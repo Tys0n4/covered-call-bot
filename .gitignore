@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / configs
+.env
+
+# Data (optional - remove if you WANT to upload your portfolio)
+data/portfolio.csv
