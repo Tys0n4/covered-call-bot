@@ -5,7 +5,7 @@ def filter_covered_calls(
     calls_df,
     min_strike_price,
     stock_price,
-    min_premium=0.05,
+    min_premium=0.10,
     min_volume=10,
     max_strike_multiple=1.50
 ):
