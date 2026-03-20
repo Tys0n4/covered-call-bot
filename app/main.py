@@ -5,7 +5,9 @@ from filters import filter_covered_calls
 from calculations import add_option_metrics
 from greeks import add_estimated_delta
 from scoring import score_options, pick_best_options
-
+from planner import allocate_manual
+from positions import create_positions_from_plan
+# from management import evaluate_position
 
 def print_section_header(title):
     print("\n" + "=" * 60)
@@ -141,12 +143,38 @@ def main():
     if scored_calls.empty:
         print("\nNo covered call candidates found.")
         return
+    overall_income, overall_balanced, overall_safe = pick_best_options(scored_calls)
 
     print_overall_picks(scored_calls)
 
     grouped = scored_calls.sort_values(by=["expiry", "strike"])
     for expiry, group in grouped.groupby("expiry"):
         print_expiry_section(expiry, group)
+
+    # Planner
+    print_section_header("Planned Covered Call Allocations")
+
+    selected_expiry = overall_balanced["expiry"]
+
+    expiry_group = scored_calls[scored_calls["expiry"] == selected_expiry]
+
+    income_in_expiry, balanced_in_expiry, _ = pick_best_options(expiry_group)
+
+    plan = allocate_manual(
+    total_shares=shares,
+    expiry=selected_expiry,
+    allocations=[
+        {"strike": income_in_expiry["strike"], "contracts": 7},
+        {"strike": balanced_in_expiry["strike"], "contracts": 10}
+    ]
+)
+
+    for item in plan:
+        print(
+            f"Sell {item['contracts']} contracts | "
+            f"Expiry: {item['expiry']} | "
+            f"Strike: {item['strike']}"
+        )
 
 
 if __name__ == "__main__":
