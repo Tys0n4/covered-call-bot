@@ -1,32 +1,57 @@
-def create_position(ticker, expiry, strike, contracts, entry_price):
+def create_position(
+    ticker,
+    expiry,
+    strike,
+    contracts,
+    entry_price,
+    premium_source="NONE",
+    quote_quality="BAD",
+    warning="Verify on broker",
+):
+    premium_total = contracts * entry_price * 100
+
     return {
         "ticker": ticker,
         "expiry": expiry,
         "strike": strike,
         "contracts": contracts,
         "entry_price": entry_price,
-        "status": "OPEN"
+        "premium_total": round(premium_total, 2),
+        "premium_source": premium_source,
+        "quote_quality": quote_quality,
+        "warning": warning,
+        "status": "OPEN",
     }
 
 
-def create_positions_from_plan(ticker, expiry, plan, option_lookup):
+def create_positions_from_plan(ticker, plan, scored_calls):
     positions = []
 
     for item in plan:
+        expiry = item["expiry"]
         strike = item["strike"]
         contracts = item["contracts"]
 
-        if strike not in option_lookup:
-            raise ValueError(f"No option data found for strike {strike}")
+        match = scored_calls[
+            (scored_calls["expiry"] == expiry) &
+            (scored_calls["strike"] == strike)
+        ]
 
-        entry_price = option_lookup[strike]["premium_price"]
+        if match.empty:
+            raise ValueError(f"No scored option found for expiry {expiry} and strike {strike}")
+
+        row = match.iloc[0]
+        entry_price = float(row["premium_price"])
 
         position = create_position(
             ticker=ticker,
             expiry=expiry,
             strike=strike,
             contracts=contracts,
-            entry_price=entry_price
+            entry_price=entry_price,
+            premium_source=str(row.get("premium_source", "NONE")),
+            quote_quality=str(row.get("quote_quality", "BAD")),
+            warning=str(row.get("warning", "Verify on broker")),
         )
 
         positions.append(position)

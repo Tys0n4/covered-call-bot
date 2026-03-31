@@ -1,3 +1,4 @@
+# scoring.py
 def score_options(df):
     df = df.copy()
 
@@ -23,7 +24,6 @@ def score_options(df):
     )
 
     # Balanced = reward middle deltas more than highest premium
-    # target around 0.10 to 0.18 for your current SOFI chains
     target_delta = 0.14
     df["delta_balance_score"] = 1 - (df["delta"] - target_delta).abs() / target_delta
     df["delta_balance_score"] = df["delta_balance_score"].clip(lower=0)
@@ -34,29 +34,22 @@ def score_options(df):
         df["delta_balance_score"] * 0.30
     )
 
-    # Safe = low delta + high upside
-    df["safe_score"] = (
-        (1 - df["delta"].fillna(0)) * 0.65 +
-        df["upside_score"] * 0.25 +
-        df["volume_score"] * 0.10
-    )
-
     return df
 
 
 def pick_best_options(df):
+    """
+    Returns (income_pick, balanced_pick).
+    """
     if df.empty:
-        return None, None, None
+        return None, None
 
     income_pick = df.loc[df["income_score"].idxmax()]
 
-    # For balanced, exclude the income pick if there are other choices
     balanced_pool = df.copy()
     if len(balanced_pool) > 1:
         balanced_pool = balanced_pool.drop(index=income_pick.name)
 
     balanced_pick = balanced_pool.loc[balanced_pool["balanced_score"].idxmax()]
 
-    safe_pick = df.loc[df["safe_score"].idxmax()]
-
-    return income_pick, balanced_pick, safe_pick
+    return income_pick, balanced_pick

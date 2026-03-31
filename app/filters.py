@@ -9,6 +9,15 @@ def filter_covered_calls(
     min_volume=10,
     max_strike_multiple=1.50
 ):
+    """
+    Premium rules:
+      - LIVE: bid>0 and ask>0 and ask>=bid => premium_price = midpoint, premium_source=MID
+      - STALE: otherwise if lastPrice>0 => premium_price = lastPrice, premium_source=LAST
+      - BAD: otherwise => premium_price = 0, premium_source=NONE
+
+    Adds:
+      premium_source, quote_quality, warning
+    """
     if calls_df.empty:
         return calls_df
 
@@ -19,12 +28,30 @@ def filter_covered_calls(
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df["mid_temp"] = (df["bid"] + df["ask"]) / 2
+    df["mid"] = (df["bid"] + df["ask"]) / 2
 
-    df["premium_price"] = df["bid"]
-    df.loc[df["premium_price"].isna() | (df["premium_price"] <= 0), "premium_price"] = df["mid_temp"]
-    df.loc[df["premium_price"].isna() | (df["premium_price"] <= 0), "premium_price"] = df["lastPrice"]
-    df.loc[df["premium_price"].isna() | (df["premium_price"] <= 0), "premium_price"] = df["ask"]
+    bid_ok = df["bid"].fillna(0) > 0
+    ask_ok = df["ask"].fillna(0) > 0
+    spread_ok = df["ask"].fillna(0) >= df["bid"].fillna(0)
+    live_mask = bid_ok & ask_ok & spread_ok
+
+    last_ok = df["lastPrice"].fillna(0) > 0
+    stale_mask = (~live_mask) & last_ok
+
+    df["premium_price"] = 0.0
+    df["premium_source"] = "NONE"
+    df["quote_quality"] = "BAD"
+    df["warning"] = "Verify on broker"
+
+    df.loc[live_mask, "premium_price"] = df.loc[live_mask, "mid"]
+    df.loc[live_mask, "premium_source"] = "MID"
+    df.loc[live_mask, "quote_quality"] = "LIVE"
+    df.loc[live_mask, "warning"] = ""
+
+    df.loc[stale_mask, "premium_price"] = df.loc[stale_mask, "lastPrice"]
+    df.loc[stale_mask, "premium_source"] = "LAST"
+    df.loc[stale_mask, "quote_quality"] = "STALE"
+    df.loc[stale_mask, "warning"] = "Verify on broker"
 
     max_strike_price = stock_price * max_strike_multiple
 
