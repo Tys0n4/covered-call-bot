@@ -15,7 +15,8 @@ def allocate_manual(total_shares, expiry, allocations):
         plan.append({
             "expiry": expiry,
             "strike": item["strike"],
-            "contracts": item["contracts"]
+            "contracts": item["contracts"],
+            "type": item.get("type", ""),
         })
 
     return plan

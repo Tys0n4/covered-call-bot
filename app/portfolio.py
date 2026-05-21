@@ -1,20 +1,25 @@
+# portfolio.py
 import pandas as pd
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from models import PortfolioPosition
+
+BASE_DIR = Path(__file__).resolve().parent
 PORTFOLIO_PATH = BASE_DIR / "data" / "portfolio.csv"
 
-def load_portfolio():
-    df = pd.read_csv(PORTFOLIO_PATH)
 
-    portfolio = []
+def load_portfolio(path: Path = PORTFOLIO_PATH) -> list[PortfolioPosition]:
+    """Load portfolio CSV and return a list of PortfolioPosition instances."""
+    df = pd.read_csv(path)
 
+    positions: list[PortfolioPosition] = []
     for _, row in df.iterrows():
-        portfolio.append({
-            "ticker": row["ticker"],
-            "shares": int(row["shares"]),
-            "avg_cost": float(row["avg_cost"]),
-            "min_sale_price": float(row["target_min_sale_price"])
-        })
+        positions.append(
+            PortfolioPosition(
+                ticker=str(row["ticker"]),
+                shares=int(row["shares"]),
+                avg_cost=float(row["avg_cost"]),
+            )
+        )
 
-    return portfolio
+    return positions

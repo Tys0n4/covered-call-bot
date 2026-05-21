@@ -1,22 +1,25 @@
+# filters.py
 import pandas as pd
+
+from config import ScannerConfig, DEFAULT_CONFIG
+from quote_policy import apply_quote_policy_to_df
 
 
 def filter_covered_calls(
-    calls_df,
-    min_strike_price,
-    stock_price,
-    min_premium=0.10,
-    min_volume=10,
-    max_strike_multiple=1.50
-):
+    calls_df: pd.DataFrame,
+    min_strike_price: float,
+    stock_price: float,
+    config: ScannerConfig = DEFAULT_CONFIG,
+) -> pd.DataFrame:
     """
-    Premium rules:
-      - LIVE: bid>0 and ask>0 and ask>=bid => premium_price = midpoint, premium_source=MID
-      - STALE: otherwise if lastPrice>0 => premium_price = lastPrice, premium_source=LAST
-      - BAD: otherwise => premium_price = 0, premium_source=NONE
+    Filter option candidates and attach premium/quote columns.
 
-    Adds:
-      premium_source, quote_quality, warning
+    Filters applied:
+      - Strike within [min_strike_price, stock_price * max_strike_multiple]
+      - premium_price >= min_premium
+      - volume >= min_volume
+      - open_interest >= min_open_interest  (liquidity signal)
+      - spread_pct <= max_spread_pct        (quote quality signal)
     """
     if calls_df.empty:
         return calls_df
@@ -28,43 +31,24 @@ def filter_covered_calls(
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df["mid"] = (df["bid"] + df["ask"]) / 2
+    df = apply_quote_policy_to_df(df, mode="mid_or_last")
+    df["mid"] = ((df["bid"].fillna(0) + df["ask"].fillna(0)) / 2).round(3)
 
-    bid_ok = df["bid"].fillna(0) > 0
-    ask_ok = df["ask"].fillna(0) > 0
-    spread_ok = df["ask"].fillna(0) >= df["bid"].fillna(0)
-    live_mask = bid_ok & ask_ok & spread_ok
+    # Spread % for filtering — (ask - bid) / mid
+    df["spread_pct"] = (
+        (df["ask"].fillna(0) - df["bid"].fillna(0)) /
+        df["mid"].replace(0, float("nan"))
+    ) * 100
 
-    last_ok = df["lastPrice"].fillna(0) > 0
-    stale_mask = (~live_mask) & last_ok
+    max_strike_price = stock_price * config.max_strike_multiple
 
-    df["premium_price"] = 0.0
-    df["premium_source"] = "NONE"
-    df["quote_quality"] = "BAD"
-    df["warning"] = "Verify on broker"
+    mask = (
+        (df["strike"] >= min_strike_price) &
+        (df["strike"] <= max_strike_price) &
+        (df["premium_price"] >= config.min_premium) &
+        (df["volume"].fillna(0) >= config.min_volume) &
+        (df["openInterest"].fillna(0) >= config.min_open_interest) &
+        (df["spread_pct"].fillna(float("inf")) <= config.max_spread_pct * 100)
+    )
 
-    df.loc[live_mask, "premium_price"] = df.loc[live_mask, "mid"]
-    df.loc[live_mask, "premium_source"] = "MID"
-    df.loc[live_mask, "quote_quality"] = "LIVE"
-    df.loc[live_mask, "warning"] = ""
-
-    df.loc[stale_mask, "premium_price"] = df.loc[stale_mask, "lastPrice"]
-    df.loc[stale_mask, "premium_source"] = "LAST"
-    df.loc[stale_mask, "quote_quality"] = "STALE"
-    df.loc[stale_mask, "warning"] = "Verify on broker"
-
-    max_strike_price = stock_price * max_strike_multiple
-
-    strike_min_condition = df["strike"] >= min_strike_price
-    strike_max_condition = df["strike"] <= max_strike_price
-    premium_condition = df["premium_price"] >= min_premium
-    volume_condition = df["volume"].fillna(0) >= min_volume
-
-    filtered = df[
-        strike_min_condition &
-        strike_max_condition &
-        premium_condition &
-        volume_condition
-    ].copy()
-
-    return filtered
+    return df[mask].copy()
