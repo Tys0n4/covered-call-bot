@@ -8,25 +8,26 @@ from models import OpenCoveredCall
 from config import ScannerConfig, DEFAULT_CONFIG
 
 
-# ---------------------------------------------------------------------------
-# Price fetching
-# ---------------------------------------------------------------------------
-
 def get_current_option_price(
     ticker: str,
     expiry: str,
     strike: float,
     *,
-    mode: QuoteMode = "mid_or_last",
+    mode: QuoteMode = "ask",   # use ask for buybacks — more conservative cost estimate
     strike_tolerance: float = DEFAULT_CONFIG.strike_match_tolerance,
 ) -> float:
     """
-    Fetch the current market price for an open call position.
-    Delegates quote selection to quote_policy.select_quote for consistency.
+    Fetch current market price for an open call position via yfinance.
+    Uses ask price by default for buyback cost estimates (conservative).
+    Delegates quote selection to quote_policy for consistency.
     """
-    tk = yf.Ticker(ticker)
-    chain = tk.option_chain(expiry)
-    calls = chain.calls.copy()
+    try:
+        tk = yf.Ticker(ticker)
+        chain = tk.option_chain(expiry)
+        calls = chain.calls.copy()
+    except Exception as e:
+        print(f"  Error fetching chain for {ticker} {expiry}: {e}")
+        return 0.0
 
     if calls.empty or "strike" not in calls.columns:
         return 0.0
@@ -46,10 +47,6 @@ def get_current_option_price(
     )
     return result.price
 
-
-# ---------------------------------------------------------------------------
-# Evaluation logic
-# ---------------------------------------------------------------------------
 
 def calculate_profit_capture(entry_price: float, current_price: float) -> float:
     if entry_price <= 0:
@@ -80,13 +77,17 @@ def evaluate_position(
 
 def evaluate_positions(
     positions: list[dict],
-    *,
     config: ScannerConfig = DEFAULT_CONFIG,
-    price_mode: QuoteMode = "mid_or_last",
+    price_mode: QuoteMode = "ask",
 ) -> list[OpenCoveredCall]:
-    """Batch evaluate open positions: fetch current prices and compute buyback flags."""
+    """
+    Batch evaluate open positions.
+    Fetches current ask price for each and computes buyback recommendation.
+    """
     results: list[OpenCoveredCall] = []
+
     for pos in positions:
+        print(f"  Checking {pos['ticker']} {pos['expiry']} ${pos['strike']:.2f}...")
         current_px = get_current_option_price(
             ticker=pos["ticker"],
             expiry=pos["expiry"],
@@ -95,4 +96,5 @@ def evaluate_positions(
             strike_tolerance=config.strike_match_tolerance,
         )
         results.append(evaluate_position(pos, current_px, config=config))
+
     return results

@@ -148,3 +148,48 @@ def print_positions_with_budget(
     print(f"  Gross Premium Collected:          ${gross_premium:.2f}")
     print(f"  Buyback Budget ({kept_pct}% kept):  -${total_buyback:.2f}")
     print(f"  Net Premium After Buyback:         ${net:.2f}")
+
+
+# ---------------------------------------------------------------------------
+# Management reporting
+# ---------------------------------------------------------------------------
+
+def print_management_report(results: list, config: ScannerConfig = DEFAULT_CONFIG) -> None:
+    from models import OpenCoveredCall
+
+    _section("Open Position Management")
+
+    if not results:
+        print("  No open positions found.")
+        return
+
+    buyback_count = sum(1 for r in results if r.should_buy_back)
+    print(f"  Positions evaluated: {len(results)}")
+    print(f"  Buyback recommended: {buyback_count}")
+    print()
+
+    for r in results:
+        status_icon = "🟢 BUY BACK" if r.should_buy_back else "⏳ HOLD"
+        cost_to_close = round(r.current_option_price * r.contracts * 100, 2)
+
+        print(
+            f"  {status_icon:<14} {r.ticker} | "
+            f"Expiry: {r.expiry} | "
+            f"Strike: ${r.strike:.2f} | "
+            f"Contracts: {r.contracts}"
+        )
+        print(
+            f"    Entry: ${r.entry_price:.2f} | "
+            f"Current Ask: ${r.current_option_price:.2f} | "
+            f"Profit Captured: {r.profit_capture_pct:.1f}% | "
+            f"Cost to Close: ${cost_to_close:.2f}"
+        )
+
+        if r.should_buy_back:
+            print(
+                f"    ✓ Target of {int(config.profit_capture_target_pct)}% profit capture reached — "
+                f"consider buying back to free up shares."
+            )
+        elif r.current_option_price == 0.0:
+            print(f"    ⚠  Could not fetch current price — verify manually on broker.")
+        print()
