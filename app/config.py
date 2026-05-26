@@ -13,7 +13,7 @@ class ScannerConfig:
     max_strike_multiple: float = 1.40
 
     # --- Quote quality ---
-    min_premium: float = 0.05
+    min_premium: float = 0.10
     min_volume: int = 10
     min_open_interest: int = 50              # ensures you can get filled and buy back
     max_spread_pct: float = 0.50             # max (ask-bid)/mid — filters wide/illiquid spreads

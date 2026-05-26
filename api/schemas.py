@@ -1,34 +1,11 @@
 # api/schemas.py
-"""
-Pydantic models for all API request and response bodies.
-These are separate from app/models.py dataclasses —
-schemas handle serialization/validation at the API boundary.
-"""
-
 from __future__ import annotations
 from pydantic import BaseModel
 from typing import Optional
 
 
-# ---------------------------------------------------------------------------
-# Shared
-# ---------------------------------------------------------------------------
-
-class PortfolioSummary(BaseModel):
-    ticker: str
-    shares: int
-    avg_cost: float
-    current_price: float
-    total_contracts: int
-    open_contracts: int
-    available_contracts: int
-
-
-# ---------------------------------------------------------------------------
-# Scanner
-# ---------------------------------------------------------------------------
-
 class ScanConfig(BaseModel):
+    ticker: str = "SOFI"        # ← now dynamic
     min_dte: int = 20
     max_dte: int = 38
     min_strike_pct: float = 0.20
@@ -55,7 +32,7 @@ class Candidate(BaseModel):
 
 
 class AllocationItem(BaseModel):
-    allocation_type: str        # "Income" | "Balanced"
+    allocation_type: str
     expiry: str
     strike: float
     contracts: int
@@ -80,10 +57,6 @@ class ScanResponse(BaseModel):
     net_premium: float
     warnings: list[str]
 
-
-# ---------------------------------------------------------------------------
-# Positions
-# ---------------------------------------------------------------------------
 
 class PositionIn(BaseModel):
     ticker: str
@@ -115,10 +88,6 @@ class ClosePositionRequest(BaseModel):
     position_id: int
 
 
-# ---------------------------------------------------------------------------
-# Management
-# ---------------------------------------------------------------------------
-
 class EvaluatedPosition(BaseModel):
     id: int
     ticker: str
@@ -139,10 +108,6 @@ class ManagementResponse(BaseModel):
     buyback_recommended: int
     positions: list[EvaluatedPosition]
 
-
-# ---------------------------------------------------------------------------
-# Settings
-# ---------------------------------------------------------------------------
 
 class SettingsResponse(BaseModel):
     min_dte: int

@@ -1,17 +1,37 @@
 # Python
 __pycache__/
-*.pyc
-
-# Virtual env
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
 venv/
-.env
+env/
 
-# OS
+# Environment variables — never commit API keys
+.env
+.env.*
+
+# Data files — contains your personal positions and portfolio
+app/data/open_positions.json
+app/data/portfolio.csv
+
+# Node
+node_modules/
+web/dist/
+web/.vite/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
 
-# Secrets / configs
-.env
-
-# Data (optional - remove if you WANT to upload your portfolio)
-data/portfolio.csv
+# Logs
+*.log
+npm-debug.log*

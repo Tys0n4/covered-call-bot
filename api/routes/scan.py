@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
-# Make app/ importable from api/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
 from config import ScannerConfig
@@ -11,9 +10,8 @@ from portfolio import load_portfolio
 from scanner_service import scan_covered_calls
 from planning_service import build_plan, compute_buyback_budget, get_allocation_targets
 from positions_store import load_open_positions, save_positions
-from api.schemas import (
-    ScanConfig, ScanResponse, Candidate, AllocationItem
-)
+from models import PlannedCall
+from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem
 
 router = APIRouter(prefix="/scan", tags=["scanner"])
 
@@ -37,15 +35,17 @@ def _row_to_candidate(row) -> Candidate:
 
 @router.post("", response_model=ScanResponse)
 async def run_scan(scan_config: ScanConfig):
-    """
-    Run the covered call scanner with the provided config.
-    Returns candidates, best picks, and allocation plan.
-    """
+    """Run the covered call scanner for the specified ticker."""
     portfolio = load_portfolio()
+
     if not portfolio:
         raise HTTPException(status_code=404, detail="No portfolio positions found.")
 
-    position = portfolio[0]  # single ticker for now
+    # Find matching ticker — fall back to first position if not specified
+    position = next(
+        (p for p in portfolio if p.ticker == scan_config.ticker),
+        portfolio[0]
+    )
 
     config = ScannerConfig(
         min_dte=scan_config.min_dte,
@@ -63,9 +63,12 @@ async def run_scan(scan_config: ScanConfig):
     if scan.current_price == 0.0:
         raise HTTPException(status_code=503, detail="Could not fetch current price.")
 
-    open_positions = load_open_positions()
-    planned = build_plan(scan, config=config, open_positions=open_positions)
-    targets = get_allocation_targets(position.shares, open_positions, config)
+    # Only consider open positions for this ticker
+    all_open = load_open_positions()
+    ticker_open = [p for p in all_open if p.get("ticker") == position.ticker]
+
+    planned = build_plan(scan, config=config, open_positions=ticker_open)
+    targets = get_allocation_targets(position.shares, ticker_open, config)
 
     min_strike = scan.current_price * (1 + config.min_strike_pct_above_current)
 
@@ -74,8 +77,8 @@ async def run_scan(scan_config: ScanConfig):
         for _, row in scan.candidates.iterrows():
             candidates.append(_row_to_candidate(row))
 
-    income_pick = _row_to_candidate(scan.income_pick) if scan.income_pick is not None else None
-    balanced_pick = _row_to_candidate(scan.balanced_pick) if scan.balanced_pick is not None else None
+    income_pick  = _row_to_candidate(scan.income_pick)  if scan.income_pick  is not None else None
+    balanced_pick= _row_to_candidate(scan.balanced_pick) if scan.balanced_pick is not None else None
 
     planned_positions = []
     gross_premium = 0.0
@@ -94,7 +97,7 @@ async def run_scan(scan_config: ScanConfig):
             buyback_total=float(budget["buyback_total"]),
             per_contract_budget=float(budget["per_contract"]),
         ))
-        gross_premium += p.premium_total
+        gross_premium  += p.premium_total
         buyback_budget += budget["buyback_total"]
 
     return ScanResponse(
@@ -116,7 +119,6 @@ async def run_scan(scan_config: ScanConfig):
 @router.post("/save")
 async def save_scan_positions(positions_data: list[dict]):
     """Save confirmed positions from a scan to open_positions.json."""
-    from models import PlannedCall
     planned = [
         PlannedCall(
             ticker=p["ticker"],

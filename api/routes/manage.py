@@ -1,6 +1,7 @@
 # api/routes/manage.py
 import sys
 from pathlib import Path
+from typing import Optional
 from fastapi import APIRouter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
@@ -14,12 +15,16 @@ router = APIRouter(prefix="/manage", tags=["management"])
 
 
 @router.get("", response_model=ManagementResponse)
-async def evaluate_open_positions():
+async def evaluate_open_positions(ticker: Optional[str] = None):
     """
-    Fetch current prices for all open positions and evaluate buyback conditions.
+    Evaluate open positions for buyback. Optionally filter by ticker.
     """
-    open_positions = load_open_positions()
-    all_positions = {p["id"]: p for p in list_all_positions()}
+    all_open = load_open_positions()
+
+    if ticker:
+        open_positions = [p for p in all_open if p.get("ticker") == ticker]
+    else:
+        open_positions = all_open
 
     if not open_positions:
         return ManagementResponse(
@@ -32,7 +37,6 @@ async def evaluate_open_positions():
 
     evaluated = []
     for r in results:
-        # Match back to get id, allocation_type, opened_at from store
         matched = next(
             (p for p in open_positions
              if p["ticker"] == r.ticker

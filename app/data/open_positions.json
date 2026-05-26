@@ -3,28 +3,30 @@
     "id": 1,
     "ticker": "SOFI",
     "expiry": "2026-06-18",
-    "strike": 19.00,
+    "strike": 19.0,
     "contracts": 5,
     "entry_price": 0.16,
-    "premium_total": 80.00,
+    "premium_total": 80.0,
     "premium_source": "MID",
     "quote_quality": "LIVE",
     "allocation_type": "Income",
     "status": "OPEN",
-    "opened_at": "2026-05-19"
+    "opened_at": "2026-05-19",
+    "closed_at": "2026-05-25"
   },
   {
     "id": 2,
     "ticker": "SOFI",
     "expiry": "2026-06-18",
-    "strike": 19.50,
+    "strike": 19.5,
     "contracts": 5,
     "entry_price": 0.12,
-    "premium_total": 60.00,
+    "premium_total": 60.0,
     "premium_source": "MID",
     "quote_quality": "LIVE",
     "allocation_type": "Balanced",
     "status": "OPEN",
-    "opened_at": "2026-05-20"
+    "opened_at": "2026-05-20",
+    "closed_at": "2026-05-25"
   }
 ]

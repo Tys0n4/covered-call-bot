@@ -1,29 +1,33 @@
 # api/routes/positions.py
 import sys
 from pathlib import Path
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
-from positions_store import (
-    load_open_positions, list_all_positions,
-    save_positions, close_position
-)
+from positions_store import load_open_positions, list_all_positions, save_positions, close_position
 from api.schemas import PositionOut, PositionIn, ClosePositionRequest
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
 
 @router.get("", response_model=list[PositionOut])
-async def get_open_positions():
-    """Return all currently open positions."""
-    return load_open_positions()
+async def get_open_positions(ticker: Optional[str] = None):
+    """Return open positions. Optionally filter by ticker."""
+    positions = load_open_positions()
+    if ticker:
+        positions = [p for p in positions if p.get("ticker") == ticker]
+    return positions
 
 
 @router.get("/all", response_model=list[PositionOut])
-async def get_all_positions():
-    """Return all positions including closed ones."""
-    return list_all_positions()
+async def get_all_positions(ticker: Optional[str] = None):
+    """Return all positions including closed. Optionally filter by ticker."""
+    positions = list_all_positions()
+    if ticker:
+        positions = [p for p in positions if p.get("ticker") == ticker]
+    return positions
 
 
 @router.post("", response_model=dict)
