@@ -11,6 +11,7 @@
     "quote_quality": "LIVE",
     "allocation_type": "Income",
     "status": "OPEN",
-    "opened_at": "2026-05-19"
+    "opened_at": "2026-05-19",
+    "closed_at": null
   }
 ]

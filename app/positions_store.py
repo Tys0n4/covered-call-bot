@@ -35,7 +35,10 @@ def _save_raw(positions: list[dict]) -> None:
 
 def load_open_positions() -> list[dict]:
     """Return all positions with status OPEN."""
-    return [p for p in _load_raw() if p.get("status") == "OPEN"]
+    positions = [p for p in _load_raw() if p.get("status") == "OPEN"]
+    for p in positions:
+        p.pop("closed_at", None)
+    return positions
 
 
 def save_positions(planned: list[PlannedCall]) -> None:
@@ -61,6 +64,7 @@ def save_positions(planned: list[PlannedCall]) -> None:
             "allocation_type":  p.allocation_type,
             "status":           "OPEN",
             "opened_at":        datetime.today().strftime("%Y-%m-%d"),
+            "closed_at":        None,
         }
         existing.append(record)
 
