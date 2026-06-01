@@ -16,8 +16,8 @@ env/
 .env.*
 
 # Data files — contains your personal positions and portfolio
-app/data/open_positions.json
-app/data/portfolio.csv
+# app/data/open_positions.json
+# app/data/portfolio.csv
 
 # Node
 node_modules/
