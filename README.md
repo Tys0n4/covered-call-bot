@@ -6,6 +6,13 @@ A full-stack financial tool for scanning, planning, and managing covered call op
 
 ---
 
+## Live Demo
+
+**Frontend:** https://covered-call-bot.vercel.app  
+**API Docs:** https://covered-call-bot-production.up.railway.app/docs
+
+---
+
 ## Overview
 
 Covered Call Scanner automates the process of finding, evaluating, and tracking covered call opportunities for stock positions you already own. Instead of manually scanning options chains, the app fetches live market data, scores candidates by income potential and risk profile, and builds a contract allocation plan that maintains a configurable 70/30 income-to-balanced split across your portfolio.
@@ -24,15 +31,24 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ---
 
+## Screenshots
+
+![Dashboard](screenshots/dashboard.png)
+![Scanner](screenshots/scanner.png)
+![Manage](screenshots/manage.png)
+
+---
+
 ## Tech Stack
 
-| Layer     | Technology                          |
-|-----------|-------------------------------------|
-| Backend   | Python, FastAPI, Uvicorn            |
-| Data      | yfinance, Alpha Vantage API, pandas |
-| Frontend  | React, Vite, Tailwind CSS           |
-| State     | React Context API, localStorage     |
-| Persistence | JSON flat-file store              |
+| Layer       | Technology                          |
+|-------------|-------------------------------------|
+| Backend     | Python, FastAPI, Uvicorn            |
+| Data        | yfinance, Alpha Vantage API, pandas |
+| Frontend    | React, Vite, Tailwind CSS           |
+| State       | React Context API, localStorage     |
+| Persistence | JSON flat-file store                |
+| Deployment  | Vercel (frontend), Railway (backend)|
 
 ---
 
@@ -83,14 +99,14 @@ covered-call-bot/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/Tys0n4/covered-call-scanner.git
-cd covered-call-scanner
+git clone https://github.com/Tys0n4/covered-call-bot.git
+cd covered-call-bot
 ```
 
 ### 2. Install Python dependencies
 
 ```bash
-pip install fastapi uvicorn pydantic yfinance pandas requests python-dotenv
+pip install -r requirements.txt
 ```
 
 ### 3. Set up environment variables
@@ -107,7 +123,7 @@ Create `app/data/portfolio.csv`:
 
 ```csv
 ticker,shares,avg_cost
-SOFI,1800,13.01
+AAPL,100,175.00
 ```
 
 Create an empty `app/data/open_positions.json`:
@@ -117,8 +133,6 @@ Create an empty `app/data/open_positions.json`:
 ```
 
 ### 5. Start the API
-
-From the `covered-call-bot/` root directory:
 
 ```bash
 uvicorn api.main:app --reload --port 8000
@@ -131,7 +145,6 @@ API docs available at [http://localhost:8000/docs](http://localhost:8000/docs)
 ```bash
 cd web
 npm install
-npm install axios react-router-dom recharts lucide-react
 npm run dev
 ```
 
@@ -187,24 +200,16 @@ class ScannerConfig:
 
 ## API Endpoints
 
-| Method | Endpoint         | Description                              |
-|--------|------------------|------------------------------------------|
-| GET    | `/portfolio`     | All tickers with contract stats          |
-| POST   | `/scan`          | Run scanner for a ticker                 |
-| POST   | `/scan/save`     | Save planned positions                   |
-| GET    | `/positions`     | Open positions (filter by ticker)        |
-| GET    | `/positions/all` | All positions including closed           |
-| POST   | `/positions/close` | Mark a position as closed              |
-| GET    | `/manage`        | Evaluate positions for buyback           |
-| GET    | `/settings`      | Current scanner config                   |
-
----
-
-## Screenshots
-
-> Dashboard, Scanner, and Manage pages shown below.
-
-*Add screenshots here after deployment.*
+| Method | Endpoint           | Description                        |
+|--------|--------------------|------------------------------------|
+| GET    | `/portfolio`       | All tickers with contract stats    |
+| POST   | `/scan`            | Run scanner for a ticker           |
+| POST   | `/scan/save`       | Save planned positions             |
+| GET    | `/positions`       | Open positions (filter by ticker)  |
+| GET    | `/positions/all`   | All positions including closed     |
+| POST   | `/positions/close` | Mark a position as closed          |
+| GET    | `/manage`          | Evaluate positions for buyback     |
+| GET    | `/settings`        | Current scanner config             |
 
 ---
 
