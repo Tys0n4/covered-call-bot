@@ -251,7 +251,13 @@ export default function Scanner() {
 
                 {result.candidates.length === 0 && (
                   <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-                    No candidates found. Try loosening the filters.
+                    <div style={{ fontSize: 20, marginBottom: 12 }}>📉</div>
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>No candidates found</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+                      Options data is live during market hours <span style={{ color: 'var(--purple-light)' }}>(9:30am – 4:00pm ET, Mon – Fri)</span>.<br />
+                      Outside market hours, bid/ask quotes go stale and candidates are filtered out.<br />
+                      Try again during trading hours, or loosen the filters above.
+                    </div>
                   </div>
                 )}
               </>
