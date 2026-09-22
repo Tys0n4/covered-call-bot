@@ -1,24 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --bg-base:      #07070f;
-  --bg-card:      #0d0d1e;
-  --bg-card-2:    #13132a;
-  --bg-hover:     #16163a;
-  --purple:       #8b5cf6;
-  --purple-light: #a78bfa;
-  --purple-dim:   rgba(139, 92, 246, 0.12);
-  --purple-glow:  rgba(139, 92, 246, 0.35);
-  --border:       rgba(139, 92, 246, 0.18);
-  --border-hover: rgba(139, 92, 246, 0.4);
-  --green:        #10b981;
-  --green-dim:    rgba(16, 185, 129, 0.12);
-  --red:          #ef4444;
-  --red-dim:      rgba(239, 68, 68, 0.12);
-  --amber:        #f59e0b;
-  --text:         #e2e8f0;
-  --text-dim:     #94a3b8;
-  --text-muted:   #475569;
+  /* Neutral, near-black surfaces — no color tint on backgrounds or borders.
+     Accent is reserved for a handful of elements (primary button, active
+     nav, the hero chart, key badges) rather than washing every border and
+     shadow in purple, matching how Robinhood/SoFi/Finrise-style dashboards
+     use color: sparingly, so it means something when it shows up. */
+  --bg-base:      #08080b;
+  --bg-card:      #121216;
+  --bg-card-2:    #17171e;
+  --bg-hover:     #1c1c24;
+
+  --purple:       #7c6ff2;
+  --purple-light: #a99bff;
+  --purple-dim:   rgba(124, 111, 242, 0.14);
+  --purple-glow:  rgba(124, 111, 242, 0.28);
+
+  --border:       rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.14);
+
+  --green:        #2fd077;
+  --green-dim:    rgba(47, 208, 119, 0.12);
+  --red:          #f0475f;
+  --red-dim:      rgba(240, 71, 95, 0.12);
+  --amber:        #f5a524;
+  --amber-dim:    rgba(245, 165, 36, 0.12);
+  --blue:         #4cc9f0;
+  --blue-dim:     rgba(76, 201, 240, 0.12);
+
+  --text:         #f2f2f5;
+  --text-dim:     #9d9da9;
+  --text-muted:   #5c5c68;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -31,30 +43,17 @@ body {
   overflow-x: hidden;
 }
 
-/* Subtle grid background */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  z-index: 0;
-}
-
 #root { position: relative; z-index: 1; }
 
-.mono { font-family: 'JetBrains Mono', monospace; }
+.mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
 
 /* Cards */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 18px;
   padding: 24px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .card:hover {
@@ -64,100 +63,107 @@ body::before {
 .card-sm {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 16px;
 }
 
-/* Gradient card header */
+/* Gradient card — used sparingly, for the one or two elements that should
+   carry the accent (a highlighted hero card), not every panel. */
 .card-gradient {
-  background: linear-gradient(135deg, var(--bg-card) 0%, #160f2e 100%);
+  background: linear-gradient(150deg, var(--bg-card) 0%, #1a1730 100%);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 18px;
   padding: 24px;
 }
 
 /* Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #6a5cf0 0%, #8b7cf6 100%);
   color: white;
   border: none;
-  padding: 12px 28px;
-  border-radius: 10px;
+  padding: 11px 24px;
+  border-radius: 12px;
   font-family: 'Syne', sans-serif;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 0.02em;
+  transition: filter 0.15s, transform 0.15s;
+  letter-spacing: 0.01em;
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 0 24px var(--purple-glow), 0 4px 12px rgba(0,0,0,0.3);
-  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn-primary:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .btn-secondary {
   background: transparent;
-  color: var(--purple-light);
+  color: var(--text-dim);
   border: 1px solid var(--border);
   padding: 10px 20px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-family: 'Syne', sans-serif;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
 .btn-secondary:hover {
-  background: var(--purple-dim);
-  border-color: var(--purple);
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-hover);
 }
 
 .btn-danger {
   background: var(--red-dim);
   color: var(--red);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(240, 71, 95, 0.25);
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-family: 'Syne', sans-serif;
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s;
 }
 
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(240, 71, 95, 0.18);
 }
 
-/* Badges */
+/* Badges — compact pills, color used only to carry meaning (status/type),
+   never as decoration */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
+  padding: 3px 10px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
 }
 
-.badge-green  { background: var(--green-dim);  color: var(--green);        border: 1px solid rgba(16,185,129,0.2); }
-.badge-red    { background: var(--red-dim);    color: var(--red);          border: 1px solid rgba(239,68,68,0.2); }
-.badge-purple { background: var(--purple-dim); color: var(--purple-light); border: 1px solid var(--border); }
-.badge-amber  { background: rgba(245,158,11,0.12); color: var(--amber);   border: 1px solid rgba(245,158,11,0.2); }
+.badge-green  { background: var(--green-dim);  color: var(--green);        border: 1px solid rgba(47,208,119,0.2); }
+.badge-red    { background: var(--red-dim);    color: var(--red);          border: 1px solid rgba(240,71,95,0.2); }
+.badge-purple { background: var(--purple-dim); color: var(--purple-light); border: 1px solid rgba(124,111,242,0.22); }
+.badge-amber  { background: var(--amber-dim);  color: var(--amber);        border: 1px solid rgba(245,165,36,0.2); }
+.badge-blue   { background: var(--blue-dim);   color: var(--blue);         border: 1px solid rgba(76,201,240,0.2); }
 
 /* Table */
 .data-table {
@@ -171,7 +177,7 @@ body::before {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
@@ -179,23 +185,31 @@ body::before {
 
 .data-table td {
   padding: 13px 14px;
-  border-bottom: 1px solid rgba(139, 92, 246, 0.07);
+  border-bottom: 1px solid var(--border);
   color: var(--text-dim);
   vertical-align: middle;
 }
 
 .data-table tr:hover td {
-  background: var(--purple-dim);
+  background: var(--bg-hover);
   color: var(--text);
 }
 
 .data-table tr:last-child td { border-bottom: none; }
 
+/* Numeric column convention: right-aligned, tabular figures — standard
+   for financial data tables so digits stack for fast scanning. */
+.data-table th.num,
+.data-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Inputs */
 .input {
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text);
   font-family: 'Syne', sans-serif;
   font-size: 14px;
@@ -212,7 +226,7 @@ body::before {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   margin-bottom: 6px;
   display: block;
@@ -221,27 +235,28 @@ body::before {
 /* Stat number */
 .stat-num {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 28px;
   font-weight: 600;
+  font-size: 26px;
   color: var(--text);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 /* Loading spinner */
 .spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(139, 92, 246, 0.3);
-  border-top-color: var(--purple);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--purple-light);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -252,7 +267,7 @@ body::before {
 /* Progress bar */
 .progress-bar {
   height: 6px;
-  background: rgba(139, 92, 246, 0.12);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 99px;
   overflow: hidden;
 }
@@ -260,13 +275,13 @@ body::before {
 .progress-fill {
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  background: linear-gradient(90deg, #6a5cf0, #a99bff);
   transition: width 0.5s ease;
 }
 
 /* Fade in */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -275,4 +290,4 @@ body::before {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.3); border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 99px; }

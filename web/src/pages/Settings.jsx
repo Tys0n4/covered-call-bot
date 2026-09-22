@@ -1,12 +1,13 @@
 // src/pages/Settings.jsx
 import { useEffect, useState } from 'react'
 import { getSettings } from '../api/client'
+import { ScanLine, Scale, Info } from 'lucide-react'
 
 function SettingRow({ label, value, description }) {
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-      padding: '16px 0', borderBottom: '1px solid rgba(139,92,246,0.07)',
+      padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.06)',
     }}>
       <div>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{label}</div>
@@ -34,7 +35,7 @@ export default function Settings() {
 
   return (
     <div className="fade-up">
-      <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 4 }}>Settings</h1>
+      <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 4 }}>Settings</h1>
       <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 32 }}>
         Current scanner configuration. To change values, edit <code style={{ background: 'var(--purple-dim)', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>app/config.py</code>.
       </p>
@@ -47,7 +48,7 @@ export default function Settings() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
           {/* Scanner settings */}
           <div className="card">
-            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--purple-light)', marginBottom: 4 }}>◎ Scanner</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--purple-light)', marginBottom: 4 }}><ScanLine size={15} strokeWidth={1.75} /> Scanner</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>Options filtering parameters</div>
             <SettingRow label="Min DTE"              value={settings.min_dte}            description="Minimum days to expiry" />
             <SettingRow label="Max DTE"              value={settings.max_dte}            description="Maximum days to expiry" />
@@ -59,7 +60,7 @@ export default function Settings() {
 
           {/* Strategy settings */}
           <div className="card">
-            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--purple-light)', marginBottom: 4 }}>⬡ Strategy</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--purple-light)', marginBottom: 4 }}><Scale size={15} strokeWidth={1.75} /> Strategy</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>Scoring and allocation rules</div>
             <SettingRow label="Target Delta"         value={settings.target_delta}       description="Balanced pick target delta" />
             <SettingRow label="Income Weight"        value={`${(settings.income_weight * 100).toFixed(0)}%`} description="Contract allocation to income picks" />
@@ -79,11 +80,11 @@ export default function Settings() {
         borderRadius: 12, padding: '16px 20px', fontSize: 13, color: 'var(--text-dim)',
         display: 'flex', alignItems: 'flex-start', gap: 12,
       }}>
-        <span style={{ fontSize: 18, flexShrink: 0 }}>◌</span>
+        <Info size={18} strokeWidth={1.75} style={{ flexShrink: 0, color: 'var(--purple-light)' }} />
         <div>
           <strong style={{ color: 'var(--text)' }}>To change settings:</strong> Open{' '}
-          <code style={{ background: 'rgba(139,92,246,0.2)', padding: '1px 6px', borderRadius: 4 }}>app/config.py</code>{' '}
-          and update the <code style={{ background: 'rgba(139,92,246,0.2)', padding: '1px 6px', borderRadius: 4 }}>ScannerConfig</code> dataclass values.
+          <code style={{ background: 'rgba(124,111,242,0.16)', padding: '1px 6px', borderRadius: 4 }}>app/config.py</code>{' '}
+          and update the <code style={{ background: 'rgba(124,111,242,0.16)', padding: '1px 6px', borderRadius: 4 }}>ScannerConfig</code> dataclass values.
           Restart the API server after saving changes.
         </div>
       </div>

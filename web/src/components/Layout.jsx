@@ -1,13 +1,14 @@
 // src/components/Layout.jsx
 import { NavLink } from 'react-router-dom'
+import { LayoutGrid, ScanLine, Briefcase, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { useTicker } from '../context/TickerContext'
 
 const NAV = [
-  { to: '/',          label: 'Dashboard',  icon: '▦' },
-  { to: '/scanner',   label: 'Scanner',    icon: '◎' },
-  { to: '/positions', label: 'Positions',  icon: '◈' },
-  { to: '/manage',    label: 'Manage',     icon: '⬡' },
-  { to: '/settings',  label: 'Settings',   icon: '◌' },
+  { to: '/',          label: 'Dashboard',  icon: LayoutGrid },
+  { to: '/scanner',   label: 'Scanner',    icon: ScanLine },
+  { to: '/positions', label: 'Positions',  icon: Briefcase },
+  { to: '/manage',    label: 'Manage',     icon: RefreshCw },
+  { to: '/settings',  label: 'Settings',   icon: SettingsIcon },
 ]
 
 export default function Layout({ children }) {
@@ -30,13 +31,13 @@ export default function Layout({ children }) {
         <div style={{ padding: '28px 24px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <div style={{
-              width: 32, height: 32,
-              background: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
-              borderRadius: 8,
+              width: 30, height: 30,
+              background: 'linear-gradient(135deg, #6a5cf0, #8b7cf6)',
+              borderRadius: 9,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, fontWeight: 800, color: 'white',
+              fontSize: 15, fontWeight: 700, color: 'white',
             }}>C</div>
-            <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-0.02em' }}>CovCall</span>
+            <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em' }}>CovCall</span>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>SCANNER v1.0</div>
         </div>
@@ -45,24 +46,28 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '0 12px' }}>
-          {NAV.map(({ to, label, icon }) => (
+          {NAV.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               style={({ isActive }) => ({
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '11px 14px', borderRadius: 10, marginBottom: 4,
+                padding: '10px 14px', borderRadius: 10, marginBottom: 2,
                 textDecoration: 'none', fontSize: 14,
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? 'white' : 'var(--text-muted)',
-                background: isActive ? 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(139,92,246,0.15))' : 'transparent',
-                border: isActive ? '1px solid rgba(139,92,246,0.3)' : '1px solid transparent',
-                transition: 'all 0.15s',
+                fontWeight: isActive ? 600 : 500,
+                color: isActive ? 'var(--text)' : 'var(--text-muted)',
+                background: isActive ? 'var(--bg-hover)' : 'transparent',
+                border: '1px solid transparent',
+                transition: 'background 0.15s, color 0.15s',
               })}
             >
-              <span style={{ fontSize: 16, opacity: 0.8 }}>{icon}</span>
-              {label}
+              {({ isActive }) => (
+                <>
+                  <Icon size={16} strokeWidth={1.75} color={isActive ? 'var(--purple-light)' : 'currentColor'} style={{ flexShrink: 0 }} />
+                  {label}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -101,14 +106,14 @@ export default function Layout({ children }) {
                 color: 'var(--purple-light)',
                 cursor: 'pointer', outline: 'none',
                 appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b5cf6' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a99bff' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'right 12px center',
                 paddingRight: 32,
               }}
             >
               {tickers.map(t => (
-                <option key={t.ticker} value={t.ticker} style={{ background: '#0d0d1e' }}>
+                <option key={t.ticker} value={t.ticker} style={{ background: '#121216' }}>
                   {t.ticker}
                 </option>
               ))}

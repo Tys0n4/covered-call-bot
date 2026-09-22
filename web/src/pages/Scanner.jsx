@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { runScan, savePositions } from '../api/client'
 import { useTicker } from '../context/TickerContext'
+import { SlidersHorizontal, RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2 } from 'lucide-react'
 
 const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
@@ -32,11 +33,13 @@ function Field({ label, name, value, onChange, step = 1, min, max }) {
   )
 }
 
-function PickCard({ label, pick, accent }) {
+function PickCard({ label, icon: Icon, pick, accent }) {
   if (!pick) return null
   return (
-    <div style={{ background: 'var(--bg-card-2)', border: `1px solid ${accent}33`, borderRadius: 12, padding: 16, flex: 1 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: '0.08em', marginBottom: 12 }}>{label}</div>
+    <div style={{ background: 'var(--bg-card-2)', border: `1px solid ${accent}33`, borderRadius: 14, padding: 16, flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: accent, letterSpacing: '0.06em', marginBottom: 12 }}>
+        <Icon size={13} strokeWidth={2} /> {label}
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {[
           ['Expiry',    pick.expiry],
@@ -102,7 +105,7 @@ export default function Scanner() {
   return (
     <div className="fade-up">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em' }}>Scanner</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' }}>Scanner</h1>
         {selected && (
           <span style={{
             fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 14,
@@ -116,8 +119,8 @@ export default function Scanner() {
       </p>
 
       {!selected && (
-        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 12, padding: 16, color: 'var(--amber)', fontSize: 14 }}>
-          ⚠ Select a ticker from the sidebar to start scanning.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--amber-dim)', border: '1px solid rgba(245,165,36,0.2)', borderRadius: 14, padding: 16, color: 'var(--amber)', fontSize: 14 }}>
+          <AlertTriangle size={16} strokeWidth={1.75} /> Select a ticker from the sidebar to start scanning.
         </div>
       )}
 
@@ -126,11 +129,14 @@ export default function Scanner() {
           {/* Config panel */}
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--purple-light)' }}>◌ Scan Parameters</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 14, color: 'var(--purple-light)' }}>
+                <SlidersHorizontal size={14} strokeWidth={1.75} /> Scan Parameters
+              </div>
               <button onClick={() => setConfig(DEFAULT_CONFIG)} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
                 background: 'none', border: 'none', color: 'var(--text-muted)',
                 fontSize: 11, cursor: 'pointer', fontFamily: 'Syne, sans-serif', padding: 0,
-              }}>↺ Reset</button>
+              }}><RotateCcw size={11} strokeWidth={1.75} /> Reset</button>
             </div>
             <Field label="Min DTE"           name="min_dte"            value={config.min_dte}           onChange={updateConfig} min={1}    max={60} />
             <Field label="Max DTE"           name="max_dte"            value={config.max_dte}           onChange={updateConfig} min={1}    max={120} />
@@ -140,15 +146,15 @@ export default function Scanner() {
             <Field label="Min Open Interest" name="min_open_interest"  value={config.min_open_interest} onChange={updateConfig} min={1} />
             <Field label="Target Delta"      name="target_delta"       value={config.target_delta}      onChange={updateConfig} step={0.01} min={0.05} max={0.5} />
             <button className="btn-primary" onClick={handleScan} disabled={loading} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-              {loading ? <><span className="spinner" /> Scanning {selected}...</> : <><span>◎</span> Scan {selected}</>}
+              {loading ? <><span className="spinner" /> Scanning {selected}...</> : <><ScanLine size={15} strokeWidth={2} /> Scan {selected}</>}
             </button>
           </div>
 
           {/* Results */}
           <div>
             {error && (
-              <div style={{ background: 'var(--red-dim)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: 16, marginBottom: 20, color: 'var(--red)', fontSize: 14 }}>
-                ⚠ {error}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--red-dim)', border: '1px solid rgba(240,71,95,0.25)', borderRadius: 14, padding: 16, marginBottom: 20, color: 'var(--red)', fontSize: 14 }}>
+                <AlertTriangle size={16} strokeWidth={1.75} /> {error}
               </div>
             )}
 
@@ -178,14 +184,18 @@ export default function Scanner() {
                 </div>
 
                 {result.warnings?.length > 0 && (
-                  <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
-                    {result.warnings.map((w, i) => <div key={i} style={{ fontSize: 13, color: 'var(--amber)' }}>⚠ {w}</div>)}
+                  <div style={{ background: 'var(--amber-dim)', border: '1px solid rgba(245,165,36,0.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20 }}>
+                    {result.warnings.map((w, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--amber)' }}>
+                        <AlertTriangle size={13} strokeWidth={1.75} /> {w}
+                      </div>
+                    ))}
                   </div>
                 )}
 
                 <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                  <PickCard label="⬆ INCOME PICK"   pick={result.income_pick}   accent="#8b5cf6" />
-                  <PickCard label="⬡ BALANCED PICK" pick={result.balanced_pick} accent="#10b981" />
+                  <PickCard label="INCOME PICK"   icon={TrendingUp} pick={result.income_pick}   accent="#a99bff" />
+                  <PickCard label="BALANCED PICK" icon={Scale}      pick={result.balanced_pick} accent="#4cc9f0" />
                 </div>
 
                 <div className="card" style={{ marginBottom: 20 }}>
@@ -193,19 +203,19 @@ export default function Scanner() {
                   <div style={{ overflowX: 'auto' }}>
                     <table className="data-table">
                       <thead>
-                        <tr><th>Expiry</th><th>DTE</th><th>Strike</th><th>Premium</th><th>Ann.Yield%</th><th>Delta</th><th>Upside%</th><th>Spread%</th><th>Quote</th></tr>
+                        <tr><th>Expiry</th><th className="num">DTE</th><th className="num">Strike</th><th className="num">Premium</th><th className="num">Ann.Yield%</th><th className="num">Delta</th><th className="num">Upside%</th><th className="num">Spread%</th><th>Quote</th></tr>
                       </thead>
                       <tbody>
                         {result.candidates.map((c, i) => (
                           <tr key={i}>
                             <td className="mono">{c.expiry}</td>
-                            <td className="mono">{c.dte}</td>
-                            <td className="mono" style={{ color: 'var(--text)', fontWeight: 600 }}>${c.strike.toFixed(2)}</td>
-                            <td className="mono" style={{ color: 'var(--purple-light)' }}>${c.premium_price.toFixed(2)}</td>
-                            <td className="mono">{c.annualized_yield_pct?.toFixed(1)}%</td>
-                            <td className="mono">{c.delta?.toFixed(3) ?? 'n/a'}</td>
-                            <td className="mono">{c.upside_to_strike_pct?.toFixed(1)}%</td>
-                            <td className="mono">{c.spread_pct?.toFixed(1)}%</td>
+                            <td className="mono num">{c.dte}</td>
+                            <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>${c.strike.toFixed(2)}</td>
+                            <td className="mono num" style={{ color: 'var(--purple-light)' }}>${c.premium_price.toFixed(2)}</td>
+                            <td className="mono num">{c.annualized_yield_pct?.toFixed(1)}%</td>
+                            <td className="mono num">{c.delta?.toFixed(3) ?? 'n/a'}</td>
+                            <td className="mono num">{c.upside_to_strike_pct?.toFixed(1)}%</td>
+                            <td className="mono num">{c.spread_pct?.toFixed(1)}%</td>
                             <td><span className={`badge badge-${c.quote_quality === 'LIVE' ? 'green' : c.quote_quality === 'STALE' ? 'amber' : 'red'}`}>{c.quote_quality}</span></td>
                           </tr>
                         ))}
@@ -224,25 +234,25 @@ export default function Scanner() {
                     </div>
                     <table className="data-table" style={{ marginBottom: 16 }}>
                       <thead>
-                        <tr><th>Type</th><th>Expiry</th><th>Strike</th><th>Contracts</th><th>Entry</th><th>Gross</th><th>Buyback Budget</th></tr>
+                        <tr><th>Type</th><th>Expiry</th><th className="num">Strike</th><th className="num">Contracts</th><th className="num">Entry</th><th className="num">Gross</th><th className="num">Buyback Budget</th></tr>
                       </thead>
                       <tbody>
                         {result.planned_positions.map((p, i) => (
                           <tr key={i}>
-                            <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'purple' : 'green'}`}>{p.allocation_type}</span></td>
+                            <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'purple' : 'blue'}`}>{p.allocation_type}</span></td>
                             <td className="mono">{p.expiry}</td>
-                            <td className="mono" style={{ color: 'var(--text)', fontWeight: 600 }}>${p.strike.toFixed(2)}</td>
-                            <td className="mono">{p.contracts}</td>
-                            <td className="mono">${p.entry_price.toFixed(2)}</td>
-                            <td className="mono" style={{ color: 'var(--green)' }}>${p.premium_total.toFixed(2)}</td>
-                            <td className="mono">${p.buyback_total.toFixed(0)}</td>
+                            <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>${p.strike.toFixed(2)}</td>
+                            <td className="mono num">{p.contracts}</td>
+                            <td className="mono num">${p.entry_price.toFixed(2)}</td>
+                            <td className="mono num" style={{ color: 'var(--green)' }}>${p.premium_total.toFixed(2)}</td>
+                            <td className="mono num">${p.buyback_total.toFixed(0)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       {saved
-                        ? <span style={{ color: 'var(--green)', fontSize: 13, fontWeight: 600 }}>✓ Positions saved</span>
+                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontSize: 13, fontWeight: 600 }}><CheckCircle2 size={15} strokeWidth={1.75} /> Positions saved</span>
                         : <button className="btn-primary" onClick={handleSave}>Save Positions</button>
                       }
                     </div>
@@ -251,7 +261,7 @@ export default function Scanner() {
 
                 {result.candidates.length === 0 && (
                   <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-                    <div style={{ fontSize: 20, marginBottom: 12 }}>📉</div>
+                    <TrendingDown size={22} strokeWidth={1.75} style={{ marginBottom: 12, opacity: 0.6 }} />
                     <div style={{ fontWeight: 600, marginBottom: 8 }}>No candidates found</div>
                     <div style={{ fontSize: 13, lineHeight: 1.7 }}>
                       Options data is live during market hours <span style={{ color: 'var(--purple-light)' }}>(9:30am – 4:00pm ET, Mon – Fri)</span>.<br />
@@ -265,7 +275,7 @@ export default function Scanner() {
 
             {!result && !loading && !error && (
               <div className="card" style={{ textAlign: 'center', padding: 80, color: 'var(--text-muted)' }}>
-                <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>◎</div>
+                <ScanLine size={38} strokeWidth={1.5} style={{ marginBottom: 16, opacity: 0.3 }} />
                 <div style={{ fontSize: 15, fontWeight: 600 }}>Configure and run a scan</div>
                 <div style={{ fontSize: 13, marginTop: 6 }}>Results will appear here</div>
               </div>

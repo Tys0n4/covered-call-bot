@@ -2,13 +2,14 @@
 import { useEffect, useState } from 'react'
 import { getAllPositions, closePosition } from '../api/client'
 import { useTicker } from '../context/TickerContext'
+import { AlertTriangle, Layers } from 'lucide-react'
 
 function ConfirmModal({ position, onConfirm, onCancel, loading }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
-      <div className="card" style={{ width: 420, padding: 32, border: '1px solid rgba(239,68,68,0.3)', animation: 'fadeUp 0.2s ease forwards' }}>
-        <div style={{ fontSize: 24, marginBottom: 12 }}>⚠️</div>
-        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>Close Position?</div>
+      <div className="card" style={{ width: 420, padding: 32, border: '1px solid rgba(240,71,95,0.3)', animation: 'fadeUp 0.2s ease forwards' }}>
+        <AlertTriangle size={24} strokeWidth={1.75} color="var(--red)" style={{ marginBottom: 12 }} />
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Close Position?</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24, lineHeight: 1.6 }}>
           You are about to mark this position as closed:
           <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', marginTop: 12, fontFamily: 'JetBrains Mono, monospace', fontSize: 13 }}>
@@ -61,7 +62,7 @@ export default function Positions() {
       {confirm && <ConfirmModal position={confirm} onConfirm={handleConfirm} onCancel={() => setConfirm(null)} loading={closing} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em' }}>Positions</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' }}>Positions</h1>
         {selected && (
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 14, color: 'var(--purple-light)', background: 'var(--purple-dim)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px' }}>{selected}</span>
         )}
@@ -79,25 +80,25 @@ export default function Positions() {
           <div style={{ textAlign: 'center', padding: 60 }}><div className="spinner" style={{ width: 36, height: 36, margin: '0 auto' }} /></div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>◈</div>
+            <Layers size={26} strokeWidth={1.75} style={{ opacity: 0.4, marginBottom: 8 }} />
             <div>No {filter.toLowerCase()} positions{selected ? ` for ${selected}` : ''}.</div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>ID</th><th>Ticker</th><th>Type</th><th>Expiry</th><th>Strike</th><th>Contracts</th><th>Entry</th><th>Premium</th><th>Status</th><th>Opened</th><th></th></tr>
+              <tr><th>ID</th><th>Ticker</th><th>Type</th><th>Expiry</th><th className="num">Strike</th><th className="num">Contracts</th><th className="num">Entry</th><th className="num">Premium</th><th>Status</th><th>Opened</th><th></th></tr>
             </thead>
             <tbody>
               {filtered.map(p => (
                 <tr key={p.id}>
                   <td className="mono" style={{ color: 'var(--text-muted)' }}>#{p.id}</td>
                   <td style={{ fontWeight: 700, color: 'var(--text)', fontFamily: 'JetBrains Mono, monospace' }}>{p.ticker}</td>
-                  <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'purple' : 'green'}`}>{p.allocation_type}</span></td>
+                  <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'purple' : 'blue'}`}>{p.allocation_type}</span></td>
                   <td className="mono">{p.expiry}</td>
-                  <td className="mono" style={{ color: 'var(--text)', fontWeight: 600 }}>${p.strike.toFixed(2)}</td>
-                  <td className="mono">{p.contracts}</td>
-                  <td className="mono">${p.entry_price.toFixed(2)}</td>
-                  <td className="mono" style={{ color: 'var(--green)' }}>${p.premium_total.toFixed(2)}</td>
+                  <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>${p.strike.toFixed(2)}</td>
+                  <td className="mono num">{p.contracts}</td>
+                  <td className="mono num">${p.entry_price.toFixed(2)}</td>
+                  <td className="mono num" style={{ color: 'var(--green)' }}>${p.premium_total.toFixed(2)}</td>
                   <td><span className={`badge badge-${p.status === 'OPEN' ? 'purple' : 'red'}`}>{p.status}</span></td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{p.opened_at}</td>
                   <td>{p.status === 'OPEN' && <button className="btn-danger" onClick={() => setConfirm(p)}>Close</button>}</td>
