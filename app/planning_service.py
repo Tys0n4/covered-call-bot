@@ -5,6 +5,7 @@ import math
 from config import ScannerConfig, DEFAULT_CONFIG
 from models import ScanResult, PlannedCall
 from positions import create_positions_from_plan
+from strategy import split_contracts
 
 
 def get_allocation_targets(
@@ -26,8 +27,7 @@ def get_allocation_targets(
       available            : total contracts still available to sell
     """
     total = total_shares // 100
-    target_income = round(total * config.income_weight)
-    target_balanced = total - target_income
+    target_income, target_balanced = split_contracts(total, config.income_weight)
 
     open_income = sum(
         p["contracts"] for p in open_positions
@@ -38,8 +38,12 @@ def get_allocation_targets(
         if p.get("status") == "OPEN" and p.get("allocation_type") == "Balanced"
     )
 
-    needed_income   = max(target_income - open_income, 0)
-    needed_balanced = max(target_balanced - open_balanced, 0)
+    # Never plan more contracts than your shares can cover. If the split was
+    # changed while calls are open, one side can already be over its target;
+    # the other side then only gets what is actually free.
+    free            = max(total - open_income - open_balanced, 0)
+    needed_income   = min(max(target_income - open_income, 0), free)
+    needed_balanced = min(max(target_balanced - open_balanced, 0), free - needed_income)
     available       = needed_income + needed_balanced
 
     return {

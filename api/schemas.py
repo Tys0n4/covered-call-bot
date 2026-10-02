@@ -12,7 +12,7 @@ class ScanConfig(BaseModel):
     min_premium: float = 0.05
     min_volume: int = 10
     min_open_interest: int = 50
-    income_weight: float = 0.70
+    income_weight: float = 0.70   # ignored: the split now comes from your saved strategy
     target_delta: float = 0.22
 
 
@@ -109,19 +109,6 @@ class ManagementResponse(BaseModel):
     positions: list[EvaluatedPosition]
 
 
-class SettingsResponse(BaseModel):
-    min_dte: int
-    max_dte: int
-    min_strike_pct: float
-    min_premium: float
-    min_volume: int
-    min_open_interest: int
-    income_weight: float
-    target_delta: float
-    buyback_budget_pct: float
-    profit_capture_target_pct: float
-
-
 class HoldingIn(BaseModel):
     """A stock you own. Each 100 shares lets you sell one covered call."""
     ticker: str
@@ -132,3 +119,11 @@ class HoldingIn(BaseModel):
 class HoldingUpdate(BaseModel):
     shares: int = Field(ge=0, le=10_000_000)
     avg_cost: float = Field(ge=0, le=1_000_000)
+
+
+class StrategySettings(BaseModel):
+    """Your strategy, as shown and edited on the Strategy page."""
+    income_weight: float = Field(ge=0, le=1)                       # 0.70 = 70% income
+    profit_capture_target_pct: float = Field(ge=1, le=100)         # 80 = buy back at 80% kept
+    buyback_budget_pct: float = Field(ge=0, le=1)                  # 0.15 = 15% set aside
+    monthly_goal: float = Field(default=0, ge=0, le=10_000_000)    # dollars per month, 0 = off

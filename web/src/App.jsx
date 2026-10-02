@@ -5,7 +5,7 @@ import Layout    from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Scanner   from './pages/Scanner'
 import Positions from './pages/Positions'
-import Settings  from './pages/Settings'
+import Strategy  from './pages/Strategy'
 
 export default function App() {
   return (
@@ -18,7 +18,9 @@ export default function App() {
             <Route path="/positions" element={<Positions />} />
             {/* Manage was merged into Positions; keep old links working */}
             <Route path="/manage"    element={<Navigate to="/positions" replace />} />
-            <Route path="/settings"  element={<Settings />}  />
+            <Route path="/strategy"  element={<Strategy />}  />
+            {/* Settings became Strategy; keep old links working */}
+            <Route path="/settings"  element={<Navigate to="/strategy" replace />} />
           </Routes>
         </Layout>
       </TickerProvider>

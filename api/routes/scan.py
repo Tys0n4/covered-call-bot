@@ -5,7 +5,9 @@ from fastapi import APIRouter, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
-from config import ScannerConfig
+from dataclasses import replace
+
+from strategy import effective_config
 from portfolio import load_portfolio
 from scanner_service import scan_covered_calls
 from planning_service import build_plan, compute_buyback_budget, get_allocation_targets
@@ -47,14 +49,15 @@ async def run_scan(scan_config: ScanConfig):
         portfolio[0]
     )
 
-    config = ScannerConfig(
+    # Filters come from the Scanner page; split and buyback reserve from your saved strategy
+    config = replace(
+        effective_config(),
         min_dte=scan_config.min_dte,
         max_dte=scan_config.max_dte,
         min_strike_pct_above_current=scan_config.min_strike_pct,
         min_premium=scan_config.min_premium,
         min_volume=scan_config.min_volume,
         min_open_interest=scan_config.min_open_interest,
-        income_weight=scan_config.income_weight,
         target_delta=scan_config.target_delta,
     )
 

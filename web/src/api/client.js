@@ -7,7 +7,8 @@ const api = axios.create({
 })
 
 export const getPortfolio    = ()            => api.get('/portfolio')
-export const getSettings     = ()            => api.get('/settings')
+export const getStrategy     = ()            => api.get('/settings')
+export const saveStrategy    = (data)        => api.put('/settings', data)
 export const getPositions    = (ticker)      => api.get('/positions',     { params: ticker ? { ticker } : {} })
 export const getAllPositions  = (ticker)      => api.get('/positions/all', { params: ticker ? { ticker } : {} })
 export const addPosition     = (data)        => api.post('/positions', data)

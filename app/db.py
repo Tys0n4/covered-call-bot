@@ -56,6 +56,17 @@ positions = Table(
 )
 
 
+# Your strategy settings: a single row (id = 1), edited on the Strategy page
+strategy = Table(
+    "strategy", metadata,
+    Column("id",                        Integer, primary_key=True),
+    Column("income_weight",             Float, nullable=False),
+    Column("profit_capture_target_pct", Float, nullable=False),
+    Column("buyback_budget_pct",        Float, nullable=False),
+    Column("monthly_goal",              Float, nullable=False, default=0),
+)
+
+
 def database_url() -> str:
     """DATABASE_URL if set (normalized for SQLAlchemy + psycopg), else the local SQLite file."""
     url = os.environ.get("DATABASE_URL", "").strip()

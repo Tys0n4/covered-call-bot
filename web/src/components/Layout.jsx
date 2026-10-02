@@ -1,6 +1,6 @@
 // src/components/Layout.jsx
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, ScanLine, Briefcase, Settings as SettingsIcon } from 'lucide-react'
+import { LayoutGrid, ScanLine, Briefcase, SlidersHorizontal } from 'lucide-react'
 
 // Three main steps of the workflow: see where you stand, find a trade, look after it.
 const NAV = [
@@ -72,7 +72,7 @@ export default function Layout({ children }) {
         </nav>
 
         <div style={{ padding: '12px 12px 24px', borderTop: '1px solid var(--border)' }}>
-          <NavItem to="/settings" label="Settings" icon={SettingsIcon} small />
+          <NavItem to="/strategy" label="Strategy" hint="Your rules" icon={SlidersHorizontal} small />
         </div>
       </aside>
 

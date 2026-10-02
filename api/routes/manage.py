@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
-from config import DEFAULT_CONFIG
+from strategy import effective_config
 from positions_store import load_open_positions, list_all_positions
 from management import evaluate_positions
 from api.schemas import ManagementResponse, EvaluatedPosition
@@ -33,7 +33,7 @@ async def evaluate_open_positions(ticker: Optional[str] = None):
             positions=[],
         )
 
-    results = evaluate_positions(open_positions, config=DEFAULT_CONFIG)
+    results = evaluate_positions(open_positions, config=effective_config())
 
     evaluated = []
     for r in results:

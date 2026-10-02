@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
 from portfolio import load_portfolio, upsert_holding, delete_holding, normalize_ticker
 from positions_store import load_open_positions
-from config import DEFAULT_CONFIG
+from strategy import load_strategy, split_contracts
 from api.schemas import HoldingIn, HoldingUpdate
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -17,13 +17,12 @@ def _portfolio_rows() -> list[dict]:
     """All holdings with contract stats, as used by the dashboard and ticker selector."""
     positions = load_portfolio()
     open_positions = load_open_positions()
-    config = DEFAULT_CONFIG
+    income_weight = load_strategy()["income_weight"]
 
     result = []
     for pos in positions:
         total_contracts = pos.shares // 100
-        target_income   = round(total_contracts * config.income_weight)
-        target_balanced = total_contracts - target_income
+        target_income, target_balanced = split_contracts(total_contracts, income_weight)
 
         open_income = sum(
             p["contracts"] for p in open_positions
