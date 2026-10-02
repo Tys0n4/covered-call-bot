@@ -56,6 +56,8 @@ class ScanResponse(BaseModel):
     buyback_budget: float
     net_premium: float
     warnings: list[str]
+    quotes_live: bool = True                 # False = priced at last trades (market closed)
+    next_market_open: Optional[str] = None   # ISO time of the next open, when closed
 
 
 class PositionIn(BaseModel):

@@ -1,4 +1,5 @@
 # api/routes/scan.py
+import math
 import sys
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 from dataclasses import replace
 
 from strategy import effective_config
+from market_hours import next_market_open
 from portfolio import load_portfolio
 from scanner_service import scan_covered_calls
 from planning_service import build_plan, compute_buyback_budget, get_allocation_targets
@@ -16,6 +18,15 @@ from models import PlannedCall
 from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem
 
 router = APIRouter(prefix="/scan", tags=["scanner"])
+
+
+def _num(value):
+    """A float, or None for missing/NaN values (NaN isn't valid JSON)."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(f) or math.isinf(f) else f
 
 
 def _row_to_candidate(row) -> Candidate:
@@ -27,11 +38,11 @@ def _row_to_candidate(row) -> Candidate:
         premium_per_contract=float(row["premium_per_contract"]),
         annualized_yield_pct=float(row.get("annualized_yield_pct", 0)),
         upside_to_strike_pct=float(row["upside_to_strike_pct"]),
-        delta=float(row["delta"]) if row.get("delta") is not None else None,
-        spread_pct=float(row["spread_pct"]) if row.get("spread_pct") is not None else None,
+        delta=_num(row.get("delta")),
+        spread_pct=_num(row.get("spread_pct")),
         quote_quality=str(row["quote_quality"]),
-        income_score=float(row["income_score"]) if row.get("income_score") is not None else None,
-        balanced_score=float(row["balanced_score"]) if row.get("balanced_score") is not None else None,
+        income_score=_num(row.get("income_score")),
+        balanced_score=_num(row.get("balanced_score")),
     )
 
 
@@ -116,6 +127,8 @@ async def run_scan(scan_config: ScanConfig):
         buyback_budget=buyback_budget,
         net_premium=gross_premium - buyback_budget,
         warnings=scan.warnings,
+        quotes_live=scan.quotes_live,
+        next_market_open=None if scan.quotes_live else next_market_open().isoformat(),
     )
 
 

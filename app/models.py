@@ -51,3 +51,4 @@ class ScanResult:
     income_pick: object | None
     balanced_pick: object | None
     warnings: list[str] = field(default_factory=list)
+    quotes_live: bool = True        # False = last traded prices (market closed / no live quotes)

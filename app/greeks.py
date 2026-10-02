@@ -11,7 +11,8 @@ def estimate_call_delta(stock_price, strike, days_to_expiry, implied_volatility,
     """Black-Scholes delta estimate — used only when provider delta is unavailable."""
     if stock_price <= 0 or strike <= 0 or days_to_expiry <= 0:
         return None
-    if implied_volatility is None or pd.isna(implied_volatility) or implied_volatility <= 0:
+    # Below 1% is a placeholder (Yahoo reports ~0 after hours), not a real volatility
+    if implied_volatility is None or pd.isna(implied_volatility) or implied_volatility < 0.01:
         return None
 
     T = days_to_expiry / 365.0

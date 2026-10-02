@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { runScan, savePositions } from '../api/client'
 import { useTicker } from '../context/TickerContext'
-import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight } from 'lucide-react'
+import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
@@ -101,15 +101,17 @@ function Fact({ label, tip, value, color }) {
   )
 }
 
-function PickCard({ title, subtitle, icon: Icon, pick, accent }) {
+function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan }) {
   if (!pick) return null
   const called = pick.delta != null ? `~${Math.round(pick.delta * 100)}%` : 'n/a'
   return (
-    <div className="card" style={{ flex: 1, borderColor: `${accent}33` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: accent, fontWeight: 700, fontSize: 15 }}>
+    <div className="card" style={{ flex: 1, borderColor: notInPlan ? 'var(--border)' : `${accent}33` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: notInPlan ? 'var(--text-muted)' : accent, fontWeight: 700, fontSize: 15 }}>
         <Icon size={16} strokeWidth={2} /> {title}
+        {notInPlan && <span className="badge" style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.06)', color: 'var(--text-dim)', border: '1px solid var(--border)' }}>Not in your plan</span>}
       </div>
-      <div className="hint" style={{ marginBottom: 16 }}>{subtitle}</div>
+      <div className="hint" style={{ marginBottom: 16 }}>{notInPlan || subtitle}</div>
+      <div style={notInPlan ? { opacity: 0.55 } : undefined}>
       <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>
         {money(pick.strike)} strike <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>· expires {fmtDate(pick.expiry)}</span>
       </div>
@@ -118,6 +120,7 @@ function PickCard({ title, subtitle, icon: Icon, pick, accent }) {
         <Fact label="Yearly return"            tip={TERMS.yield}   value={pct(pick.annualized_yield_pct)} />
         <Fact label="Room to rise"             tip={TERMS.upside}  value={pct(pick.upside_to_strike_pct)} />
         <Fact label="Chance of being called"   tip={TERMS.delta}   value={called} />
+      </div>
       </div>
     </div>
   )
@@ -204,6 +207,16 @@ export default function Scanner() {
     : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
 
   const planned = result?.planned_positions || []
+  // Market closed: results use last traded prices, so saving waits for live prices
+  const lastPrices = result?.quotes_live === false
+  const nextOpen = result?.next_market_open
+    ? new Date(result.next_market_open).toLocaleString('en-CA', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
+    : null
+  // Which side of your split this stock actually uses (from your Strategy split)
+  const summary = result?.allocation_summary || {}
+  const splitTarget = summary.total_contracts > 0
+    ? { income: summary.target_income, balanced: summary.target_balanced }
+    : { income: null, balanced: null }
 
   return (
     <div className="fade-up">
@@ -267,10 +280,21 @@ export default function Scanner() {
           {result && !loading && (
             <>
               <div style={{ fontSize: 15, color: 'var(--text-dim)', marginBottom: 20 }}>
-                <strong style={{ color: 'var(--text)' }}>{result.ticker}</strong> is trading at{' '}
+                <strong style={{ color: 'var(--text)' }}>{result.ticker}</strong> {lastPrices ? 'last traded at' : 'is trading at'}{' '}
                 <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.{' '}
                 {plural(result.candidates.length, 'option')} matched your filters.
               </div>
+
+              {lastPrices && (
+                <div className="callout callout-amber" style={{ marginBottom: 20 }}>
+                  <Moon size={18} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <strong>The market is closed, so these are last traded prices, not live quotes.</strong>{' '}
+                    Use them to plan. Prices will change when trading starts{nextOpen ? ` (${nextOpen} your time)` : ''}.
+                    Scan again then to save a trade.
+                  </div>
+                </div>
+              )}
 
               {result.warnings?.length > 0 && (
                 <div className="callout callout-amber" style={{ marginBottom: 20, flexDirection: 'column', gap: 6 }}>
@@ -287,13 +311,16 @@ export default function Scanner() {
                 <div className="rec-card" style={{ marginBottom: 24 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, marginBottom: 20 }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-light)', marginBottom: 6 }}>Recommended trade</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-light)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        Recommended trade
+                        {lastPrices && <span className="badge badge-amber">Last prices</span>}
+                      </div>
                       <div style={{ fontSize: 22, fontWeight: 700 }}>
                         Sell {plural(planned.reduce((s, p) => s + p.contracts, 0), 'call')} on {result.ticker}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div className="fact-label" style={{ justifyContent: 'flex-end' }}>You collect today <InfoTip text={TERMS.premium} size={12} align="right" /></div>
+                      <div className="fact-label" style={{ justifyContent: 'flex-end' }}>{lastPrices ? 'Estimated at last prices' : 'You collect today'} <InfoTip text={TERMS.premium} size={12} align="right" /></div>
                       <div className="stat-num" style={{ color: 'var(--green)', fontSize: 30 }}>{money(result.gross_premium)}</div>
                     </div>
                   </div>
@@ -327,13 +354,16 @@ export default function Scanner() {
                         <Link to="/positions" className="link-btn">View in Positions <ArrowRight size={15} /></Link>
                       </div>
                     ) : (
-                      <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                      <button className="btn-primary" onClick={handleSave} disabled={saving || lastPrices}
+                        title={lastPrices ? 'Available when the market is open and prices are live' : undefined}>
                         {saving ? <><span className="spinner" /> Saving…</> : 'Save this trade'}
                       </button>
                     )}
                   </div>
                   <div className="hint" style={{ marginTop: 14 }}>
-                    Saving records the trade here so you can track it. It does not place an order with your broker.
+                    {lastPrices
+                      ? 'Saving is turned off until the market opens, so trades are never recorded at an out-of-date price.'
+                      : 'Saving records the trade here so you can track it. It does not place an order with your broker.'}
                   </div>
                 </div>
               )}
@@ -350,8 +380,10 @@ export default function Scanner() {
                 <>
                   <div className="section-title" style={{ marginBottom: 12 }}>Top picks</div>
                   <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
-                    <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#6ae4ff" />
-                    <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#5aa9e6" />
+                    <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#6ae4ff"
+                      notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} />
+                    <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#5aa9e6"
+                      notInPlan={splitTarget.balanced === 0 ? "Your split puts all of this stock's contracts in income, so this is shown for reference only." : null} />
                   </div>
                 </>
               )}

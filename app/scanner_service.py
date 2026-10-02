@@ -11,6 +11,7 @@ from filters import filter_covered_calls
 from calculations import add_option_metrics
 from greeks import add_estimated_delta
 from scoring import score_options, pick_best_options
+from market_hours import is_market_open
 
 
 def resolve_min_strike(current_price: float, config: ScannerConfig) -> float:
@@ -56,11 +57,22 @@ def scan_covered_calls(
             warnings=["No options found in DTE window."],
         )
 
+    # Outside market hours (or when Yahoo has no live quotes at all, e.g. a
+    # holiday) bid/ask are empty, so price options at their last trade instead.
+    if "bid" in raw_calls.columns and "ask" in raw_calls.columns:
+        bid = pd.to_numeric(raw_calls["bid"], errors="coerce").fillna(0)
+        ask = pd.to_numeric(raw_calls["ask"], errors="coerce").fillna(0)
+        has_live_quotes = bool(((bid > 0) & (ask > 0)).any())
+    else:
+        has_live_quotes = False
+    quotes_live = is_market_open() and has_live_quotes
+
     filtered = filter_covered_calls(
         raw_calls,
         min_strike_price=min_strike,
         stock_price=current_price,
         config=config,
+        use_last_price=not quotes_live,
     )
 
     if filtered.empty:
@@ -71,10 +83,11 @@ def scan_covered_calls(
             income_pick=None,
             balanced_pick=None,
             warnings=["No candidates passed filters."],
+            quotes_live=quotes_live,
         )
 
     bad_quote_count = (filtered["quote_quality"] != "LIVE").sum()
-    if bad_quote_count > 0:
+    if quotes_live and bad_quote_count > 0:
         warnings.append(f"{bad_quote_count} candidate(s) have STALE or BAD quotes — verify on broker.")
 
     enriched = add_estimated_delta(filtered, current_price, risk_free_rate=config.risk_free_rate)
@@ -83,8 +96,8 @@ def scan_covered_calls(
     missing_delta = enriched["delta"].isna().sum()
     if missing_delta > 0:
         warnings.append(
-            f"{missing_delta} candidate(s) have missing delta (bad IV). "
-            "Balanced score will apply a zero delta penalty for those rows."
+            f"Couldn't estimate the chance of being called for {missing_delta} option(s), "
+            "so the balanced pick may be less accurate."
         )
 
     scored = score_options(enriched, config=config)
@@ -97,4 +110,5 @@ def scan_covered_calls(
         income_pick=income_pick,
         balanced_pick=balanced_pick,
         warnings=warnings,
+        quotes_live=quotes_live,
     )

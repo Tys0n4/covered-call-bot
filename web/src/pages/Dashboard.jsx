@@ -45,14 +45,21 @@ function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
         <div style={{ width: w(t.open_balanced), background: 'linear-gradient(90deg, #3b8fd0, var(--blue))', transition: 'width 0.5s' }} />
       </div>
       <div style={{ display: 'flex', gap: 20, fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--accent-light)' }} />
-          Income: {t.open_income} of {t.target_income} <InfoTip text={TERMS.income} size={12} />
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--blue)' }} />
-          Balanced: {t.open_balanced} of {t.target_balanced} <InfoTip text={TERMS.balanced} size={12} />
-        </span>
+        {/* Hide a side your split doesn't use, unless calls of that kind are still open */}
+        {(t.target_income > 0 || t.open_income > 0) && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--accent-light)' }} />
+            {t.target_income > 0 ? <>Income: {t.open_income} of {t.target_income}</> : <>Income: {t.open_income} open (not in your split)</>}
+            <InfoTip text={TERMS.income} size={12} />
+          </span>
+        )}
+        {(t.target_balanced > 0 || t.open_balanced > 0) && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--blue)' }} />
+            {t.target_balanced > 0 ? <>Balanced: {t.open_balanced} of {t.target_balanced}</> : <>Balanced: {t.open_balanced} open (not in your split)</>}
+            <InfoTip text={TERMS.balanced} size={12} />
+          </span>
+        )}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 8, height: 8, borderRadius: 99, background: 'rgba(255,255,255,0.18)' }} />
           Not sold: {t.available}
