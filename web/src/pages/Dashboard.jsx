@@ -1,109 +1,112 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getPortfolio, getAllPositions } from '../api/client'
-import { Link } from 'react-router-dom'
-import { ScanLine, LayoutGrid, ArrowUpRight } from 'lucide-react'
+import { useTicker } from '../context/TickerContext'
+import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
+import PageHeader from '../components/PageHeader'
+import InfoTip from '../components/InfoTip'
+import Collapsible from '../components/Collapsible'
+import HoldingModal from '../components/HoldingModal'
+import { TERMS } from '../lib/terms'
+import { fmtDate, money, plural } from '../lib/format'
 
-function TickerCard({ ticker: t, positions }) {
-  const grossPremium = positions.reduce((s, p) => s + p.premium_total, 0)
+function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
+  const collected = positions.reduce((s, p) => s + p.premium_total, 0)
+  const total = t.total_contracts || 0
+  const w = n => (total > 0 ? `${(n / total) * 100}%` : '0%')
 
   return (
-    <div className="card-gradient" style={{ marginBottom: 20 }}>
-      {/* Ticker header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+    <div className="card" style={{ marginBottom: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-            fontSize: 22, color: 'var(--purple-light)',
-            background: 'var(--purple-dim)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '4px 12px',
-          }}>{t.ticker}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            {t.shares.toLocaleString()} shares · avg ${t.avg_cost.toFixed(2)}
-          </div>
+          <span className="ticker-pill" style={{ fontSize: 18 }}>{t.ticker}</span>
+          <span className="hint" style={{ fontSize: 14 }}>{t.shares.toLocaleString()} shares · avg cost {money(t.avg_cost)}</span>
+          <button className="btn-secondary" onClick={onEdit} style={{ padding: '5px 12px', fontSize: 13, borderRadius: 9 }} aria-label={`Edit ${t.ticker}`}>
+            <Pencil size={13} strokeWidth={2} /> Edit
+          </button>
         </div>
-        <div style={{
-          fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-          fontSize: 18, color: 'var(--green)',
-        }}>${grossPremium.toFixed(2)} <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>collected</span></div>
-      </div>
-
-      {/* Stat row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
-        {[
-          ['Total',     t.total_contracts,  'var(--text)'],
-          ['Income',    `${t.open_income}/${t.target_income}`,   'var(--purple-light)'],
-          ['Balanced',  `${t.open_balanced}/${t.target_balanced}`, 'var(--blue)'],
-          ['Open',      t.open_total,       'var(--text)'],
-          ['Available', t.available,        t.available > 0 ? 'var(--amber)' : 'var(--text-muted)'],
-        ].map(([label, val, color]) => (
-          <div key={label} style={{
-            background: 'rgba(0,0,0,0.18)', borderRadius: 12,
-            padding: '12px 14px', textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
-            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: 19, color }}>{val}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Allocation bar */}
-      <div style={{ marginBottom: positions.length > 0 ? 20 : 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.03em' }}>ALLOCATION</span>
-          <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
-            <span><span style={{ color: 'var(--purple-light)' }}>■</span> Income {Math.round(t.open_income/t.total_contracts*100)||0}%</span>
-            <span><span style={{ color: 'var(--blue)' }}>■</span> Balanced {Math.round(t.open_balanced/t.total_contracts*100)||0}%</span>
-            <span><span style={{ color: 'var(--text-muted)', opacity: 0.6 }}>■</span> Available {Math.round(t.available/t.total_contracts*100)||0}%</span>
-          </div>
-        </div>
-        <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', display: 'flex' }}>
-          {t.open_income > 0 && (
-            <div style={{ width: `${t.open_income/t.total_contracts*100}%`, background: 'linear-gradient(90deg, var(--purple), var(--purple-light))', transition: 'width 0.5s' }} />
-          )}
-          {t.open_balanced > 0 && (
-            <div style={{ width: `${t.open_balanced/t.total_contracts*100}%`, background: 'linear-gradient(90deg, #2fb8d6, var(--blue))', transition: 'width 0.5s' }} />
-          )}
+        <div style={{ textAlign: 'right' }}>
+          <div className="stat-num" style={{ fontSize: 20, color: 'var(--green)' }}>{money(collected)}</div>
+          <div className="hint">collected from open calls</div>
         </div>
       </div>
 
-      {/* Positions mini table */}
+      {/* One-line status + bar */}
+      <div style={{ fontSize: 16, marginBottom: 10 }}>
+        <strong>{t.open_total} of {plural(total, 'contract')}</strong> working
+        {t.available > 0 && <> · <strong style={{ color: 'var(--amber)' }}>{t.available} ready to sell</strong></>}
+        <span style={{ marginLeft: 6 }}><InfoTip text={TERMS.available} /></span>
+      </div>
+      <div style={{ height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', display: 'flex', marginBottom: 10 }}>
+        <div style={{ width: w(t.open_income), background: 'linear-gradient(90deg, var(--accent), var(--accent-light))', transition: 'width 0.5s' }} />
+        <div style={{ width: w(t.open_balanced), background: 'linear-gradient(90deg, #3b8fd0, var(--blue))', transition: 'width 0.5s' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 20, fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--accent-light)' }} />
+          Income: {t.open_income} of {t.target_income} <InfoTip text={TERMS.income} size={12} />
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--blue)' }} />
+          Balanced: {t.open_balanced} of {t.target_balanced} <InfoTip text={TERMS.balanced} size={12} />
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 99, background: 'rgba(255,255,255,0.18)' }} />
+          Not sold: {t.available}
+        </span>
+      </div>
+
+      {/* Next step */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px', marginBottom: positions.length ? 14 : 0 }}>
+        {t.available > 0 ? (
+          <>
+            <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>
+              <strong style={{ color: 'var(--text)' }}>Next step:</strong> find a call for your {plural(t.available, 'unused contract')}.
+            </span>
+            <button className="btn-primary" onClick={onScan} style={{ padding: '9px 18px' }}><ScanLine size={15} strokeWidth={2} /> Scan {t.ticker}</button>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 14, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle2 size={16} color="var(--green)" /> All contracts are working. Check if any are ready to buy back.
+            </span>
+            <button className="btn-secondary" onClick={onPositions} style={{ padding: '9px 18px' }}>View positions <ArrowRight size={15} /></button>
+          </>
+        )}
+      </div>
+
+      {/* Details on request */}
       {positions.length > 0 && (
-        <table className="data-table" style={{ marginTop: 4 }}>
-          <thead>
-            <tr>
-              <th>Type</th><th>Expiry</th><th className="num">Strike</th>
-              <th className="num">Contracts</th><th className="num">Entry</th><th className="num">Premium</th><th>Opened</th>
-            </tr>
-          </thead>
-          <tbody>
-            {positions.map(p => (
-              <tr key={p.id}>
-                <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'purple' : 'blue'}`}>{p.allocation_type}</span></td>
-                <td className="mono">{p.expiry}</td>
-                <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>${p.strike.toFixed(2)}</td>
-                <td className="mono num">{p.contracts}</td>
-                <td className="mono num">${p.entry_price.toFixed(2)}</td>
-                <td className="mono num" style={{ color: 'var(--green)' }}>${p.premium_total.toFixed(2)}</td>
-                <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{p.opened_at}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {positions.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-          No open positions for {t.ticker}.{' '}
-          <Link to="/scanner" style={{ color: 'var(--purple-light)' }}>Run a scan →</Link>
-        </div>
+        <Collapsible label={`Show ${plural(positions.length, 'open call')}`} openLabel="Hide open calls">
+          <table className="data-table">
+            <thead>
+              <tr><th>Type</th><th className="num">Strike</th><th>Expires</th><th className="num">Contracts</th><th className="num">Collected</th></tr>
+            </thead>
+            <tbody>
+              {positions.map(p => (
+                <tr key={p.id}>
+                  <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span></td>
+                  <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(p.strike)}</td>
+                  <td>{fmtDate(p.expiry)}</td>
+                  <td className="mono num">{p.contracts}</td>
+                  <td className="mono num" style={{ color: 'var(--green)' }}>{money(p.premium_total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Collapsible>
       )}
     </div>
   )
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+  const { selectTicker, applyPortfolio } = useTicker()
+  const [editing,      setEditing]      = useState(null)   // null | 'new' | a holding row
   const [portfolio,    setPortfolio]    = useState([])
   const [positions,    setPositions]    = useState([])
   const [allPositions, setAllPositions] = useState([])
@@ -120,36 +123,45 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-  const totalGross     = positions.reduce((s, p) => s + p.premium_total, 0)
-  const totalOpen      = positions.length
+  const openPremium    = positions.reduce((s, p) => s + p.premium_total, 0)
   const totalContracts = portfolio.reduce((s, t) => s + t.total_contracts, 0)
+  const working        = portfolio.reduce((s, t) => s + t.open_total, 0)
+  const available      = portfolio.reduce((s, t) => s + t.available, 0)
 
-  // Cumulative premium collected over time, for a quiet trend line under
-  // the hero number — the "big number + sparkline" pattern most brokerage
-  // dashboards lead with, built from real position history.
+  // Running total of premium from every call you've sold, oldest first.
   const chartData = useMemo(() => {
     const sorted = [...allPositions].sort((a, b) => new Date(a.opened_at) - new Date(b.opened_at))
-    let running = 0
-    return sorted.map(p => {
-      running += p.premium_total
-      return { date: p.opened_at, total: Number(running.toFixed(2)) }
-    })
+    return sorted.reduce((points, p) => {
+      const prev = points.length ? points[points.length - 1].total : 0
+      points.push({ date: p.opened_at, total: Number((prev + p.premium_total).toFixed(2)) })
+      return points
+    }, [])
   }, [allPositions])
+
+  const go = (ticker, path) => { selectTicker(ticker); navigate(path) }
+
+  // The API returns the updated portfolio after every add/edit/remove
+  const handleSaved = (rows, ticker) => {
+    setPortfolio(rows)
+    applyPortfolio(rows)
+    if (ticker && editing === 'new') selectTicker(ticker)
+    setEditing(null)
+  }
 
   return (
     <div className="fade-up">
-      {/* Header */}
-      <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 4 }}>Dashboard</h1>
-          <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-            {new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </div>
-        </div>
-        <Link to="/scanner">
-          <button className="btn-primary"><ScanLine size={16} strokeWidth={2} /> Run Scan</button>
-        </Link>
-      </div>
+      {editing && (
+        <HoldingModal
+          holding={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
+      )}
+      <PageHeader
+        title="Dashboard"
+        subtitle={`Where your covered calls stand today, ${new Date().toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' })}.`}
+        actions={<button className="btn-primary" onClick={() => navigate('/scanner')}><ScanLine size={16} strokeWidth={2} /> Find a trade</button>}
+      />
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
@@ -157,65 +169,67 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* Summary row — hero premium metric with trend, plus supporting stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr', gap: 16, marginBottom: 28 }}>
+          {/* Three numbers that matter */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 16, marginBottom: 32 }}>
             <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div className="stat-label">Gross Premium Collected</div>
-                  <div className="stat-num" style={{ fontSize: 30 }}>${totalGross.toFixed(2)}</div>
-                </div>
-                {chartData.length >= 2 && (
-                  <span className="badge badge-green">
-                    <ArrowUpRight size={12} /> {chartData.length} fills
-                  </span>
-                )}
-              </div>
+              <div className="stat-label">Premium from open calls <InfoTip text={TERMS.premium} size={12} /></div>
+              <div className="stat-num" style={{ fontSize: 32, color: 'var(--green)' }}>{money(openPremium)}</div>
               {chartData.length >= 2 ? (
-                <div style={{ height: 52, marginTop: 12, marginLeft: -8, marginRight: -8 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
-                      <defs>
-                        <linearGradient id="premiumFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f2f2f5" stopOpacity={0.18} />
-                          <stop offset="100%" stopColor="#f2f2f5" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="date" hide />
-                      <YAxis hide domain={['dataMin', 'dataMax']} />
-                      <Tooltip
-                        contentStyle={{ background: '#17171e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, fontSize: 12 }}
-                        labelStyle={{ color: '#9d9da9' }}
-                        itemStyle={{ color: '#f2f2f5' }}
-                        formatter={(v) => [`$${v.toFixed(2)}`, 'Collected']}
-                      />
-                      <Area type="monotone" dataKey="total" stroke="#d8d8e0" strokeWidth={1.75} fill="url(#premiumFill)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                <>
+                  <div style={{ height: 56, marginTop: 10, marginLeft: -8, marginRight: -8 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
+                        <defs>
+                          <linearGradient id="premiumFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#6ae4ff" stopOpacity={0.22} />
+                            <stop offset="100%" stopColor="#6ae4ff" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="date" hide />
+                        <YAxis hide domain={['dataMin', 'dataMax']} />
+                        <Tooltip
+                          contentStyle={{ background: '#202a3e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, fontSize: 12 }}
+                          labelStyle={{ color: '#cdd0d6' }}
+                          itemStyle={{ color: '#ffffff' }}
+                          labelFormatter={fmtDate}
+                          formatter={(v) => [money(v), 'Total collected']}
+                        />
+                        <Area type="monotone" dataKey="total" stroke="#6ae4ff" strokeWidth={1.75} fill="url(#premiumFill)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="hint">All-time total: {money(chartData[chartData.length - 1].total)} from {plural(chartData.length, 'call')}</div>
+                </>
               ) : (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 'auto', paddingTop: 12 }}>
-                  Trend appears once you have 2+ filled positions.
-                </div>
+                <div className="hint" style={{ marginTop: 'auto', paddingTop: 12 }}>A trend line appears once you've sold 2 or more calls.</div>
               )}
             </div>
-            {[
-              ['Total Contracts', totalContracts,   'var(--text)'],
-              ['Open Positions',  totalOpen,         'var(--purple-light)'],
-              ['Tickers',         portfolio.length,  'var(--text)'],
-            ].map(([label, val, color]) => (
-              <div key={label} className="card">
-                <div className="stat-label">{label}</div>
-                <div className="stat-num" style={{ color }}>{val}</div>
-              </div>
-            ))}
+            <div className="card">
+              <div className="stat-label">Contracts working <InfoTip text="Contracts with an open call sold against them. Each contract covers 100 shares." size={12} /></div>
+              <div className="stat-num" style={{ fontSize: 32 }}>{working}<span className="muted" style={{ fontSize: 20 }}> / {totalContracts}</span></div>
+              <div className="hint" style={{ marginTop: 6 }}>across {plural(portfolio.length, 'stock')}</div>
+            </div>
+            <div className="card">
+              <div className="stat-label">Ready to sell <InfoTip text={TERMS.available} size={12} /></div>
+              <div className="stat-num" style={{ fontSize: 32, color: available > 0 ? 'var(--amber)' : 'var(--text)' }}>{available}</div>
+              <div className="hint" style={{ marginTop: 6 }}>{available > 0 ? 'Scan to put these to work.' : 'Everything is covered.'}</div>
+            </div>
           </div>
 
-          {/* Per-ticker cards */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div className="section-title" style={{ margin: 0 }}>Your stocks</div>
+            {portfolio.length > 0 && (
+              <button className="btn-secondary" onClick={() => setEditing('new')} style={{ padding: '8px 16px' }}>
+                <Plus size={15} strokeWidth={2} /> Add stock
+              </button>
+            )}
+          </div>
           {portfolio.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-              <LayoutGrid size={26} strokeWidth={1.75} style={{ opacity: 0.4, marginBottom: 10 }} />
-              <div>No tickers in portfolio. Add rows to <code>data/portfolio.csv</code>.</div>
+            <div className="card" style={{ textAlign: 'center', padding: 60 }}>
+              <LayoutGrid size={28} strokeWidth={1.75} style={{ opacity: 0.4, marginBottom: 10 }} />
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No stocks yet</div>
+              <div className="hint" style={{ marginBottom: 18 }}>Add the shares you own to start finding covered calls.</div>
+              <button className="btn-primary" onClick={() => setEditing('new')}><Plus size={16} strokeWidth={2} /> Add your first stock</button>
             </div>
           ) : (
             portfolio.map(t => (
@@ -223,6 +237,9 @@ export default function Dashboard() {
                 key={t.ticker}
                 ticker={t}
                 positions={positions.filter(p => p.ticker === t.ticker)}
+                onScan={() => go(t.ticker, '/scanner')}
+                onPositions={() => go(t.ticker, '/positions')}
+                onEdit={() => setEditing(t)}
               />
             ))
           )}

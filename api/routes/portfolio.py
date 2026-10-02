@@ -1,23 +1,20 @@
 # api/routes/portfolio.py
 import sys
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
-from portfolio import load_portfolio
+from portfolio import load_portfolio, upsert_holding, delete_holding, normalize_ticker
 from positions_store import load_open_positions
 from config import DEFAULT_CONFIG
+from api.schemas import HoldingIn, HoldingUpdate
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 
-@router.get("")
-async def get_portfolio():
-    """
-    Return all tickers in the portfolio with contract stats.
-    Used by the frontend ticker selector and dashboard.
-    """
+def _portfolio_rows() -> list[dict]:
+    """All holdings with contract stats, as used by the dashboard and ticker selector."""
     positions = load_portfolio()
     open_positions = load_open_positions()
     config = DEFAULT_CONFIG
@@ -41,7 +38,7 @@ async def get_portfolio():
             and p.get("allocation_type") == "Balanced"
         )
         open_total    = open_income + open_balanced
-        available     = total_contracts - open_total
+        available     = max(total_contracts - open_total, 0)
         gross_premium = sum(
             p["premium_total"] for p in open_positions
             if p.get("status") == "OPEN"
@@ -63,3 +60,75 @@ async def get_portfolio():
         })
 
     return result
+
+
+def _open_contracts(ticker: str) -> int:
+    return sum(
+        p["contracts"] for p in load_open_positions()
+        if p.get("status") == "OPEN" and p.get("ticker") == ticker
+    )
+
+
+def _valid_ticker(ticker: str) -> str:
+    try:
+        return normalize_ticker(ticker)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+def _check_covers_open_calls(ticker: str, shares: int) -> None:
+    """Refuse share counts that would leave already-sold calls uncovered."""
+    open_contracts = _open_contracts(ticker)
+    if shares // 100 < open_contracts:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"You have {open_contracts} open call contract(s) on {ticker}, which need at least "
+                f"{open_contracts * 100} shares. Close those calls first or keep more shares."
+            ),
+        )
+
+
+@router.get("")
+async def get_portfolio():
+    """
+    Return all tickers in the portfolio with contract stats.
+    Used by the frontend ticker selector and dashboard.
+    """
+    return _portfolio_rows()
+
+
+@router.post("", status_code=201)
+async def add_holding(holding: HoldingIn):
+    """Add a stock you own. Fails if the ticker is already in the portfolio (use PUT to edit)."""
+    ticker = _valid_ticker(holding.ticker)
+    if any(p.ticker == ticker for p in load_portfolio()):
+        raise HTTPException(status_code=409, detail=f"{ticker} is already in your portfolio. Edit it instead.")
+    upsert_holding(ticker, holding.shares, holding.avg_cost)
+    return _portfolio_rows()
+
+
+@router.put("/{ticker}")
+async def update_holding(ticker: str, update: HoldingUpdate):
+    """Change the share count or average cost of a stock you own."""
+    t = _valid_ticker(ticker)
+    if not any(p.ticker == t for p in load_portfolio()):
+        raise HTTPException(status_code=404, detail=f"{t} is not in your portfolio.")
+    _check_covers_open_calls(t, update.shares)
+    upsert_holding(t, update.shares, update.avg_cost)
+    return _portfolio_rows()
+
+
+@router.delete("/{ticker}")
+async def remove_holding(ticker: str):
+    """Remove a stock from the portfolio. Blocked while it still has open calls."""
+    t = _valid_ticker(ticker)
+    open_contracts = _open_contracts(t)
+    if open_contracts:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{t} still has {open_contracts} open call contract(s). Close them on the Positions page first.",
+        )
+    if not delete_holding(t):
+        raise HTTPException(status_code=404, detail=f"{t} is not in your portfolio.")
+    return _portfolio_rows()

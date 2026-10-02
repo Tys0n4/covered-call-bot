@@ -1,8 +1,14 @@
 // src/pages/Scanner.jsx
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { runScan, savePositions } from '../api/client'
 import { useTicker } from '../context/TickerContext'
-import { SlidersHorizontal, RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2 } from 'lucide-react'
+import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight } from 'lucide-react'
+import PageHeader from '../components/PageHeader'
+import InfoTip from '../components/InfoTip'
+import Collapsible from '../components/Collapsible'
+import { TERMS } from '../lib/terms'
+import { fmtDate, money, pct, plural } from '../lib/format'
 
 const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
@@ -20,12 +26,12 @@ function loadConfig() {
   } catch { return DEFAULT_CONFIG }
 }
 
-function Field({ label, name, value, onChange, step = 1, min, max }) {
+function Field({ label, tip, name, value, onChange, step = 1, min, max }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label className="label">{label}</label>
+    <div>
+      <label className="label" htmlFor={`f-${name}`}>{label} <InfoTip text={tip} /></label>
       <input
-        type="number" className="input" step={step}
+        id={`f-${name}`} type="number" className="input" step={step}
         min={min} max={max} value={value}
         onChange={e => onChange(name, parseFloat(e.target.value))}
       />
@@ -33,25 +39,54 @@ function Field({ label, name, value, onChange, step = 1, min, max }) {
   )
 }
 
-function PickCard({ label, icon: Icon, pick, accent }) {
-  if (!pick) return null
+function Fact({ label, tip, value, color }) {
   return (
-    <div style={{ background: 'var(--bg-card-2)', border: `1px solid ${accent}33`, borderRadius: 14, padding: 16, flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: accent, letterSpacing: '0.06em', marginBottom: 12 }}>
-        <Icon size={13} strokeWidth={2} /> {label}
+    <div>
+      <div className="fact-label">{label} <InfoTip text={tip} size={12} /></div>
+      <div className="fact-value" style={color ? { color } : undefined}>{value}</div>
+    </div>
+  )
+}
+
+function PickCard({ title, subtitle, icon: Icon, pick, accent }) {
+  if (!pick) return null
+  const called = pick.delta != null ? `~${Math.round(pick.delta * 100)}%` : 'n/a'
+  return (
+    <div className="card" style={{ flex: 1, borderColor: `${accent}33` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: accent, fontWeight: 700, fontSize: 15 }}>
+        <Icon size={16} strokeWidth={2} /> {title}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {[
-          ['Expiry',    pick.expiry],
-          ['Strike',    `$${pick.strike.toFixed(2)}`],
-          ['Premium',   `$${pick.premium_price.toFixed(2)}`],
-          ['Delta',     pick.delta?.toFixed(3) ?? 'n/a'],
-          ['Ann.Yield', `${pick.annualized_yield_pct?.toFixed(1)}%`],
-          ['Upside',    `${pick.upside_to_strike_pct?.toFixed(1)}%`],
-        ].map(([k, v]) => (
-          <div key={k}>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{k}</div>
-            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: 14, color: 'var(--text)', marginTop: 2 }}>{v}</div>
+      <div className="hint" style={{ marginBottom: 16 }}>{subtitle}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>
+        {money(pick.strike)} strike <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>· expires {fmtDate(pick.expiry)}</span>
+      </div>
+      <div className="facts" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <Fact label="You collect (1 contract)" tip={TERMS.premium} value={money(pick.premium_per_contract ?? pick.premium_price * 100)} color="var(--green)" />
+        <Fact label="Yearly return"            tip={TERMS.yield}   value={pct(pick.annualized_yield_pct)} />
+        <Fact label="Room to rise"             tip={TERMS.upside}  value={pct(pick.upside_to_strike_pct)} />
+        <Fact label="Chance of being called"   tip={TERMS.delta}   value={called} />
+      </div>
+    </div>
+  )
+}
+
+function HowItWorks() {
+  const steps = [
+    ['Scan', 'We look at call options on your shares that match your filters.'],
+    ['Pick', 'You get one pick for income and one balanced pick, plus a recommended trade.'],
+    ['Track', 'Save the trade and follow it on the Positions page until you close it.'],
+  ]
+  return (
+    <div className="card" style={{ marginTop: 24 }}>
+      <div className="section-title" style={{ marginBottom: 16 }}>How it works</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+        {steps.map(([t, d], i) => (
+          <div key={t} style={{ display: 'flex', gap: 12 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 99, background: 'var(--accent-dim)', color: 'var(--accent-light)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>{t}</div>
+              <div className="hint">{d}</div>
+            </div>
           </div>
         ))}
       </div>
@@ -66,15 +101,17 @@ export default function Scanner() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
   const [saved, setSaved]     = useState(false)
+  const [saving, setSaving]   = useState(false)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
   }, [config])
 
-  // Reset result when ticker changes
-  useEffect(() => {
-    setResult(null); setError(null); setSaved(false)
-  }, [selected])
+  // Clear the last scan when you switch stocks
+  const [scannedFor, setScannedFor] = useState(selected)
+  if (scannedFor !== selected) {
+    setScannedFor(selected); setResult(null); setError(null); setSaved(false)
+  }
 
   const updateConfig = (k, v) => setConfig(c => ({ ...c, [k]: v }))
 
@@ -98,190 +135,229 @@ export default function Scanner() {
       contracts: p.contracts, entry_price: p.entry_price,
       premium_total: p.premium_total, allocation_type: p.allocation_type,
     }))
-    await savePositions(payload)
-    setSaved(true)
+    setSaving(true)
+    try { await savePositions(payload); setSaved(true) }
+    catch { setError('Could not save the trade. Is the API running?') }
+    finally { setSaving(false) }
   }
+
+  const filterSummary =
+    `Calls expiring in ${config.min_dte}–${config.max_dte} days, with strikes at least ` +
+    `${Math.round((config.min_strike_pct || 0) * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.`
+
+  const planned = result?.planned_positions || []
 
   return (
     <div className="fade-up">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' }}>Scanner</h1>
-        {selected && (
-          <span style={{
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 14,
-            color: 'var(--purple-light)', background: 'var(--purple-dim)',
-            border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px',
-          }}>{selected}</span>
-        )}
-      </div>
-      <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 32 }}>
-        Configure parameters and scan for covered call candidates.
-      </p>
+      <PageHeader
+        title="Scanner"
+        showTicker
+        subtitle={selected ? `Find a covered call to sell on your ${selected} shares.` : 'Find a covered call to sell on your shares.'}
+      />
 
       {!selected && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--amber-dim)', border: '1px solid rgba(245,165,36,0.2)', borderRadius: 14, padding: 16, color: 'var(--amber)', fontSize: 14 }}>
-          <AlertTriangle size={16} strokeWidth={1.75} /> Select a ticker from the sidebar to start scanning.
+        <div className="callout callout-amber">
+          <AlertTriangle size={18} strokeWidth={1.75} /> <span>Add a stock you own on the <Link to="/" style={{ color: 'inherit', fontWeight: 700 }}>Dashboard</Link> to start scanning.</span>
         </div>
       )}
 
       {selected && (
-        <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 24, alignItems: 'start' }}>
-          {/* Config panel */}
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 14, color: 'var(--purple-light)' }}>
-                <SlidersHorizontal size={14} strokeWidth={1.75} /> Scan Parameters
+        <>
+          {/* Scan bar */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
+              <div>
+                <div className="section-title">What we'll look for</div>
+                <div className="section-sub" style={{ maxWidth: 680 }}>{filterSummary}</div>
               </div>
-              <button onClick={() => setConfig(DEFAULT_CONFIG)} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                background: 'none', border: 'none', color: 'var(--text-muted)',
-                fontSize: 11, cursor: 'pointer', fontFamily: 'Syne, sans-serif', padding: 0,
-              }}><RotateCcw size={11} strokeWidth={1.75} /> Reset</button>
+              <button className="btn-primary" onClick={handleScan} disabled={loading} style={{ padding: '13px 28px', fontSize: 15, flexShrink: 0 }}>
+                {loading ? <><span className="spinner" /> Scanning…</> : <><ScanLine size={17} strokeWidth={2} /> Scan {selected}</>}
+              </button>
             </div>
-            <Field label="Min DTE"           name="min_dte"            value={config.min_dte}           onChange={updateConfig} min={1}    max={60} />
-            <Field label="Max DTE"           name="max_dte"            value={config.max_dte}           onChange={updateConfig} min={1}    max={120} />
-            <Field label="Min Strike % OTM"  name="min_strike_pct"     value={config.min_strike_pct}    onChange={updateConfig} step={0.01} min={0.05} max={0.5} />
-            <Field label="Min Premium ($)"   name="min_premium"        value={config.min_premium}       onChange={updateConfig} step={0.01} min={0.01} />
-            <Field label="Min Volume"        name="min_volume"         value={config.min_volume}        onChange={updateConfig} min={1} />
-            <Field label="Min Open Interest" name="min_open_interest"  value={config.min_open_interest} onChange={updateConfig} min={1} />
-            <Field label="Target Delta"      name="target_delta"       value={config.target_delta}      onChange={updateConfig} step={0.01} min={0.05} max={0.5} />
-            <button className="btn-primary" onClick={handleScan} disabled={loading} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-              {loading ? <><span className="spinner" /> Scanning {selected}...</> : <><ScanLine size={15} strokeWidth={2} /> Scan {selected}</>}
-            </button>
+            <div className="divider" style={{ margin: '18px 0 10px' }} />
+            <Collapsible
+              label="Adjust filters"
+              openLabel="Hide filters"
+              right={
+                <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setConfig(DEFAULT_CONFIG)}>
+                  <RotateCcw size={13} strokeWidth={1.75} /> Reset to defaults
+                </button>
+              }
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+                <Field label="Shortest expiry (days)" tip={TERMS.dte}         name="min_dte"           value={config.min_dte}           onChange={updateConfig} min={1} max={60} />
+                <Field label="Longest expiry (days)"  tip={TERMS.dte}         name="max_dte"           value={config.max_dte}           onChange={updateConfig} min={1} max={120} />
+                <Field label="Min. distance above price" tip={TERMS.minStrike} name="min_strike_pct"   value={config.min_strike_pct}    onChange={updateConfig} step={0.01} min={0.05} max={0.5} />
+                <Field label="Min. premium per share ($)" tip={TERMS.minPremium} name="min_premium"    value={config.min_premium}       onChange={updateConfig} step={0.01} min={0.01} />
+                <Field label="Min. daily volume"      tip={TERMS.volume}      name="min_volume"        value={config.min_volume}        onChange={updateConfig} min={1} />
+                <Field label="Min. open interest"     tip={TERMS.openInt}     name="min_open_interest" value={config.min_open_interest} onChange={updateConfig} min={1} />
+                <Field label="Balanced pick target"   tip={TERMS.targetDelta} name="target_delta"      value={config.target_delta}      onChange={updateConfig} step={0.01} min={0.05} max={0.5} />
+              </div>
+            </Collapsible>
           </div>
 
-          {/* Results */}
-          <div>
-            {error && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--red-dim)', border: '1px solid rgba(240,71,95,0.25)', borderRadius: 14, padding: 16, marginBottom: 20, color: 'var(--red)', fontSize: 14 }}>
-                <AlertTriangle size={16} strokeWidth={1.75} /> {error}
-              </div>
-            )}
+          {error && (
+            <div className="callout callout-red" style={{ marginBottom: 20 }}>
+              <AlertTriangle size={18} strokeWidth={1.75} /> {error}
+            </div>
+          )}
 
-            {loading && (
-              <div className="card" style={{ textAlign: 'center', padding: 60 }}>
-                <div className="spinner" style={{ width: 40, height: 40, margin: '0 auto 16px' }} />
-                <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Fetching {selected} options chain...</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 6 }}>This may take 15–30 seconds</div>
-              </div>
-            )}
+          {loading && (
+            <div className="card" style={{ textAlign: 'center', padding: 60 }}>
+              <div className="spinner" style={{ width: 40, height: 40, margin: '0 auto 16px' }} />
+              <div style={{ fontSize: 15, fontWeight: 600 }}>Checking {selected} options…</div>
+              <div className="hint" style={{ marginTop: 6 }}>This usually takes 15–30 seconds.</div>
+            </div>
+          )}
 
-            {result && !loading && (
-              <>
-                <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                  {[
-                    ['Current Price', `$${result.current_price.toFixed(2)}`],
-                    ['Min Strike',    `$${result.min_strike.toFixed(2)}`],
-                    ['Candidates',    result.candidates.length],
-                    ['Gross Premium', `$${result.gross_premium.toFixed(2)}`],
-                    ['Net Premium',   `$${result.net_premium.toFixed(2)}`],
-                  ].map(([label, val]) => (
-                    <div key={label} className="card-sm" style={{ flex: 1, textAlign: 'center' }}>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{label}</div>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: 18, color: 'var(--text)' }}>{val}</div>
+          {result && !loading && (
+            <>
+              <div style={{ fontSize: 15, color: 'var(--text-dim)', marginBottom: 20 }}>
+                <strong style={{ color: 'var(--text)' }}>{result.ticker}</strong> is trading at{' '}
+                <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.{' '}
+                {plural(result.candidates.length, 'option')} matched your filters.
+              </div>
+
+              {result.warnings?.length > 0 && (
+                <div className="callout callout-amber" style={{ marginBottom: 20, flexDirection: 'column', gap: 6 }}>
+                  {result.warnings.map((w, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <AlertTriangle size={15} strokeWidth={1.75} /> {w}
                     </div>
                   ))}
                 </div>
+              )}
 
-                {result.warnings?.length > 0 && (
-                  <div style={{ background: 'var(--amber-dim)', border: '1px solid rgba(245,165,36,0.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20 }}>
-                    {result.warnings.map((w, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--amber)' }}>
-                        <AlertTriangle size={13} strokeWidth={1.75} /> {w}
+              {/* 1. The recommendation */}
+              {planned.length > 0 && (
+                <div className="rec-card" style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, marginBottom: 20 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-light)', marginBottom: 6 }}>Recommended trade</div>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>
+                        Sell {plural(planned.reduce((s, p) => s + p.contracts, 0), 'call')} on {result.ticker}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="fact-label" style={{ justifyContent: 'flex-end' }}>You collect today <InfoTip text={TERMS.premium} size={12} align="right" /></div>
+                      <div className="stat-num" style={{ color: 'var(--green)', fontSize: 30 }}>{money(result.gross_premium)}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    {planned.map((p, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span>
+                          <span style={{ fontSize: 15 }}>
+                            Sell <strong>{plural(p.contracts, 'contract')}</strong> at the <strong>{money(p.strike)}</strong> strike, expiring <strong>{fmtDate(p.expiry)}</strong>
+                          </span>
+                          <span className="hint">({money(p.entry_price)} per share)</span>
+                        </div>
+                        <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
                       </div>
                     ))}
                   </div>
-                )}
 
-                <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                  <PickCard label="INCOME PICK"   icon={TrendingUp} pick={result.income_pick}   accent="#a99bff" />
-                  <PickCard label="BALANCED PICK" icon={Scale}      pick={result.balanced_pick} accent="#4cc9f0" />
-                </div>
-
-                <div className="card" style={{ marginBottom: 20 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Candidates</div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table className="data-table">
-                      <thead>
-                        <tr><th>Expiry</th><th className="num">DTE</th><th className="num">Strike</th><th className="num">Premium</th><th className="num">Ann.Yield%</th><th className="num">Delta</th><th className="num">Upside%</th><th className="num">Spread%</th><th>Quote</th></tr>
-                      </thead>
-                      <tbody>
-                        {result.candidates.map((c, i) => (
-                          <tr key={i}>
-                            <td className="mono">{c.expiry}</td>
-                            <td className="mono num">{c.dte}</td>
-                            <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>${c.strike.toFixed(2)}</td>
-                            <td className="mono num" style={{ color: 'var(--purple-light)' }}>${c.premium_price.toFixed(2)}</td>
-                            <td className="mono num">{c.annualized_yield_pct?.toFixed(1)}%</td>
-                            <td className="mono num">{c.delta?.toFixed(3) ?? 'n/a'}</td>
-                            <td className="mono num">{c.upside_to_strike_pct?.toFixed(1)}%</td>
-                            <td className="mono num">{c.spread_pct?.toFixed(1)}%</td>
-                            <td><span className={`badge badge-${c.quote_quality === 'LIVE' ? 'green' : c.quote_quality === 'STALE' ? 'amber' : 'red'}`}>{c.quote_quality}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {result.planned_positions?.length > 0 && (
-                  <div className="card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>Allocation Plan</div>
-                      <div style={{ fontSize: 13, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)' }}>
-                        {result.allocation_summary?.available || 0} contracts available
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+                    <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px 40px' }}>
+                      <Fact label="Premium"                tip={TERMS.premium} value={money(result.gross_premium)} />
+                      <Fact label="Set aside for buyback"  tip={TERMS.buyback} value={money(result.buyback_budget)} />
+                      <Fact label="You keep"               value={money(result.net_premium)} color="var(--green)" />
+                    </div>
+                    {saved ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontWeight: 600 }}>
+                          <CheckCircle2 size={17} strokeWidth={1.75} /> Saved
+                        </span>
+                        <Link to="/positions" className="link-btn">View in Positions <ArrowRight size={15} /></Link>
                       </div>
-                    </div>
-                    <table className="data-table" style={{ marginBottom: 16 }}>
-                      <thead>
-                        <tr><th>Type</th><th>Expiry</th><th className="num">Strike</th><th className="num">Contracts</th><th className="num">Entry</th><th className="num">Gross</th><th className="num">Buyback Budget</th></tr>
-                      </thead>
-                      <tbody>
-                        {result.planned_positions.map((p, i) => (
-                          <tr key={i}>
-                            <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'purple' : 'blue'}`}>{p.allocation_type}</span></td>
-                            <td className="mono">{p.expiry}</td>
-                            <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>${p.strike.toFixed(2)}</td>
-                            <td className="mono num">{p.contracts}</td>
-                            <td className="mono num">${p.entry_price.toFixed(2)}</td>
-                            <td className="mono num" style={{ color: 'var(--green)' }}>${p.premium_total.toFixed(2)}</td>
-                            <td className="mono num">${p.buyback_total.toFixed(0)}</td>
+                    ) : (
+                      <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                        {saving ? <><span className="spinner" /> Saving…</> : 'Save this trade'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="hint" style={{ marginTop: 14 }}>
+                    Saving records the trade here so you can track it. It does not place an order with your broker.
+                  </div>
+                </div>
+              )}
+
+              {planned.length === 0 && result.candidates.length > 0 && (
+                <div className="callout callout-green" style={{ marginBottom: 24 }}>
+                  <CheckCircle2 size={18} strokeWidth={1.75} />
+                  All of your {result.ticker} contracts are already working, so there is nothing new to sell. The best options are below for reference.
+                </div>
+              )}
+
+              {/* 2. The two picks */}
+              {(result.income_pick || result.balanced_pick) && (
+                <>
+                  <div className="section-title" style={{ marginBottom: 12 }}>Top picks</div>
+                  <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+                    <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#6ae4ff" />
+                    <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#5aa9e6" />
+                  </div>
+                </>
+              )}
+
+              {/* 3. Everything else, on request */}
+              {result.candidates.length > 0 && (
+                <div className="card">
+                  <Collapsible label={`See all ${plural(result.candidates.length, 'option')}`} openLabel="Hide the full list">
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Expires</th>
+                            <th className="num">Days left</th>
+                            <th className="num">Strike <InfoTip text={TERMS.strike} size={12} /></th>
+                            <th className="num">Premium <InfoTip text={TERMS.premium} size={12} /></th>
+                            <th className="num">Yearly return <InfoTip text={TERMS.yield} size={12} /></th>
+                            <th className="num">Room to rise <InfoTip text={TERMS.upside} size={12} /></th>
+                            <th className="num">Called chance <InfoTip text={TERMS.delta} size={12} /></th>
+                            <th className="num">Spread <InfoTip text={TERMS.spread} size={12} /></th>
+                            <th>Quote <InfoTip text={TERMS.quote} size={12} /></th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      {saved
-                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontSize: 13, fontWeight: 600 }}><CheckCircle2 size={15} strokeWidth={1.75} /> Positions saved</span>
-                        : <button className="btn-primary" onClick={handleSave}>Save Positions</button>
-                      }
+                        </thead>
+                        <tbody>
+                          {result.candidates.map((c, i) => (
+                            <tr key={i}>
+                              <td>{fmtDate(c.expiry)}</td>
+                              <td className="mono num">{c.dte}</td>
+                              <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(c.strike)}</td>
+                              <td className="mono num" style={{ color: 'var(--accent-light)' }}>{money(c.premium_price)}</td>
+                              <td className="mono num">{pct(c.annualized_yield_pct)}</td>
+                              <td className="mono num">{pct(c.upside_to_strike_pct)}</td>
+                              <td className="mono num">{c.delta != null ? `${Math.round(c.delta * 100)}%` : 'n/a'}</td>
+                              <td className="mono num">{pct(c.spread_pct)}</td>
+                              <td><span className={`badge badge-${c.quote_quality === 'LIVE' ? 'green' : c.quote_quality === 'STALE' ? 'amber' : 'red'}`}>{c.quote_quality}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  </div>
-                )}
+                  </Collapsible>
+                </div>
+              )}
 
-                {result.candidates.length === 0 && (
-                  <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-                    <TrendingDown size={22} strokeWidth={1.75} style={{ marginBottom: 12, opacity: 0.6 }} />
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>No candidates found</div>
-                    <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-                      Options data is live during market hours <span style={{ color: 'var(--purple-light)' }}>(9:30am – 4:00pm ET, Mon – Fri)</span>.<br />
-                      Outside market hours, bid/ask quotes go stale and candidates are filtered out.<br />
-                      Try again during trading hours, or loosen the filters above.
-                    </div>
+              {result.candidates.length === 0 && (
+                <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                  <TrendingDown size={24} strokeWidth={1.75} style={{ marginBottom: 12, opacity: 0.6 }} />
+                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)', marginBottom: 8 }}>No options matched</div>
+                  <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+                    Prices are only live during market hours <span style={{ color: 'var(--accent-light)' }}>(9:30am – 4:00pm ET, Mon – Fri)</span>.<br />
+                    Outside those hours quotes go stale and get filtered out.<br />
+                    Try again during trading hours, or loosen the filters above.
                   </div>
-                )}
-              </>
-            )}
+                </div>
+              )}
+            </>
+          )}
 
-            {!result && !loading && !error && (
-              <div className="card" style={{ textAlign: 'center', padding: 80, color: 'var(--text-muted)' }}>
-                <ScanLine size={38} strokeWidth={1.5} style={{ marginBottom: 16, opacity: 0.3 }} />
-                <div style={{ fontSize: 15, fontWeight: 600 }}>Configure and run a scan</div>
-                <div style={{ fontSize: 13, marginTop: 6 }}>Results will appear here</div>
-              </div>
-            )}
-          </div>
-        </div>
+          {!result && !loading && !error && <HowItWorks />}
+        </>
       )}
     </div>
   )

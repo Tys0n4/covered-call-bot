@@ -1,6 +1,6 @@
 # api/schemas.py
 from __future__ import annotations
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -120,3 +120,15 @@ class SettingsResponse(BaseModel):
     target_delta: float
     buyback_budget_pct: float
     profit_capture_target_pct: float
+
+
+class HoldingIn(BaseModel):
+    """A stock you own. Each 100 shares lets you sell one covered call."""
+    ticker: str
+    shares: int = Field(ge=0, le=10_000_000)
+    avg_cost: float = Field(ge=0, le=1_000_000)
+
+
+class HoldingUpdate(BaseModel):
+    shares: int = Field(ge=0, le=10_000_000)
+    avg_cost: float = Field(ge=0, le=1_000_000)

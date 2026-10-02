@@ -6,3 +6,5 @@ pandas
 requests
 python-dotenv
 numpy
+sqlalchemy>=2.0
+psycopg[binary]>=3.1
