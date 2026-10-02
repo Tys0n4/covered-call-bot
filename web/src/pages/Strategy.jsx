@@ -38,9 +38,13 @@ function Slider({ value, onChange, min, max, step, label }) {
   )
 }
 
+// 1000 -> '1000', 0 -> '' (empty box shows the placeholder)
+const goalToText = g => (g > 0 ? String(Math.round(g)) : '')
+
 export default function Strategy() {
   const [saved, setSaved]       = useState(null)    // what the server has
   const [draft, setDraft]       = useState(null)    // what's on screen
+  const [goalText, setGoalText] = useState('')      // goal box exactly as typed ('' = no goal)
   const [loadError, setLoadError] = useState(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
@@ -51,7 +55,7 @@ export default function Strategy() {
 
   useEffect(() => {
     getStrategy()
-      .then(r => { const s = { ...DEFAULT_STRATEGY, ...r.data }; setSaved(s); setDraft(s) })
+      .then(r => { const s = { ...DEFAULT_STRATEGY, ...r.data }; setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)) })
       .catch(e => setLoadError(apiError(e, 'Could not load your strategy. Is the API running?')))
     getAllPositions().then(r => setPositions(r.data)).catch(() => {})
     getPortfolio().then(r => setHoldings(r.data)).catch(() => {})
@@ -89,7 +93,7 @@ export default function Strategy() {
     try {
       const r = await saveStrategy(draft)
       const s = { ...DEFAULT_STRATEGY, ...r.data }
-      setSaved(s); setDraft(s); setJustSaved(true)
+      setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)); setJustSaved(true)
     } catch (e) {
       setError(apiError(e))
     } finally {
@@ -173,8 +177,15 @@ export default function Strategy() {
             <label className="label" htmlFor="goal">Premium you'd like to collect each month</label>
             <div style={{ position: 'relative', maxWidth: 220, marginBottom: 16 }}>
               <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
-              <input id="goal" className="input" type="number" min={0} step={50} value={draft.monthly_goal}
-                onChange={e => set('monthly_goal', Math.max(0, Number(e.target.value) || 0))} style={{ paddingLeft: 28 }} />
+              <input id="goal" className="input" type="text" inputMode="numeric" autoComplete="off" placeholder="0" maxLength={7}
+                value={goalText}
+                onChange={e => {
+                  // whole dollars only; drop leading zeros so "0" + "1000" becomes "1000"
+                  const text = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '')
+                  setGoalText(text)
+                  set('monthly_goal', text === '' ? 0 : Number(text))
+                }}
+                style={{ paddingLeft: 28 }} />
             </div>
             {draft.monthly_goal > 0 && (
               <>
@@ -211,7 +222,7 @@ export default function Strategy() {
           {error && <span style={{ color: 'var(--red)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={14} /> {error}</span>}
           {!error && justSaved && !dirty && <span style={{ color: 'var(--green)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={15} /> Saved</span>}
           {!error && dirty && <span className="hint">You have unsaved changes</span>}
-          <button className="btn-secondary" onClick={() => { setDraft(saved); setError(null) }} disabled={!dirty || saving}>Discard</button>
+          <button className="btn-secondary" onClick={() => { setDraft(saved); setGoalText(goalToText(saved.monthly_goal)); setError(null) }} disabled={!dirty || saving}>Discard</button>
           <button className="btn-primary" onClick={handleSave} disabled={!dirty || saving}>
             {saving ? <><span className="spinner" /> Saving…</> : 'Save strategy'}
           </button>
