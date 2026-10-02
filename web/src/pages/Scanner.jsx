@@ -19,22 +19,75 @@ const DEFAULT_CONFIG = {
 
 const STORAGE_KEY = 'scanner_config'
 
+// The filter boxes: what each accepts and the allowed range
+const FIELDS = [
+  { name: 'min_dte',           label: 'Shortest expiry (days)',      tip: TERMS.dte,         kind: 'int', min: 1,    max: 60 },
+  { name: 'max_dte',           label: 'Longest expiry (days)',       tip: TERMS.dte,         kind: 'int', min: 1,    max: 120 },
+  { name: 'min_strike_pct',    label: 'Min. distance above price',   tip: TERMS.minStrike,   kind: 'dec', min: 0.05, max: 0.5 },
+  { name: 'min_premium',       label: 'Min. premium per share ($)',  tip: TERMS.minPremium,  kind: 'dec', min: 0.01, max: 1000 },
+  { name: 'min_volume',        label: 'Min. daily volume',           tip: TERMS.volume,      kind: 'int', min: 1,    max: 1000000 },
+  { name: 'min_open_interest', label: 'Min. open interest',          tip: TERMS.openInt,     kind: 'int', min: 1,    max: 1000000 },
+  { name: 'target_delta',      label: 'Balanced pick target',        tip: TERMS.targetDelta, kind: 'dec', min: 0.05, max: 0.5 },
+]
+
+const inRange = (f, v) => Number.isFinite(v) && v >= f.min && v <= f.max && (f.kind !== 'int' || Number.isInteger(v))
+
+// Saved filters from this browser. Anything missing or invalid (e.g. a box
+// that was left empty before this fix) falls back to the default.
 function loadConfig() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : DEFAULT_CONFIG
-  } catch { return DEFAULT_CONFIG }
+  let saved
+  try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {} } catch { saved = {} }
+  const config = { ...DEFAULT_CONFIG }
+  for (const f of FIELDS) {
+    const v = Number(saved[f.name])
+    if (saved[f.name] !== null && saved[f.name] !== '' && inRange(f, v)) config[f.name] = v
+  }
+  if (config.max_dte < config.min_dte) { config.min_dte = DEFAULT_CONFIG.min_dte; config.max_dte = DEFAULT_CONFIG.max_dte }
+  return config
 }
 
-function Field({ label, tip, name, value, onChange, step = 1, min, max }) {
+const toForm = config => Object.fromEntries(FIELDS.map(f => [f.name, String(config[f.name])]))
+
+// Turn the typed text into numbers, with a plain message for each problem
+function parseForm(form) {
+  const values = {}, errors = {}
+  for (const f of FIELDS) {
+    const text = form[f.name]
+    const v = Number(text)
+    if (text === '' || text === '.') errors[f.name] = 'Enter a number'
+    else if (!inRange(f, v)) errors[f.name] = `Must be ${f.kind === 'int' ? 'a whole number ' : ''}between ${f.min} and ${f.max.toLocaleString()}`
+    else values[f.name] = v
+  }
+  if (!errors.min_dte && !errors.max_dte && values.max_dte < values.min_dte) {
+    errors.max_dte = 'Must be at least the shortest expiry'
+  }
+  return { values, errors, valid: Object.keys(errors).length === 0 }
+}
+
+// Keep only what a box can hold: digits, plus one dot for decimals.
+// Leading zeros are dropped so typing over a 0 replaces it.
+function cleanInput(raw, kind) {
+  if (kind === 'int') return raw.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '')
+  let t = raw.replace(/[^0-9.]/g, '')
+  const dot = t.indexOf('.')
+  if (dot !== -1) t = t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, '')
+  return t.replace(/^0+(?=\d)/, '')
+}
+
+function Field({ field, text, error, onChange }) {
+  const id = `f-${field.name}`
   return (
     <div>
-      <label className="label" htmlFor={`f-${name}`}>{label} <InfoTip text={tip} /></label>
+      <label className="label" htmlFor={id}>{field.label} <InfoTip text={field.tip} /></label>
       <input
-        id={`f-${name}`} type="number" className="input" step={step}
-        min={min} max={max} value={value}
-        onChange={e => onChange(name, parseFloat(e.target.value))}
+        id={id} type="text" className="input" autoComplete="off"
+        inputMode={field.kind === 'int' ? 'numeric' : 'decimal'}
+        value={text}
+        aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined}
+        onChange={e => onChange(field.name, cleanInput(e.target.value, field.kind))}
+        style={error ? { borderColor: 'var(--red)' } : undefined}
       />
+      {error && <div id={`${id}-err`} style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 5 }}>{error}</div>}
     </div>
   )
 }
@@ -96,16 +149,20 @@ function HowItWorks() {
 
 export default function Scanner() {
   const { selected } = useTicker()
-  const [config, setConfig]   = useState(loadConfig)
+  const [form, setForm]       = useState(() => toForm(loadConfig()))   // boxes, exactly as typed
   const [result, setResult]   = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
   const [saved, setSaved]     = useState(false)
   const [saving, setSaving]   = useState(false)
 
+  const { values: config, errors: fieldErrors, valid: filtersValid } = parseForm(form)
+
+  // Remember filters in this browser, but only once every box is valid
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
-  }, [config])
+    if (!filtersValid) return
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)) } catch { /* storage unavailable */ }
+  }, [form]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear the last scan when you switch stocks
   const [scannedFor, setScannedFor] = useState(selected)
@@ -113,10 +170,10 @@ export default function Scanner() {
     setScannedFor(selected); setResult(null); setError(null); setSaved(false)
   }
 
-  const updateConfig = (k, v) => setConfig(c => ({ ...c, [k]: v }))
+  const updateField = (k, text) => setForm(f => ({ ...f, [k]: text }))
 
   const handleScan = async () => {
-    if (!selected) return
+    if (!selected || !filtersValid) return
     setLoading(true); setError(null); setResult(null); setSaved(false)
     try {
       const res = await runScan({ ...config, ticker: selected })
@@ -141,9 +198,10 @@ export default function Scanner() {
     finally { setSaving(false) }
   }
 
-  const filterSummary =
-    `Calls expiring in ${config.min_dte}–${config.max_dte} days, with strikes at least ` +
-    `${Math.round((config.min_strike_pct || 0) * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.`
+  const filterSummary = filtersValid
+    ? `Calls expiring in ${config.min_dte}–${config.max_dte} days, with strikes at least ` +
+      `${Math.round(config.min_strike_pct * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.`
+    : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
 
   const planned = result?.planned_positions || []
 
@@ -168,9 +226,9 @@ export default function Scanner() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
               <div>
                 <div className="section-title">What we'll look for</div>
-                <div className="section-sub" style={{ maxWidth: 680 }}>{filterSummary}</div>
+                <div className="section-sub" style={{ maxWidth: 680, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}</div>
               </div>
-              <button className="btn-primary" onClick={handleScan} disabled={loading} style={{ padding: '13px 28px', fontSize: 15, flexShrink: 0 }}>
+              <button className="btn-primary" onClick={handleScan} disabled={loading || !filtersValid} style={{ padding: '13px 28px', fontSize: 15, flexShrink: 0 }}>
                 {loading ? <><span className="spinner" /> Scanning…</> : <><ScanLine size={17} strokeWidth={2} /> Scan {selected}</>}
               </button>
             </div>
@@ -179,19 +237,15 @@ export default function Scanner() {
               label="Adjust filters"
               openLabel="Hide filters"
               right={
-                <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setConfig(DEFAULT_CONFIG)}>
+                <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setForm(toForm(DEFAULT_CONFIG))}>
                   <RotateCcw size={13} strokeWidth={1.75} /> Reset to defaults
                 </button>
               }
             >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-                <Field label="Shortest expiry (days)" tip={TERMS.dte}         name="min_dte"           value={config.min_dte}           onChange={updateConfig} min={1} max={60} />
-                <Field label="Longest expiry (days)"  tip={TERMS.dte}         name="max_dte"           value={config.max_dte}           onChange={updateConfig} min={1} max={120} />
-                <Field label="Min. distance above price" tip={TERMS.minStrike} name="min_strike_pct"   value={config.min_strike_pct}    onChange={updateConfig} step={0.01} min={0.05} max={0.5} />
-                <Field label="Min. premium per share ($)" tip={TERMS.minPremium} name="min_premium"    value={config.min_premium}       onChange={updateConfig} step={0.01} min={0.01} />
-                <Field label="Min. daily volume"      tip={TERMS.volume}      name="min_volume"        value={config.min_volume}        onChange={updateConfig} min={1} />
-                <Field label="Min. open interest"     tip={TERMS.openInt}     name="min_open_interest" value={config.min_open_interest} onChange={updateConfig} min={1} />
-                <Field label="Balanced pick target"   tip={TERMS.targetDelta} name="target_delta"      value={config.target_delta}      onChange={updateConfig} step={0.01} min={0.05} max={0.5} />
+                {FIELDS.map(f => (
+                  <Field key={f.name} field={f} text={form[f.name]} error={fieldErrors[f.name]} onChange={updateField} />
+                ))}
               </div>
             </Collapsible>
           </div>
