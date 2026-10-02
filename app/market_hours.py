@@ -22,6 +22,18 @@ def is_market_open(now: datetime | None = None) -> bool:
     return n.weekday() < 5 and OPEN <= n.time() < CLOSE
 
 
+def market_today(now: datetime | None = None) -> str:
+    """Today's date in New York (the market's calendar), as YYYY-MM-DD."""
+    return _ny(now).strftime("%Y-%m-%d")
+
+
+def has_expired(expiry: str, now: datetime | None = None) -> bool:
+    """Options stop trading at 4:00pm New York time on their expiry date."""
+    n = _ny(now)
+    today = n.strftime("%Y-%m-%d")
+    return expiry < today or (expiry == today and n.time() >= CLOSE)
+
+
 def next_market_open(now: datetime | None = None) -> datetime:
     """The next weekday 9:30am New York time (today's, if it hasn't happened yet)."""
     n = _ny(now)

@@ -60,8 +60,14 @@ def evaluate_position(
     config: ScannerConfig = DEFAULT_CONFIG,
 ) -> OpenCoveredCall:
     entry_price = float(position["entry_price"])
-    profit_capture = calculate_profit_capture(entry_price, current_option_price)
-    buy_back = profit_capture >= config.profit_capture_target_pct
+    if current_option_price <= 0:
+        # No price came back (no quote, or the chain couldn't be fetched).
+        # Don't treat that as "worth $0 = 100% kept"; just don't recommend anything.
+        profit_capture = 0.0
+        buy_back = False
+    else:
+        profit_capture = calculate_profit_capture(entry_price, current_option_price)
+        buy_back = profit_capture >= config.profit_capture_target_pct
 
     return OpenCoveredCall(
         ticker=position["ticker"],

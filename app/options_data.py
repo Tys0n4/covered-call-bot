@@ -6,6 +6,8 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 
+from market_hours import market_today
+
 
 def get_call_options_in_dte_range(
     ticker_symbol: str,
@@ -23,7 +25,7 @@ def get_call_options_in_dte_range(
         print(f"No option expirations found for {ticker_symbol}.")
         return pd.DataFrame()
 
-    today = datetime.today().date()
+    today = datetime.strptime(market_today(), "%Y-%m-%d").date()
     all_calls = []
 
     for expiry_str in expirations:

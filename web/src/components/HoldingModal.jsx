@@ -135,7 +135,7 @@ export default function HoldingModal({ holding, onClose, onSaved }) {
             <div style={{ display: 'flex', gap: 10 }}>
               <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
               <button type="submit" className="btn-primary" disabled={saving}>
-                {saving ? <><span className="spinner" /> Saving…</> : editing ? 'Save changes' : 'Add stock'}
+                {saving ? <><span className="spinner" /> {editing ? 'Saving…' : 'Checking ticker…'}</> : editing ? 'Save changes' : 'Add stock'}
               </button>
             </div>
           )}

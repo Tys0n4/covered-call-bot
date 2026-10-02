@@ -5,12 +5,31 @@ Stores your covered call positions (open and closed) in the database
 """
 
 from __future__ import annotations
-from datetime import datetime
+from sqlalchemy import and_, insert, select, update
 
-from sqlalchemy import insert, select, update
-
+from clock import local_today
 from db import get_engine, positions
+from market_hours import has_expired, market_today
 from models import PlannedCall
+
+
+def expire_finished_positions() -> int:
+    """
+    Mark OPEN calls whose expiry has passed (4pm New York on expiry day) as
+    EXPIRED, closed on their expiry date with nothing paid to close.
+    Returns how many were updated.
+    """
+    today = market_today()
+    past = positions.c.expiry < today
+    if has_expired(today):            # after today's close, today's expiries are done too
+        past = positions.c.expiry <= today
+    with get_engine().begin() as conn:
+        result = conn.execute(
+            update(positions)
+            .where(and_(positions.c.status == "OPEN", past))
+            .values(status="EXPIRED", closed_at=positions.c.expiry, close_cost=0.0)
+        )
+    return result.rowcount
 
 
 def _rows(query) -> list[dict]:
@@ -19,7 +38,8 @@ def _rows(query) -> list[dict]:
 
 
 def load_open_positions() -> list[dict]:
-    """Return all positions with status OPEN."""
+    """Return all positions with status OPEN (expired ones are closed out first)."""
+    expire_finished_positions()
     rows = _rows(select(positions).where(positions.c.status == "OPEN").order_by(positions.c.id))
     for p in rows:
         p.pop("closed_at", None)
@@ -30,7 +50,7 @@ def save_positions(planned: list[PlannedCall]) -> None:
     """Add new planned positions as OPEN, stamped with today's date."""
     if not planned:
         return
-    today = datetime.today().strftime("%Y-%m-%d")
+    today = local_today()
     records = [
         {
             "ticker":           p.ticker,
@@ -53,17 +73,23 @@ def save_positions(planned: list[PlannedCall]) -> None:
     print(f"  Saved {len(planned)} position(s)")
 
 
-def close_position(position_id: int) -> bool:
-    """Mark a position as CLOSED by id. Returns True if found."""
+def close_position(position_id: int, close_cost: float | None = None) -> bool:
+    """
+    Mark an OPEN position as CLOSED (bought back) by id.
+    close_cost = total dollars paid to buy it back, if you entered it.
+    Returns False if there's no open position with that id.
+    """
     with get_engine().begin() as conn:
         result = conn.execute(
             update(positions)
-            .where(positions.c.id == position_id)
-            .values(status="CLOSED", closed_at=datetime.today().strftime("%Y-%m-%d"))
+            .where(and_(positions.c.id == position_id, positions.c.status == "OPEN"))
+            .values(status="CLOSED", closed_at=local_today(),
+                    close_cost=None if close_cost is None else round(float(close_cost), 2))
         )
     return result.rowcount > 0
 
 
 def list_all_positions() -> list[dict]:
-    """Return all positions including closed ones."""
+    """Return all positions including closed and expired ones."""
+    expire_finished_positions()
     return _rows(select(positions).order_by(positions.c.id))

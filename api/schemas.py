@@ -82,12 +82,15 @@ class PositionOut(BaseModel):
     entry_price: float
     premium_total: float
     allocation_type: str
-    status: str
+    status: str                              # OPEN, CLOSED (bought back) or EXPIRED
     opened_at: str
+    closed_at: Optional[str] = None
+    close_cost: Optional[float] = None       # $ paid to buy it back (0 when expired)
 
 
 class ClosePositionRequest(BaseModel):
     position_id: int
+    close_cost: Optional[float] = Field(default=None, ge=0, le=10_000_000)   # $ paid to buy back
 
 
 class EvaluatedPosition(BaseModel):

@@ -65,10 +65,16 @@ export default function Strategy() {
   const now = new Date()
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const monthName = now.toLocaleDateString('en-CA', { month: 'long' })
-  const thisMonth = positions.filter(p => (p.opened_at || '').startsWith(monthKey))
-  const monthPremium = thisMonth.reduce((sum, p) => sum + p.premium_total, 0)
-  const monthCount = thisMonth.length
-  const goalPct = draft?.monthly_goal > 0 ? Math.round((monthPremium / draft.monthly_goal) * 100) : 0
+  // Net premium this month = premium from calls sold this month
+  //                          − what you paid to buy calls back this month
+  const soldThisMonth   = positions.filter(p => (p.opened_at || '').startsWith(monthKey))
+  const closedThisMonth = positions.filter(p => p.status === 'CLOSED' && (p.closed_at || '').startsWith(monthKey))
+  const monthCollected  = soldThisMonth.reduce((sum, p) => sum + p.premium_total, 0)
+  const monthBuybacks   = closedThisMonth.reduce((sum, p) => sum + (p.close_cost || 0), 0)
+  const monthMissingCost = closedThisMonth.filter(p => p.close_cost == null).length
+  const monthPremium = monthCollected - monthBuybacks
+  const monthCount = soldThisMonth.length
+  const goalPct = draft?.monthly_goal > 0 ? Math.max(0, Math.round((monthPremium / draft.monthly_goal) * 100)) : 0
 
   const exportHoldings = async () => {
     setExporting(true)
@@ -81,7 +87,7 @@ export default function Strategy() {
     setExporting(true)
     try {
       const r = await getAllPositions()
-      downloadCsv('trades.csv', ['id', 'ticker', 'allocation_type', 'status', 'expiry', 'strike', 'contracts', 'entry_price', 'premium_total', 'opened_at', 'closed_at'], r.data)
+      downloadCsv('trades.csv', ['id', 'ticker', 'allocation_type', 'status', 'expiry', 'strike', 'contracts', 'entry_price', 'premium_total', 'opened_at', 'closed_at', 'close_cost'], r.data)
     } finally { setExporting(false) }
   }
 
@@ -190,14 +196,17 @@ export default function Strategy() {
             {draft.monthly_goal > 0 && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8 }}>
-                  <span>{monthName}: <strong style={{ color: 'var(--green)' }}>{money(monthPremium)}</strong> of {money(draft.monthly_goal, 0)}</span>
+                  <span>{monthName} so far: <strong style={{ color: monthPremium < 0 ? 'var(--red)' : 'var(--green)' }}>{money(monthPremium)}</strong> of {money(draft.monthly_goal, 0)} <span className="muted">(net)</span></span>
                   <span className="mono" style={{ color: goalPct >= 100 ? 'var(--green)' : 'var(--text-dim)' }}>{goalPct}%</span>
                 </div>
                 <div className="progress-bar">
                   <div className="progress-fill" style={{ width: `${Math.min(goalPct, 100)}%`, background: goalPct >= 100 ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : undefined }} />
                 </div>
                 <div className="hint" style={{ marginTop: 8 }}>
-                  {goalPct >= 100 ? 'Goal reached this month.' : `${money(Math.max(draft.monthly_goal - monthPremium, 0))} to go`} · from {plural(monthCount, 'call')} sold since {monthName} 1
+                  {goalPct >= 100 ? 'Goal reached this month.' : `${money(Math.max(draft.monthly_goal - monthPremium, 0))} to go`}
+                  {' · '}{money(monthCollected)} collected from {plural(monthCount, 'call')}
+                  {monthBuybacks > 0 && <> − {money(monthBuybacks)} paid to buy back</>}
+                  {monthMissingCost > 0 && <span style={{ color: 'var(--amber)' }}> · {plural(monthMissingCost, 'buyback')} closed without a cost entered</span>}
                 </div>
               </>
             )}

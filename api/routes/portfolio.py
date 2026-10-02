@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
@@ -9,6 +10,7 @@ from portfolio import load_portfolio, upsert_holding, delete_holding, normalize_
 from positions_store import load_open_positions
 from strategy import load_strategy, split_contracts
 from api.schemas import HoldingIn, HoldingUpdate
+from ticker_check import has_listed_options
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -103,6 +105,12 @@ async def add_holding(holding: HoldingIn):
     ticker = _valid_ticker(holding.ticker)
     if any(p.ticker == ticker for p in load_portfolio()):
         raise HTTPException(status_code=409, detail=f"{ticker} is already in your portfolio. Edit it instead.")
+    # Covered calls need listed options; catch typos like "SOFII" here
+    if await run_in_threadpool(has_listed_options, ticker) is False:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Couldn't find listed options for {ticker}. Check the ticker symbol is right.",
+        )
     upsert_holding(ticker, holding.shares, holding.avg_cost)
     return _portfolio_rows()
 

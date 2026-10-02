@@ -52,7 +52,7 @@ async def add_position(position: PositionIn):
 @router.post("/close")
 async def close_open_position(request: ClosePositionRequest):
     """Mark a position as closed by ID."""
-    success = close_position(request.position_id)
+    success = close_position(request.position_id, close_cost=request.close_cost)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Position {request.position_id} not found.")
+        raise HTTPException(status_code=404, detail=f"No open position with id {request.position_id}.")
     return {"closed": request.position_id}

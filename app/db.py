@@ -17,7 +17,7 @@ import threading
 from pathlib import Path
 
 from sqlalchemy import (
-    Column, Float, Integer, MetaData, String, Table, create_engine, func, insert, select,
+    Column, Float, Integer, MetaData, String, Table, create_engine, func, insert, inspect, select, text,
 )
 from sqlalchemy.engine import Engine
 
@@ -53,6 +53,7 @@ positions = Table(
     Column("status",          String(10), nullable=False, default="OPEN", index=True),
     Column("opened_at",       String(10), nullable=False),
     Column("closed_at",       String(10), nullable=True),
+    Column("close_cost",      Float,   nullable=True),   # what you paid to buy it back ($ total)
 )
 
 
@@ -102,10 +103,27 @@ def get_engine() -> Engine:
                     connect_args={"check_same_thread": False} if is_sqlite else {},
                 )
                 metadata.create_all(engine)
+                _add_missing_columns(engine)
                 if is_sqlite:
                     _seed_if_empty(engine)
                 _engine = engine
     return _engine
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    """
+    create_all() makes missing tables but never changes existing ones, so add
+    any column introduced after a table was first created (safe to re-run).
+    """
+    added_later = {"positions": [positions.c.close_cost]}
+    insp = inspect(engine)
+    for table_name, cols in added_later.items():
+        existing = {c["name"] for c in insp.get_columns(table_name)}
+        for col in cols:
+            if col.name not in existing:
+                col_type = col.type.compile(dialect=engine.dialect)
+                with engine.begin() as conn:
+                    conn.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}'))
 
 
 def _seed_if_empty(engine: Engine) -> None:
