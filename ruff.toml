@@ -1,4 +1,4 @@
-# Python lint settings (run: ruff check app api tests)
+# Python lint settings (run: ruff check backend tests)
 target-version = "py311"
 
 [lint]

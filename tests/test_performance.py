@@ -1,7 +1,7 @@
 # tests/test_performance.py — realized results math
 import pytest
 
-from performance import compute_performance, trade_result
+from core.performance import compute_performance, trade_result
 
 
 def _p(id, status, premium, opened="2026-09-01", closed="2026-09-30", **kw):

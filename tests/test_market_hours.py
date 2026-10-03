@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 import pytest
 
-from market_hours import (
+from core.market_hours import (
     NEW_YORK, has_expired, is_market_open, next_market_open, nyse_early_closes, nyse_holidays,
 )
 

@@ -1,7 +1,7 @@
 # tests/test_strategy.py — the split and allocation math
 import pytest
 
-from strategy import allocation_targets, split_contracts
+from core.strategy import allocation_targets, split_contracts
 
 
 @pytest.mark.parametrize("total, weight, expected", [

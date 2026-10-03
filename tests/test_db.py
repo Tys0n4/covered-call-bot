@@ -3,7 +3,7 @@ import sqlite3
 
 from sqlalchemy import inspect
 
-import db
+from core import db
 
 
 def test_old_positions_table_gets_new_columns(tmp_path, monkeypatch):
