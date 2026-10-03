@@ -18,7 +18,6 @@ const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
   min_strike_pct: 0.15, min_premium: 0.05,
   min_volume: 10, min_open_interest: 50,
-  target_delta: 0.22,
   exclude_below_cost: false,
   avoid_earnings: false,
 }
@@ -39,7 +38,6 @@ const FIELDS = [
   { name: 'min_premium',       label: 'Min. premium per share ($)',  tip: TERMS.minPremium,  kind: 'dec', min: 0.01, max: 1000 },
   { name: 'min_volume',        label: 'Min. daily volume',           tip: TERMS.volume,      kind: 'int', min: 1,    max: 1000000 },
   { name: 'min_open_interest', label: 'Min. open interest',          tip: TERMS.openInt,     kind: 'int', min: 1,    max: 1000000 },
-  { name: 'target_delta',      label: 'Balanced pick: chance called', tip: TERMS.targetDelta, kind: 'dec', min: 0.05, max: 0.5, pct: true },
 ]
 // Fields with pct: true are typed as percentages (20 = 20%) but stored and
 // sent to the API as fractions (0.20), with min/max in stored units.

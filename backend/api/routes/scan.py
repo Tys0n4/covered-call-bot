@@ -67,7 +67,6 @@ def run_scan(scan_config: ScanConfig):
         min_premium=scan_config.min_premium,
         min_volume=scan_config.min_volume,
         min_open_interest=scan_config.min_open_interest,
-        target_delta=scan_config.target_delta,
         exclude_below_cost=scan_config.exclude_below_cost,
         avoid_earnings=scan_config.avoid_earnings,
     )

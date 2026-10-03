@@ -36,7 +36,6 @@ class ScanConfig(BaseModel):
     min_premium: float = Field(default=0.05, ge=0, le=1000)
     min_volume: int = Field(default=10, ge=0, le=10_000_000)
     min_open_interest: int = Field(default=50, ge=0, le=10_000_000)
-    target_delta: float = Field(default=0.22, gt=0, lt=1)
     exclude_below_cost: bool = False   # skip strikes below your average cost per share
     avoid_earnings: bool = False       # skip expiries on or after the next earnings date
 

@@ -25,7 +25,7 @@ class ScannerConfig:
 
     # --- Greeks ---
     risk_free_rate: float = 0.04
-    target_delta: float = 0.22              # raised from 0.14 — better risk/reward sweet spot
+    target_delta: float = 0.12              # balanced pick aims for ~12% chance of being called (fits the 15%+ distance)
 
     # --- Allocation ---
     income_weight: float = 0.70

@@ -11,7 +11,7 @@ export const TERMS = {
   spread:     'Gap between the buy and sell quote. Smaller means a fairer, easier fill.',
   quote:      'LIVE means the price is current. Outside market hours quotes go stale.',
   income:     'Income trades aim for the highest premium, with strikes closer to today’s price.',
-  balanced:   'Balanced trades leave more room for the stock to rise, for a smaller premium.',
+  balanced:   'Balanced trades leave more room for the stock to rise, for a smaller premium. The pick aims for about a 12% chance of being called.',
   available:  'Contracts you can still sell. Each contract covers 100 shares.',
   buyback:    'Money set aside to buy the option back early if it becomes cheap.',
   profit:     'How much of the original premium you have kept so far. Buying back near the target locks in the gain.',
@@ -24,5 +24,4 @@ export const TERMS = {
   exDividend: 'The stock goes ex-dividend before this option expires. If it is above the strike, the buyer may exercise early to collect the dividend.',
   net:        'Premium collected minus what you paid to buy it back and any fees. Gains or losses on shares that were called away are on the Performance page.',
   fill:       'The price your broker actually sold each option for. It starts at the quote shown here; change it if your fill was different.',
-  targetDelta:'The balanced pick aims for about this chance of the stock ending above the strike (delta). 22% is a common middle ground.',
 }

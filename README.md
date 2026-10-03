@@ -189,7 +189,7 @@ The scanner fetches the full options chain for a ticker within a configurable DT
 Surviving candidates are scored on two dimensions:
 
 - **Income score** — weighted by annualized yield and volume
-- **Balanced score** — weighted by delta proximity to target (0.22), upside %, and annualized yield
+- **Balanced score** — weighted by delta proximity to a fixed 12% target, upside %, and annualized yield
 
 ### Allocation
 
@@ -220,7 +220,7 @@ class ScannerConfig:
     min_premium: float = 0.05
     min_volume: int = 10
     min_open_interest: int = 50
-    target_delta: float = 0.22
+    target_delta: float = 0.12
     income_weight: float = 0.70
     buyback_budget_pct: float = 0.15
     profit_capture_target_pct: float = 80.0

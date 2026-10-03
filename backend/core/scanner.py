@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from core.config import MIN_STRIKE_PCT, ScannerConfig, DEFAULT_CONFIG
+from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.models import PortfolioPosition, ScanResult
 from core.market_data import get_current_price, get_events
 from core.options_data import get_call_options_in_dte_range
@@ -36,34 +36,6 @@ def _below_cost_warning(label: str, pick, avg_cost: float) -> str | None:
     return (
         f"The {label} pick's ${float(pick['strike']):,.2f} strike is below your ${avg_cost:,.2f} average cost. "
         f"If your shares are called away you'd sell them ${loss:,.2f} per share below what you paid."
-    )
-
-
-def _target_delta_warning(scored: pd.DataFrame, config: ScannerConfig) -> str | None:
-    """
-    The balanced pick aims for target_delta. If no candidate gets within half
-    of it (e.g. a 15%-above-price minimum only leaves ~3% deltas), both picks
-    end up as near-identical far strikes, so say why.
-    """
-    deltas = pd.to_numeric(scored.get("delta"), errors="coerce").dropna()
-    if deltas.empty:
-        return None
-    target = config.target_delta
-    closest = float(deltas.iloc[(deltas - target).abs().argmin()])
-    if abs(closest - target) <= target * 0.5:
-        return None
-    distance = config.min_strike_pct_above_current
-    if closest > target:
-        hint = "raise the target or the minimum distance"
-    elif distance > MIN_STRIKE_PCT + 1e-9:
-        hint = f"lower \"Min. distance above price\" (now {distance:.0%}, lowest {MIN_STRIKE_PCT:.0%}) or the target"
-    else:
-        hint = "lower the target"
-
-    return (
-        f"No option comes close to your {target:.0%} balanced target for the chance of being called "
-        f"(the closest is {closest:.0%}), so the balanced pick is just the best of what's left. "
-        f"To get nearer the target, {hint}."
     )
 
 
@@ -194,10 +166,6 @@ def scan_covered_calls(
     scored = score_options(enriched, config=config)
     scored["below_cost_basis"] = (position.avg_cost > 0) & (scored["strike"] < position.avg_cost)
     income_pick, balanced_pick = pick_best_options(scored)
-
-    w = _target_delta_warning(scored, config)
-    if w:
-        warnings.append(w)
 
     for label, pick in (("income", income_pick), ("balanced", balanced_pick)):
         w = _below_cost_warning(label, pick, position.avg_cost)
