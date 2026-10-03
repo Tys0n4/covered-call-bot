@@ -503,7 +503,8 @@ body { font-size: 15px; line-height: 1.5; }
 .grid-3       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-4       { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .pick-row     { display: flex; gap: 16px; }
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* position: relative keeps absolutely positioned bits (e.g. screen-reader labels) inside the scroll box */
+.table-scroll { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-scroll .data-table { min-width: 560px; }
 
 @media (max-width: 1100px) {
@@ -553,3 +554,62 @@ body { font-size: 15px; line-height: 1.5; }
 .choice input { margin-top: 3px; accent-color: var(--accent); }
 .choice:hover { border-color: var(--border-hover); }
 .choice.active { border-color: rgba(106, 228, 255, 0.4); background: var(--accent-dim); color: var(--text); }
+
+/* Toasts (context/ToastContext.jsx) */
+.toast-stack {
+  position: fixed; right: 24px; bottom: 24px; z-index: 200;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 280px; max-width: 420px;
+  background: var(--bg-card-2); border: 1px solid var(--border-hover); border-radius: 12px;
+  padding: 12px 12px 12px 14px; font-size: 14px; color: var(--text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  animation: fadeUp 0.2s ease forwards;
+}
+.toast-success svg:first-child { color: var(--green); }
+.toast-error   svg:first-child { color: var(--red); }
+.toast-close { background: none; border: none; color: var(--text-muted); cursor: pointer; display: inline-flex; padding: 2px; }
+.toast-close:hover { color: var(--text); }
+@media (max-width: 900px) {
+  .toast-stack { left: 16px; right: 16px; bottom: 84px; align-items: stretch; }
+  .toast { min-width: 0; max-width: none; }
+}
+
+/* "⋯" action menu (components/ActionMenu.jsx) */
+.menu-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px;
+  background: transparent; border: 1px solid transparent; color: var(--text-muted); cursor: pointer;
+}
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { background: var(--bg-hover); color: var(--text); border-color: var(--border); }
+.menu-btn:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; }
+.menu {
+  position: fixed; z-index: 150; min-width: 190px;
+  background: var(--bg-card-2); border: 1px solid var(--border-hover); border-radius: 12px;
+  padding: 6px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  display: flex; flex-direction: column;
+}
+.menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: none; border-radius: 8px; padding: 9px 12px;
+  color: var(--text-dim); font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600;
+  text-align: left; cursor: pointer;
+}
+.menu-item:hover, .menu-item:focus { background: var(--bg-hover); color: var(--text); outline: none; }
+.menu-item.danger { color: var(--red); }
+.menu-item.danger:hover, .menu-item.danger:focus { background: var(--red-dim); }
+
+/* Small ticker label on cards when showing all stocks */
+.ticker-tag {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
+  color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border);
+  border-radius: 7px; padding: 2px 8px;
+}
+
+/* Keep short cells on one line (dates, money headers) */
+.nowrap { white-space: nowrap; }
+.data-table th { white-space: nowrap; }

@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getPortfolio, getAllPositions, getAssignmentReview } from '../api/client'
 import { useTicker } from '../context/TickerContext'
+import { useToast } from '../context/ToastContext'
 import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import PageHeader from '../components/PageHeader'
@@ -14,7 +15,7 @@ import { TERMS } from '../lib/terms'
 import { fmtDate, money, plural } from '../lib/format'
 
 function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
-  const collected = positions.reduce((s, p) => s + p.premium_total, 0)
+  const collected = positions.reduce((s, p) => s + p.premium_total - (p.open_fees || 0), 0)
   const total = t.total_contracts || 0
   const w = n => (total > 0 ? `${(n / total) * 100}%` : '0%')
 
@@ -116,6 +117,7 @@ function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
 export default function Dashboard() {
   const navigate = useNavigate()
   const { selectTicker, applyPortfolio } = useTicker()
+  const toast = useToast()
   const [editing,      setEditing]      = useState(null)   // null | 'new' | a holding row
   const [portfolio,    setPortfolio]    = useState([])
   const [positions,    setPositions]    = useState([])
@@ -146,7 +148,8 @@ export default function Dashboard() {
 
   const retry = () => { setLoading(true); setReloadKey(k => k + 1) }
 
-  const openPremium    = positions.reduce((s, p) => s + p.premium_total, 0)
+  // After opening fees, same as "Still open" on the Performance page
+  const openPremium    = positions.reduce((s, p) => s + p.premium_total - (p.open_fees || 0), 0)
   const totalContracts = portfolio.reduce((s, t) => s + t.total_contracts, 0)
   const working        = portfolio.reduce((s, t) => s + t.open_total, 0)
   const available      = portfolio.reduce((s, t) => s + t.available, 0)
@@ -156,7 +159,7 @@ export default function Dashboard() {
     const sorted = [...allPositions].sort((a, b) => new Date(a.opened_at) - new Date(b.opened_at))
     return sorted.reduce((points, p) => {
       const prev = points.length ? points[points.length - 1].total : 0
-      points.push({ date: p.opened_at, total: Number((prev + p.premium_total).toFixed(2)) })
+      points.push({ date: p.opened_at, total: Number((prev + p.premium_total - (p.open_fees || 0)).toFixed(2)) })
       return points
     }, [])
   }, [allPositions])
@@ -168,6 +171,7 @@ export default function Dashboard() {
     setPortfolio(rows)
     applyPortfolio(rows)
     if (ticker && editing === 'new') selectTicker(ticker)
+    toast(editing === 'new' ? `${ticker} added` : ticker ? `${ticker} updated` : `${editing.ticker} removed`)
     setEditing(null)
   }
 
@@ -207,7 +211,7 @@ export default function Dashboard() {
           {/* Three numbers that matter */}
           <div className="grid-stats" style={{ marginBottom: 32 }}>
             <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-              <div className="stat-label">Premium from open calls <InfoTip text={TERMS.premium} size={12} /></div>
+              <div className="stat-label">Premium from open calls <InfoTip text="Premium from calls that are still open, after the fees you paid to sell them. Same as &quot;Still open&quot; on the Performance page." size={12} /></div>
               <div className="stat-num" style={{ fontSize: 32, color: 'var(--green)' }}>{money(openPremium)}</div>
               {chartData.length >= 2 ? (
                 <>

@@ -10,9 +10,9 @@ export default function AssignmentReview({ items, onChanged }) {
 
   if (!items?.length) return null
 
-  const act = async (id, fn) => {
-    setBusy(id); setError(null)
-    try { await fn(id); onChanged() }
+  const act = async (item, fn) => {
+    setBusy(item.id); setError(null)
+    try { await fn(item.id); onChanged(fn === assignPosition ? 'assigned' : 'not-assigned', item) }
     catch (e) { setError(apiError(e, 'Could not save that. Is the API running?')) }
     finally { setBusy(null) }
   }
@@ -31,10 +31,10 @@ export default function AssignmentReview({ items, onChanged }) {
             ({plural(p.contracts, 'contract')}) were probably called away. Check with your broker.
           </span>
           <span style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-primary" style={{ padding: '7px 14px' }} disabled={busy != null} onClick={() => act(p.id, assignPosition)}>
+            <button className="btn-primary" style={{ padding: '7px 14px' }} disabled={busy != null} onClick={() => act(p, assignPosition)}>
               {busy === p.id ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Yes, they were'}
             </button>
-            <button className="btn-secondary" style={{ padding: '7px 14px' }} disabled={busy != null} onClick={() => act(p.id, markNotAssigned)}>
+            <button className="btn-secondary" style={{ padding: '7px 14px' }} disabled={busy != null} onClick={() => act(p, markNotAssigned)}>
               No, I still have them
             </button>
           </span>

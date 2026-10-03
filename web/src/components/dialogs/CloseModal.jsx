@@ -76,7 +76,7 @@ export default function CloseModal({ position: p, evaluation, onDone, onCancel }
         )}
 
         {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div className="hint" style={{ marginTop: 12 }}>This can't be undone from the app.</div>
+        <div className="hint" style={{ marginTop: 12 }}>Made a mistake? You can undo this from History.</div>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 18 }}>
           <button className="btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={submit} disabled={busy}>

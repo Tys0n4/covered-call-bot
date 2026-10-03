@@ -57,8 +57,9 @@ def _target_delta_warning(scored: pd.DataFrame, config: ScannerConfig) -> str | 
         if closest < target else "raise the target or the minimum distance"
     )
     return (
-        f"No option comes close to your {target:.2f} balanced target delta (the closest is {closest:.2f}), "
-        f"so the balanced pick is just the best of what's left. To get nearer the target, {hint}."
+        f"No option comes close to your {target:.0%} balanced target for the chance of being called "
+        f"(the closest is {closest:.0%}), so the balanced pick is just the best of what's left. "
+        f"To get nearer the target, {hint}."
     )
 
 

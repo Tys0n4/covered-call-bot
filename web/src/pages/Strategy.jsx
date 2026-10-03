@@ -1,9 +1,10 @@
 // src/pages/Strategy.jsx — your covered call strategy, saved to the database
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, RotateCcw, Download } from 'lucide-react'
+import { AlertTriangle, RotateCcw, Download } from 'lucide-react'
 import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformance, apiError } from '../api/client'
 import PageHeader from '../components/PageHeader'
+import { useToast } from '../context/ToastContext'
 import InfoTip from '../components/InfoTip'
 import { DEFAULT_STRATEGY, splitContracts } from '../lib/strategy'
 import { TERMS } from '../lib/terms'
@@ -43,13 +44,13 @@ function Slider({ value, onChange, min, max, step, label }) {
 const goalToText = g => (g > 0 ? String(Math.round(g)) : '')
 
 export default function Strategy() {
+  const toast = useToast()
   const [saved, setSaved]       = useState(null)    // what the server has
   const [draft, setDraft]       = useState(null)    // what's on screen
   const [goalText, setGoalText] = useState('')      // goal box exactly as typed ('' = no goal)
   const [loadError, setLoadError] = useState(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
-  const [justSaved, setJustSaved] = useState(false)
   const [positions, setPositions] = useState([])
   const [holdings, setHoldings] = useState([])
   const [exporting, setExporting] = useState(false)
@@ -92,7 +93,7 @@ export default function Strategy() {
     } finally { setExporting(false) }
   }
 
-  const set = (k, v) => { setDraft(d => ({ ...d, [k]: v })); setJustSaved(false) }
+  const set = (k, v) => setDraft(d => ({ ...d, [k]: v }))
   const dirty = saved && draft && JSON.stringify(saved) !== JSON.stringify(draft)
 
   const handleSave = async () => {
@@ -100,7 +101,8 @@ export default function Strategy() {
     try {
       const r = await saveStrategy(draft)
       const s = { ...DEFAULT_STRATEGY, ...r.data }
-      setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)); setJustSaved(true)
+      setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal))
+      toast('Strategy saved. It applies to your next scan and price check.')
     } catch (e) {
       setError(apiError(e))
     } finally {
@@ -128,6 +130,12 @@ export default function Strategy() {
       <PageHeader
         title="Strategy"
         subtitle="How the app splits your trades and when it tells you to buy back. Changes apply to every stock."
+        actions={
+          <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }}
+            onClick={() => setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal }))}>
+            <RotateCcw size={13} strokeWidth={1.75} /> Reset rules to defaults
+          </button>
+        }
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -232,21 +240,19 @@ export default function Strategy() {
         </Section>
       </div>
 
-      {/* Save bar */}
+      {/* Save bar: only while there are changes to save (or an error to show) */}
+      {(dirty || error || saving) && (
       <div className="save-bar">
-        <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => { setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal })); setJustSaved(false) }}>
-          <RotateCcw size={13} strokeWidth={1.75} /> Reset rules to defaults
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span className="hint">You have unsaved changes</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {error && <span style={{ color: 'var(--red)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={14} /> {error}</span>}
-          {!error && justSaved && !dirty && <span style={{ color: 'var(--green)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={15} /> Saved</span>}
-          {!error && dirty && <span className="hint">You have unsaved changes</span>}
           <button className="btn-secondary" onClick={() => { setDraft(saved); setGoalText(goalToText(saved.monthly_goal)); setError(null) }} disabled={!dirty || saving}>Discard</button>
           <button className="btn-primary" onClick={handleSave} disabled={!dirty || saving}>
             {saving ? <><span className="spinner" /> Saving…</> : 'Save strategy'}
           </button>
         </div>
       </div>
+      )}
     </div>
   )
 }
