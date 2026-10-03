@@ -20,5 +20,7 @@ export const TERMS = {
   volume:     'Minimum contracts traded today. Higher means easier to trade.',
   openInt:    'Minimum open contracts. Higher means a more active, reliable market.',
   belowCost:  'The strike is under what you paid per share. If the shares are called away you sell them for less than you paid (the premium covers only part of that).',
+  earnings:   'The company reports earnings before this option expires. The stock can jump on the news, which raises the chance your shares are called away.',
+  exDividend: 'The stock goes ex-dividend before this option expires. If it is above the strike, the buyer may exercise early to collect the dividend.',
   targetDelta:'The balanced pick aims for this delta (0.22 ≈ 22% chance of being called away).',
 }

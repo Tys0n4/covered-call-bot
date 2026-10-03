@@ -36,6 +36,7 @@ class ScanConfig(BaseModel):
     min_open_interest: int = Field(default=50, ge=0, le=10_000_000)
     target_delta: float = Field(default=0.22, gt=0, lt=1)
     exclude_below_cost: bool = False   # skip strikes below your average cost per share
+    avoid_earnings: bool = False       # skip expiries on or after the next earnings date
 
     @field_validator("ticker")
     @classmethod
@@ -63,6 +64,8 @@ class Candidate(BaseModel):
     income_score: Optional[float]
     balanced_score: Optional[float]
     below_cost_basis: bool = False   # strike is under your average cost per share
+    spans_earnings: bool = False     # expires on/after the next earnings date
+    spans_ex_dividend: bool = False  # expires on/after the next ex-dividend date
 
 
 class AllocationItem(BaseModel):
@@ -93,6 +96,8 @@ class ScanResponse(BaseModel):
     net_premium: float
     warnings: list[str]
     quotes_live: bool = True                 # False = priced at last trades (market closed)
+    earnings_date: Optional[str] = None      # next earnings date, if known
+    ex_dividend_date: Optional[str] = None   # next ex-dividend date, if known
     next_market_open: Optional[str] = None   # ISO time of the next open, when closed
 
 
