@@ -61,34 +61,34 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ```
 covered-call-bot/
-├── app/                    # Core Python logic
-│   ├── scanner_service.py  # Full scan pipeline
-│   ├── planning_service.py # Contract allocation with 70/30 rule
-│   ├── management.py       # Buyback evaluation
-│   ├── positions_store.py  # JSON position persistence
-│   ├── scoring.py          # Income + balanced scoring
-│   ├── filters.py          # Quote quality + liquidity filters
-│   ├── calculations.py     # Annualized yield, spread metrics
-│   ├── greeks.py           # Black-Scholes delta estimation
-│   ├── config.py           # Central strategy config (all constants)
-│   ├── models.py           # Dataclasses for core domain objects
-│   └── data/
-│       ├── portfolio.csv
-│       └── open_positions.json
-├── api/                    # FastAPI backend
-│   ├── main.py             # App entry + CORS
-│   ├── schemas.py          # Pydantic request/response models
-│   └── routes/
-│       ├── scan.py         # POST /scan
-│       ├── positions.py    # GET/POST /positions
-│       ├── manage.py       # GET /manage
-│       ├── portfolio.py    # GET /portfolio
-│       └── settings.py     # GET /settings
-└── web/                    # React frontend
-    └── src/
-        ├── context/        # TickerContext global state
-        ├── components/     # Layout, sidebar
-        └── pages/          # Dashboard, Scanner, Positions, Manage, Settings
+├── app/                      # Core Python logic
+│   ├── scanner_service.py    # Full scan pipeline (filters, scoring, warnings)
+│   ├── planning_service.py   # Contract allocation for your income/balanced split
+│   ├── positions_store.py    # Saving, closing, rolling, assigning, editing, undoing calls
+│   ├── assignment_service.py # Finds expired calls that were probably assigned
+│   ├── performance.py        # Realized results and return on capital
+│   ├── management.py         # Buyback evaluation ("Check prices")
+│   ├── market_data.py        # Stock price (Alpha Vantage, Yahoo fallback), events, closes
+│   ├── options_data.py       # Option chains from Yahoo (cached)
+│   ├── market_hours.py       # NYSE hours, holidays and early closes
+│   ├── cache.py              # Short in-memory cache for market data
+│   ├── strategy.py           # Your saved strategy + split math
+│   ├── db.py                 # Database tables (Postgres, or SQLite locally)
+│   ├── config.py             # Scanner defaults
+│   └── data/                 # Demo data, used to seed a new local database
+├── api/                      # FastAPI backend
+│   ├── main.py               # App entry, CORS, login protection
+│   ├── auth.py               # APP_PASSWORD login and tokens
+│   ├── schemas.py            # Request/response models and validation
+│   └── routes/               # portfolio, scan, positions, manage, performance, settings
+├── tests/                    # pytest suite (fake market, temporary database)
+├── web/                      # React frontend (Vite)
+│   └── src/
+│       ├── pages/            # Dashboard, Scanner, Positions, Performance, Strategy, Login
+│       ├── components/       # Layout, dialogs (close, roll, edit, add), tooltips, ...
+│       ├── context/          # Login state and the selected stock
+│       └── lib/              # Formatting and P&L helpers
+└── .github/workflows/ci.yml  # Tests, lint and build on every pull request
 ```
 
 ---
@@ -254,7 +254,11 @@ needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`)
 ```bash
 pip install -r requirements-dev.txt
 pytest
+ruff check app api tests
+cd web && npm run lint && npm run build
 ```
+
+GitHub Actions runs the same checks on every pull request and on pushes to `main` (`.github/workflows/ci.yml`).
 
 The tests use a fake market and a temporary SQLite database, so they need no API keys or network.
 

@@ -2,6 +2,10 @@
 """Check a ticker is real and has listed options before adding it."""
 from __future__ import annotations
 
+import logging
+
+log = logging.getLogger(__name__)
+
 
 def has_listed_options(ticker: str) -> bool | None:
     """
@@ -13,5 +17,5 @@ def has_listed_options(ticker: str) -> bool | None:
         import yfinance as yf
         return len(yf.Ticker(ticker).options or ()) > 0
     except Exception as e:  # network trouble, rate limit, unexpected response
-        print(f"  Couldn't check options for {ticker}: {e}")
+        log.warning("Couldn't check options for %s: %s", ticker, e)
         return None

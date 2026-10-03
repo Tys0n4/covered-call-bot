@@ -1,10 +1,14 @@
 # management.py
 from __future__ import annotations
 
+import logging
+
 from options_data import get_calls
 from quote_policy import select_quote, QuoteMode
 from models import OpenCoveredCall
 from config import ScannerConfig, DEFAULT_CONFIG
+
+log = logging.getLogger(__name__)
 
 
 def get_current_option_price(
@@ -91,7 +95,7 @@ def evaluate_positions(
     results: list[OpenCoveredCall] = []
 
     for pos in positions:
-        print(f"  Checking {pos['ticker']} {pos['expiry']} ${pos['strike']:.2f}...")
+        log.debug("Checking %s %s $%.2f", pos["ticker"], pos["expiry"], float(pos["strike"]))
         current_px = get_current_option_price(
             ticker=pos["ticker"],
             expiry=pos["expiry"],

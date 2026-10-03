@@ -155,7 +155,6 @@ def print_positions_with_budget(
 # ---------------------------------------------------------------------------
 
 def print_management_report(results: list, config: ScannerConfig = DEFAULT_CONFIG) -> None:
-    from models import OpenCoveredCall
 
     _section("Open Position Management")
 
@@ -191,5 +190,5 @@ def print_management_report(results: list, config: ScannerConfig = DEFAULT_CONFI
                 f"consider buying back to free up shares."
             )
         elif r.current_option_price == 0.0:
-            print(f"    ⚠  Could not fetch current price — verify manually on broker.")
+            print("    ⚠  Could not fetch current price — verify manually on broker.")
         print()
