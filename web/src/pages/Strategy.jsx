@@ -6,6 +6,7 @@ import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformanc
 import PageHeader from '../components/PageHeader'
 import { useToast } from '../context/ToastContext'
 import InfoTip from '../components/InfoTip'
+import AlertsSection from '../components/AlertsSection'
 import { DEFAULT_STRATEGY, splitContracts } from '../lib/strategy'
 import { TERMS } from '../lib/terms'
 import { money, plural } from '../lib/format'
@@ -231,7 +232,10 @@ export default function Strategy() {
           </Section>
         </div>
 
-        {/* 5. Data */}
+        {/* 5. Alerts */}
+        <AlertsSection />
+
+        {/* 6. Data */}
         <Section title="Your data" hint="Download a copy of everything saved in the app, as spreadsheet-friendly CSV files.">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button className="btn-secondary" onClick={exportHoldings} disabled={exporting}><Download size={15} /> Holdings ({plural(holdings.length, 'stock')})</button>

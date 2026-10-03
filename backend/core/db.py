@@ -50,6 +50,7 @@ positions = Table(
     Column("cost_basis",      Float,   nullable=True),   # your avg cost per share when the call was sold
     Column("rolled_from",     Integer, nullable=True),   # id of the call this one replaced (a roll)
     Column("assignment_reviewed", Integer, nullable=True),  # 1 = you confirmed whether it was assigned
+    Column("buyback_alerted_at",  String(25), nullable=True),  # when a "buy back now" alert was sent
 )
 
 
@@ -61,6 +62,15 @@ strategy = Table(
     Column("profit_capture_target_pct", Float, nullable=False),
     Column("buyback_budget_pct",        Float, nullable=False),
     Column("monthly_goal",              Float, nullable=False, default=0),
+)
+
+# Buy-back alerts (Strategy page): a single row (id = 1)
+alert_settings = Table(
+    "alert_settings", metadata,
+    Column("id",              Integer, primary_key=True),
+    Column("discord_webhook", String(300), nullable=True),
+    Column("enabled",         Integer, nullable=False, default=0),
+    Column("last_check_at",   String(25), nullable=True),   # last time the scheduled check ran
 )
 
 
@@ -110,6 +120,7 @@ def _add_missing_columns(engine: Engine) -> None:
     added_later = {"positions": [
         positions.c.close_cost, positions.c.open_fees, positions.c.close_fees,
         positions.c.cost_basis, positions.c.rolled_from, positions.c.assignment_reviewed,
+        positions.c.buyback_alerted_at,
     ]}
     insp = inspect(engine)
     for table_name, cols in added_later.items():
