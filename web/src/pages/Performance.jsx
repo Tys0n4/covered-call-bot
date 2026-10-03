@@ -6,6 +6,7 @@ import { apiError, getPerformance, getStrategy } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
+import { PerformanceSkeleton } from '../components/Skeleton'
 import Collapsible from '../components/Collapsible'
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { fmtDate, money, pct, plural } from '../lib/format'
@@ -88,7 +89,7 @@ export default function Performance() {
   const header = <PageHeader title="Performance" subtitle="What your covered calls actually made, after buybacks and fees." />
 
   if (failed) return <div className="fade-up">{header}<ServerDown onRetry={retry} message={typeof failed === 'string' ? failed : undefined} /></div>
-  if (!data) return <div className="fade-up">{header}<div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><div className="spinner" style={{ width: 36, height: 36 }} /></div></div>
+  if (!data) return <div className="fade-up">{header}<PerformanceSkeleton /></div>
 
   const s = data.summary
   const year = new Date().getFullYear()

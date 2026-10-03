@@ -13,6 +13,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
+import { PositionsSkeleton } from '../components/Skeleton'
 import ActionMenu from '../components/ActionMenu'
 import AssignmentReview from '../components/AssignmentReview'
 import CloseModal from '../components/dialogs/CloseModal'
@@ -281,8 +282,8 @@ export default function Positions() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <div className="tabs">
-          <button className={`tab ${tab === 'OPEN' ? 'active' : ''}`} onClick={() => setTab('OPEN')}>Open ({open.length})</button>
-          <button className={`tab ${tab === 'CLOSED' ? 'active' : ''}`} onClick={() => setTab('CLOSED')}>History ({closed.length})</button>
+          <button className={`tab ${tab === 'OPEN' ? 'active' : ''}`} onClick={() => setTab('OPEN')}>Open{loading ? '' : ` (${open.length})`}</button>
+          <button className={`tab ${tab === 'CLOSED' ? 'active' : ''}`} onClick={() => setTab('CLOSED')}>History{loading ? '' : ` (${closed.length})`}</button>
         </div>
         <div className="tabs" role="group" aria-label="Which stocks">
           <button className={`tab ${scope === 'all' ? 'active' : ''}`} onClick={() => setScope('all')}>All stocks</button>
@@ -293,7 +294,7 @@ export default function Positions() {
       </div>
 
       {loading ? (
-        <div className="card" style={{ textAlign: 'center', padding: 60 }}><div className="spinner" style={{ width: 36, height: 36, margin: '0 auto' }} /></div>
+        <PositionsSkeleton />
       ) : tab === 'OPEN' ? (
         open.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: 60 }}>

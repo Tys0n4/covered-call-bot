@@ -12,6 +12,7 @@ import ActionMenu from '../components/ActionMenu'
 import PriceStamp from '../components/PriceStamp'
 import HoldingModal from '../components/dialogs/HoldingModal'
 import ServerDown from '../components/ServerDown'
+import { DashboardSkeleton } from '../components/Skeleton'
 import { TERMS } from '../lib/terms'
 import { daysUntil, fmtDate, money, plural } from '../lib/format'
 
@@ -164,9 +165,7 @@ export default function Dashboard() {
       />
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-          <div className="spinner" style={{ width: 36, height: 36 }} />
-        </div>
+        <DashboardSkeleton />
       ) : loadFailed ? (
         <ServerDown onRetry={retry} />
       ) : (
