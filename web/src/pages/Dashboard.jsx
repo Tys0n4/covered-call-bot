@@ -1,10 +1,10 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useState, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getPortfolio, getAllPositions, getAssignmentReview, getManagement, getPerformance, getStrategy } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, Target, BadgeDollarSign } from 'lucide-react'
+import { ScanLine, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, Target, BadgeDollarSign } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
@@ -15,6 +15,33 @@ import ServerDown from '../components/ServerDown'
 import { DashboardSkeleton } from '../components/Skeleton'
 import { TERMS } from '../lib/terms'
 import { daysUntil, fmtDate, money, plural } from '../lib/format'
+
+// First visit: what the app does, in three steps, and the one thing to do now
+function GettingStarted({ onAdd }) {
+  const steps = [
+    ['Add your stocks', 'Enter the shares you own and what you paid. Every 100 shares lets you sell one covered call.'],
+    ['Scan for a call', 'The Scanner finds calls at least 15% above today’s price and recommends what to sell.'],
+    ['Track and buy back', 'Positions checks prices and tells you when to buy back, roll, or let a call expire.'],
+  ]
+  return (
+    <div className="card" style={{ padding: 32 }}>
+      <div className="section-title" style={{ fontSize: 20, marginBottom: 6 }}>Welcome to CovCall</div>
+      <div className="hint" style={{ fontSize: 14, marginBottom: 24 }}>Earn income from shares you already own by selling covered calls. Here’s how it works:</div>
+      <div className="grid-steps" style={{ marginBottom: 28 }}>
+        {steps.map(([t, d], i) => (
+          <div key={t} style={{ display: 'flex', gap: 12 }}>
+            <div className={`step-num${i === 0 ? ' current' : ''}`}>{i + 1}</div>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>{t}</div>
+              <div className="hint">{d}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="btn-primary" onClick={onAdd}><Plus size={16} strokeWidth={2} /> Add your first stock</button>
+    </div>
+  )
+}
 
 // One line in the "Needs attention" box
 function Attention({ icon: Icon, tone, children, action }) {
@@ -67,9 +94,11 @@ function StockRow({ ticker: t, positions, onScan, onPositions, onEdit }) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const { selectTicker, applyPortfolio } = useTicker()
   const toast = useToast()
-  const [editing,      setEditing]      = useState(null)   // null | 'new' | a holding row
+  // null | 'new' | a holding row; /?add=1 (from Scanner or Positions) opens 'Add a stock'
+  const [editing,      setEditing]      = useState(() => (params.get('add') === '1' ? 'new' : null))
   const [portfolio,    setPortfolio]    = useState([])
   const [positions,    setPositions]    = useState([])
   const [allPositions, setAllPositions] = useState([])
@@ -140,13 +169,18 @@ export default function Dashboard() {
   const callList  = list => list.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)}`).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '')
   const allClear  = reviewCount === 0 && ready.length === 0 && expiring.length === 0 && unsold.length === 0
 
+  const closeEditor = () => {
+    setEditing(null)
+    if (params.has('add')) setParams({}, { replace: true })
+  }
+
   // The API returns the updated portfolio after every add/edit/remove
   const handleSaved = (rows, ticker) => {
     setPortfolio(rows)
     applyPortfolio(rows)
     if (ticker && editing === 'new') selectTicker(ticker)
     toast(editing === 'new' ? `${ticker} added` : ticker ? `${ticker} updated` : `${editing.ticker} removed`)
-    setEditing(null)
+    closeEditor()
   }
 
   return (
@@ -154,20 +188,23 @@ export default function Dashboard() {
       {editing && (
         <HoldingModal
           holding={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
+          onClose={closeEditor}
           onSaved={handleSaved}
         />
       )}
       <PageHeader
         title="Dashboard"
         subtitle={`Where your covered calls stand today, ${new Date().toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' })}.`}
-        actions={<button className="btn-primary" onClick={() => navigate('/scanner')}><ScanLine size={16} strokeWidth={2} /> Find a trade</button>}
+        actions={!loading && !loadFailed && portfolio.length > 0 &&
+          <button className="btn-primary" onClick={() => navigate('/scanner')}><ScanLine size={16} strokeWidth={2} /> Find a trade</button>}
       />
 
       {loading ? (
         <DashboardSkeleton />
       ) : loadFailed ? (
         <ServerDown onRetry={retry} />
+      ) : portfolio.length === 0 ? (
+        <GettingStarted onAdd={() => setEditing('new')} />
       ) : (
         <>
           {portfolio.length > 0 && (
@@ -275,38 +312,27 @@ export default function Dashboard() {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="section-title" style={{ margin: 0 }}>Your stocks</div>
-            {portfolio.length > 0 && (
-              <button className="btn-secondary" onClick={() => setEditing('new')} style={{ padding: '8px 16px' }}>
-                <Plus size={15} strokeWidth={2} /> Add stock
-              </button>
-            )}
+            <button className="btn-secondary" onClick={() => setEditing('new')} style={{ padding: '8px 16px' }}>
+              <Plus size={15} strokeWidth={2} /> Add stock
+            </button>
           </div>
-          {portfolio.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: 60 }}>
-              <LayoutGrid size={28} strokeWidth={1.75} style={{ opacity: 0.4, marginBottom: 10 }} />
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No stocks yet</div>
-              <div className="hint" style={{ marginBottom: 18 }}>Add the shares you own to start finding covered calls.</div>
-              <button className="btn-primary" onClick={() => setEditing('new')}><Plus size={16} strokeWidth={2} /> Add your first stock</button>
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {portfolio.map(t => (
+              <StockRow
+                key={t.ticker}
+                ticker={t}
+                positions={positions.filter(p => p.ticker === t.ticker)}
+                onScan={() => go(t.ticker, '/scanner')}
+                onPositions={() => go(t.ticker, '/positions')}
+                onEdit={() => setEditing(t)}
+              />
+            ))}
+            <div className="split-legend">
+              <span><i style={{ background: 'var(--accent-light)' }} /> Income <InfoTip text={TERMS.income} size={12} /></span>
+              <span><i style={{ background: 'var(--blue)' }} /> Balanced <InfoTip text={TERMS.balanced} size={12} /></span>
+              <span><i style={{ background: 'rgba(255,255,255,0.18)' }} /> Not sold</span>
             </div>
-          ) : (
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              {portfolio.map(t => (
-                <StockRow
-                  key={t.ticker}
-                  ticker={t}
-                  positions={positions.filter(p => p.ticker === t.ticker)}
-                  onScan={() => go(t.ticker, '/scanner')}
-                  onPositions={() => go(t.ticker, '/positions')}
-                  onEdit={() => setEditing(t)}
-                />
-              ))}
-              <div className="split-legend">
-                <span><i style={{ background: 'var(--accent-light)' }} /> Income <InfoTip text={TERMS.income} size={12} /></span>
-                <span><i style={{ background: 'var(--blue)' }} /> Balanced <InfoTip text={TERMS.balanced} size={12} /></span>
-                <span><i style={{ background: 'rgba(255,255,255,0.18)' }} /> Not sold</span>
-              </div>
-            </div>
-          )}
+          </div>
         </>
       )}
     </div>

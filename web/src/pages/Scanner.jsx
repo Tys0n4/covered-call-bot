@@ -9,6 +9,7 @@ import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
 import MoneyInput from '../components/MoneyInput'
 import ServerDown from '../components/ServerDown'
+import EmptyState, { AddStockLink } from '../components/EmptyState'
 import OptionsTable, { EventBadges } from '../components/OptionsTable'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
@@ -274,9 +275,9 @@ export default function Scanner() {
       {!selected && loadError && <ServerDown onRetry={() => refresh().catch(() => {})} />}
 
       {!selected && loaded && !loadError && (
-        <div className="callout callout-amber">
-          <AlertTriangle size={18} strokeWidth={1.75} /> <span>Add a stock you own on the <Link to="/" style={{ color: 'inherit', fontWeight: 700 }}>Dashboard</Link> to start scanning.</span>
-        </div>
+        <EmptyState icon={ScanLine} title="Add a stock to start scanning" action={<AddStockLink />}>
+          The Scanner looks for covered calls on shares you own. Add a stock and how many shares you have, then come back here.
+        </EmptyState>
       )}
 
       {selected && (

@@ -722,3 +722,20 @@ body { font-size: 15px; line-height: 1.5; }
 }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+
+/* --- Empty states and first-run steps ------------------------------------- */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center; padding: 48px 24px;
+}
+.empty-icon {
+  width: 52px; height: 52px; border-radius: 16px; margin-bottom: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-dim); color: var(--accent-light);
+}
+.step-num {
+  width: 28px; height: 28px; border-radius: 99px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); color: var(--text-dim); font-weight: 700; font-size: 14px;
+}
+.step-num.current { background: var(--accent-dim); color: var(--accent-light); }
