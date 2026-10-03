@@ -19,7 +19,11 @@ export function AuthProvider({ children }) {
         setAuthRequired(required)
         setState(required && !getToken() ? 'login' : 'ready')
       })
-      .catch(() => setState('down'))
+      .catch(e => {
+        // An API from before logins existed has no /auth/status: run without one
+        if (e.response?.status === 404) { setAuthRequired(false); setState('ready') }
+        else setState('down')
+      })
   }, [])
 
   useEffect(() => { fetchStatus() }, [fetchStatus])
