@@ -25,6 +25,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 - **Candidate scoring** — ranks options by annualized yield, delta proximity, bid-ask spread quality, and volume
 - **Smart allocation** — maintains a 70/30 income/balanced contract split per ticker, accounting for already-open positions
 - **Position management** — tracks open covered call positions and evaluates buyback opportunities based on profit capture %
+- **Buy-back alerts** — a Discord message when an open call reaches your buy-back target, checked every 15 minutes during market hours
 - **Real fills and fees** — record the price your broker actually filled and your commissions when you sell, buy back or roll
 - **Rolling** — buy back a call and sell a new one on the same shares in one step
 - **Assignment tracking** — record shares called away (early or at expiry); calls that expired in the money are flagged for review
@@ -201,6 +202,16 @@ The management module fetches the current ask price for each open position and c
 
 From the Positions page you can close a call (bought back, with cost and fees), roll it into a new one, or record that your shares were called away. When a call expires with the stock above the strike, the app asks you to confirm whether it was assigned instead of assuming.
 
+### Buy-back alerts (Discord)
+
+When an open call reaches your buy-back target, the app can post a message to a Discord channel. Each call is alerted once.
+
+1. **Discord:** in the channel you want, open *Edit Channel → Integrations → Webhooks → New Webhook* and copy the webhook URL.
+2. **App:** paste it under *Buy-back alerts* on the Strategy page and click Connect. A test message is sent right away.
+3. **GitHub:** the scheduled workflow `.github/workflows/alerts.yml` wakes the API every 15 minutes on weekdays and calls `POST /alerts/check`, which does nothing while the market is closed. If the API has a password, add it as a repository secret named `APP_PASSWORD` (*Settings → Secrets and variables → Actions*). Set a repository variable `API_URL` only if your backend isn't at `https://covered-call-bot-production.up.railway.app`.
+
+You can run a check by hand from the Actions tab (*Buy-back alerts → Run workflow*) or with `cd backend && python -m core.alerts`. GitHub pauses scheduled workflows after 60 days without commits to the repository; re-enable it from the Actions tab if that happens.
+
 ### Performance
 
 A call's result is realized when it finishes. Net = premium − fees − buyback cost. Assigned calls also record the gain or loss on the shares: (strike − your cost per share) × shares. Yearly return is net premium on the cost of the shares covered, weighted by how long each call was open. Bought-back calls with no cost entered are flagged and left out of the totals.
@@ -255,6 +266,10 @@ needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`)
 | GET    | `/performance`       | Realized results: summary, months, every finished call |
 | GET    | `/settings`          | Your saved strategy                           |
 | PUT    | `/settings`          | Save your strategy                            |
+| GET    | `/alerts`            | Buy-back alert settings (the webhook is never returned in full) |
+| PUT    | `/alerts`            | Save the Discord webhook, turn alerts on/off, or remove the webhook |
+| POST   | `/alerts/test`       | Send a test message to Discord                |
+| POST   | `/alerts/check`      | Alert any open call that just reached the target (used by the scheduled workflow) |
 
 ---
 

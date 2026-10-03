@@ -739,3 +739,21 @@ body { font-size: 15px; line-height: 1.5; }
   background: rgba(255,255,255,0.06); color: var(--text-dim); font-weight: 700; font-size: 14px;
 }
 .step-num.current { background: var(--accent-dim); color: var(--accent-light); }
+
+/* --- Strategy: buy-back alerts ---------------------------------------------- */
+.alert-status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.webhook-steps { margin: 14px 0 0; padding-left: 20px; display: grid; gap: 4px; list-style: decimal; }
+.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch input + span {
+  position: relative; width: 38px; height: 22px; border-radius: 99px; flex-shrink: 0;
+  background: rgba(255,255,255,0.14); transition: background 0.15s;
+}
+.switch input + span::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 99px;
+  background: #fff; transition: transform 0.15s;
+}
+.switch input:checked + span { background: var(--green); }
+.switch input:checked + span::after { transform: translateX(16px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent-light); outline-offset: 2px; }
+.switch input:disabled + span { opacity: 0.5; }

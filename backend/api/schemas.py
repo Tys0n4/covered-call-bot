@@ -251,3 +251,23 @@ class StrategySettings(BaseModel):
     profit_capture_target_pct: float = Field(ge=1, le=100)         # 80 = buy back at 80% kept
     buyback_budget_pct: float = Field(ge=0, le=1)                  # 0.15 = 15% set aside
     monthly_goal: float = Field(default=0, ge=0, le=10_000_000)    # dollars per month, 0 = off
+
+
+class AlertSettingsIn(BaseModel):
+    """Change buy-back alert settings; fields left out stay as they are."""
+    discord_webhook: Optional[str] = Field(default=None, max_length=300)
+    enabled: Optional[bool] = None
+    clear_webhook: bool = False          # remove the saved webhook (also turns alerts off)
+
+
+class AlertSettingsOut(BaseModel):
+    enabled: bool
+    webhook_set: bool
+    webhook_hint: Optional[str] = None   # last few characters, so you can tell which one is saved
+    last_check_at: Optional[str] = None  # ISO time (UTC) of the last scheduled check
+
+
+class AlertCheckResult(BaseModel):
+    status: Literal["ok", "off", "market_closed"]
+    sent: int
+    checked: Optional[int] = None
