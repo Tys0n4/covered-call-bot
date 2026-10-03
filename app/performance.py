@@ -112,6 +112,7 @@ def compute_performance(positions: list[dict], avg_costs: dict[str, float], toda
 
     return {
         "summary": {
+            "month": today[:7],                     # "this month", in your time zone (APP_TIMEZONE)
             "realized_this_month": realized(today[:7]),
             "realized_this_year": realized(today[:4]),
             "realized_all_time": realized(),

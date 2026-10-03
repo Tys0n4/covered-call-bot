@@ -2,7 +2,7 @@
 // One place for your covered calls: what's open, whether to buy back, and history.
 // (This page replaces the old separate Positions and Manage pages.)
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getAllPositions, getManagement, getAssignmentReview, apiError } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat } from 'lucide-react'
@@ -12,6 +12,8 @@ import ServerDown from '../components/ServerDown'
 import CloseModal from '../components/CloseModal'
 import RollModal from '../components/RollModal'
 import AssignmentReview from '../components/AssignmentReview'
+import EditTradeModal from '../components/EditTradeModal'
+import HistoryActions from '../components/HistoryActions'
 import { TERMS } from '../lib/terms'
 import { fmtDate, daysUntil, money, plural } from '../lib/format'
 import { optionNet, resultLabel, totalFees } from '../lib/pnl'
@@ -62,7 +64,7 @@ function StatusPanel({ evaluation, checked }) {
   )
 }
 
-function PositionCard({ p, evaluation, checked, onClose, onRoll }) {
+function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit }) {
   const days = daysUntil(p.expiry)
   const buy = evaluation?.should_buy_back
   return (
@@ -88,6 +90,9 @@ function PositionCard({ p, evaluation, checked, onClose, onRoll }) {
         <div>
           <StatusPanel evaluation={evaluation} checked={checked} />
           <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 18 }}>
+            <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => onEdit(p)}>
+              Edit
+            </button>
             <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => onRoll(p)}>
               <Repeat size={13} strokeWidth={2} /> Roll
             </button>
@@ -105,14 +110,16 @@ export default function Positions() {
   const { selected, refresh: refreshTickers } = useTicker()
   const [reloadKey, setReloadKey] = useState(0)
   const [fetched, setFetched]     = useState({ key: null, positions: [] })
-  const [tab, setTab]             = useState('OPEN')
+  const [params] = useSearchParams()
+  const [tab, setTab]             = useState(params.get('tab') === 'history' ? 'CLOSED' : 'OPEN')
   const [closingPos, setClosingPos] = useState(null)   // position in the Close dialog
   const [rollingPos, setRollingPos] = useState(null)   // position in the Roll dialog
   const [review, setReview]       = useState([])       // expired calls that may have been assigned
   const [evals, setEvals]         = useState(null)   // id -> evaluation, after "Check prices"
   const [checking, setChecking]   = useState(false)
   const [error, setError]         = useState(null)
-  const [historyScope, setHistoryScope] = useState('stock')   // 'stock' | 'all'
+  const [historyScope, setHistoryScope] = useState(params.get('scope') === 'all' ? 'all' : 'stock')   // 'stock' | 'all'
+  const [editingPos, setEditingPos] = useState(null)   // position in the Edit dialog
 
   // Price checks and errors belong to one stock; clear them when you switch
   const [shownFor, setShownFor] = useState(selected)
@@ -152,9 +159,9 @@ export default function Positions() {
 
   // After a close, roll or assignment: reload trades; an assignment also changes your share count
   const afterChange = (how) => {
-    setClosingPos(null); setRollingPos(null); setEvals(null)
+    setClosingPos(null); setRollingPos(null); setEditingPos(null); setEvals(null); setError(null)
     reload()
-    if (how === 'assigned') refreshTickers().catch(() => {})
+    if (how === 'assigned') refreshTickers().catch(() => {})   // share count changed
   }
 
   const open      = positions.filter(p => p.status === 'OPEN' && p.ticker === selected)
@@ -168,6 +175,7 @@ export default function Positions() {
     <div className="fade-up">
       {closingPos && <CloseModal position={closingPos} evaluation={evals?.[closingPos.id]}
         onDone={afterChange} onCancel={() => setClosingPos(null)} />}
+      {editingPos && <EditTradeModal position={editingPos} onDone={() => afterChange('edited')} onCancel={() => setEditingPos(null)} />}
       {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]}
         onDone={() => afterChange('rolled')} onCancel={() => setRollingPos(null)} />}
 
@@ -220,7 +228,7 @@ export default function Positions() {
                 .slice()
                 .sort((a, b) => (evals?.[b.id]?.should_buy_back ? 1 : 0) - (evals?.[a.id]?.should_buy_back ? 1 : 0))
                 .map(p => (
-                  <PositionCard key={p.id} p={p} evaluation={evals?.[p.id]} checked={!!evals} onClose={setClosingPos} onRoll={setRollingPos} />
+                  <PositionCard key={p.id} p={p} evaluation={evals?.[p.id]} checked={!!evals} onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} />
                 ))}
             </div>
           </>
@@ -246,7 +254,7 @@ export default function Positions() {
                   {historyScope === 'all' && <th>Stock</th>}
                   <th>Type</th><th className="num">Strike</th><th>Expiry</th><th className="num">Contracts</th>
                   <th>Result</th><th className="num">Collected</th><th className="num">Paid to close</th><th className="num">Fees</th>
-                  <th className="num">Net <InfoTip text={TERMS.net} size={12} /></th><th>Closed</th>
+                  <th className="num">Net <InfoTip text={TERMS.net} size={12} /></th><th>Closed</th><th><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -264,10 +272,17 @@ export default function Positions() {
                       <td className="mono num">{p.contracts}</td>
                       <td>{label === 'Assigned' ? <span className="badge badge-amber">Assigned</span> : label}</td>
                       <td className="mono num" style={{ color: 'var(--green)' }}>{money(p.premium_total)}</td>
-                      <td className="mono num">{cost == null ? <span className="muted" title="Not entered when it was closed">—</span> : money(cost)}</td>
+                      <td className="mono num">
+                        {cost == null
+                          ? <button className="link-btn" style={{ fontSize: 13, color: 'var(--amber)' }} onClick={() => setEditingPos(p)}>Add cost</button>
+                          : money(cost)}
+                      </td>
                       <td className="mono num">{fees ? money(fees) : <span className="muted">—</span>}</td>
                       <td className="mono num" style={{ color: net == null ? 'var(--text-muted)' : net >= 0 ? 'var(--text)' : 'var(--red)' }}>{net == null ? '—' : money(net)}</td>
                       <td className="muted">{fmtDate(p.closed_at)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <HistoryActions p={p} rolled={rolledIds.has(p.id)} onEdit={setEditingPos} onChanged={afterChange} onError={setError} />
+                      </td>
                     </tr>
                   )
                 })}

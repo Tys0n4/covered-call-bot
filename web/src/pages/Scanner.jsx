@@ -523,10 +523,12 @@ export default function Scanner() {
                 <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                   <TrendingDown size={24} strokeWidth={1.75} style={{ marginBottom: 12, opacity: 0.6 }} />
                   <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)', marginBottom: 8 }}>No options matched</div>
-                  <div style={{ fontSize: 14, lineHeight: 1.7 }}>
-                    Prices are only live during market hours <span style={{ color: 'var(--accent-light)' }}>(9:30am – 4:00pm ET, Mon – Fri)</span>.<br />
-                    Outside those hours quotes go stale and get filtered out.<br />
-                    Try again during trading hours, or loosen the filters above.
+                  <div style={{ fontSize: 14, lineHeight: 1.7, maxWidth: 520, margin: '0 auto' }}>
+                    None of the {result.ticker} calls expiring in {config.min_dte}–{config.max_dte} days passed every filter.
+                    Under <strong style={{ color: 'var(--text-dim)' }}>Adjust filters</strong>, try a wider expiry window,
+                    a smaller distance above price (now {Math.round(config.min_strike_pct * 100)}%),
+                    or a lower minimum premium, volume or open interest.
+                    {lastPrices && <><br />The market is closed, so options are priced at their last trade. Ones that haven't traded recently have no price and are skipped.</>}
                   </div>
                 </div>
               )}
