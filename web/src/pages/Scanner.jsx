@@ -1,7 +1,7 @@
 // src/pages/Scanner.jsx
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { runScan, savePositions } from '../api/client'
+import { runScan, savePositions, apiError } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
@@ -14,7 +14,8 @@ const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
   min_strike_pct: 0.20, min_premium: 0.05,
   min_volume: 10, min_open_interest: 50,
-  income_weight: 0.70, target_delta: 0.22,
+  target_delta: 0.22,
+  exclude_below_cost: false,
 }
 
 const STORAGE_KEY = 'scanner_config'
@@ -43,14 +44,18 @@ function loadConfig() {
     if (saved[f.name] !== null && saved[f.name] !== '' && inRange(f, v)) config[f.name] = v
   }
   if (config.max_dte < config.min_dte) { config.min_dte = DEFAULT_CONFIG.min_dte; config.max_dte = DEFAULT_CONFIG.max_dte }
+  config.exclude_below_cost = saved.exclude_below_cost === true
   return config
 }
 
-const toForm = config => Object.fromEntries(FIELDS.map(f => [f.name, String(config[f.name])]))
+const toForm = config => ({
+  ...Object.fromEntries(FIELDS.map(f => [f.name, String(config[f.name])])),
+  exclude_below_cost: !!config.exclude_below_cost,
+})
 
 // Turn the typed text into numbers, with a plain message for each problem
 function parseForm(form) {
-  const values = {}, errors = {}
+  const values = { exclude_below_cost: !!form.exclude_below_cost }, errors = {}
   for (const f of FIELDS) {
     const text = form[f.name]
     const v = Number(text)
@@ -101,7 +106,11 @@ function Fact({ label, tip, value, color }) {
   )
 }
 
-function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan }) {
+function BelowCostBadge() {
+  return <span className="badge badge-amber" title={TERMS.belowCost}>Below your cost</span>
+}
+
+function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCost }) {
   if (!pick) return null
   const called = pick.delta != null ? `~${Math.round(pick.delta * 100)}%` : 'n/a'
   return (
@@ -112,9 +121,14 @@ function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan }) {
       </div>
       <div className="hint" style={{ marginBottom: 16 }}>{notInPlan || subtitle}</div>
       <div style={notInPlan ? { opacity: 0.55 } : undefined}>
-      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>
+      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: pick.below_cost_basis ? 8 : 16 }}>
         {money(pick.strike)} strike <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>· expires {fmtDate(pick.expiry)}</span>
       </div>
+      {pick.below_cost_basis && (
+        <div className="hint" style={{ color: 'var(--amber)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <BelowCostBadge /> {money(avgCost - pick.strike)}/share loss on your shares if they're called away.
+        </div>
+      )}
       <div className="facts" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <Fact label="You collect (1 contract)" tip={TERMS.premium} value={money(pick.premium_per_contract ?? pick.premium_price * 100)} color="var(--green)" />
         <Fact label="Yearly return"            tip={TERMS.yield}   value={pct(pick.annualized_yield_pct)} />
@@ -182,7 +196,7 @@ export default function Scanner() {
       const res = await runScan({ ...config, ticker: selected })
       setResult(res.data)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Scan failed. Is the API running?')
+      setError(apiError(e, 'Scan failed. Is the API running?'))
     } finally {
       setLoading(false)
     }
@@ -197,13 +211,14 @@ export default function Scanner() {
     }))
     setSaving(true)
     try { await savePositions(payload); setSaved(true) }
-    catch { setError('Could not save the trade. Is the API running?') }
+    catch (e) { setError(apiError(e, 'Could not save the trade. Is the API running?')) }
     finally { setSaving(false) }
   }
 
   const filterSummary = filtersValid
     ? `Calls expiring in ${config.min_dte}–${config.max_dte} days, with strikes at least ` +
-      `${Math.round(config.min_strike_pct * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.`
+      `${Math.round(config.min_strike_pct * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.` +
+      (config.exclude_below_cost ? ' Strikes below your average cost are skipped.' : '')
     : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
 
   const planned = result?.planned_positions || []
@@ -260,6 +275,11 @@ export default function Scanner() {
                   <Field key={f.name} field={f} text={form[f.name]} error={fieldErrors[f.name]} onChange={updateField} />
                 ))}
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, fontSize: 14, color: 'var(--text-dim)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.exclude_below_cost} onChange={e => updateField('exclude_below_cost', e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+                Skip strikes below my average cost <InfoTip text={TERMS.belowCost} />
+              </label>
             </Collapsible>
           </div>
 
@@ -334,6 +354,7 @@ export default function Scanner() {
                             Sell <strong>{plural(p.contracts, 'contract')}</strong> at the <strong>{money(p.strike)}</strong> strike, expiring <strong>{fmtDate(p.expiry)}</strong>
                           </span>
                           <span className="hint">({money(p.entry_price)} per share)</span>
+                          {p.below_cost_basis && <BelowCostBadge />}
                         </div>
                         <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
                       </div>
@@ -381,9 +402,9 @@ export default function Scanner() {
                   <div className="section-title" style={{ marginBottom: 12 }}>Top picks</div>
                   <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
                     <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#6ae4ff"
-                      notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} />
+                      notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} avgCost={result.avg_cost} />
                     <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#5aa9e6"
-                      notInPlan={splitTarget.balanced === 0 ? "Your split puts all of this stock's contracts in income, so this is shown for reference only." : null} />
+                      notInPlan={splitTarget.balanced === 0 ? "Your split puts all of this stock's contracts in income, so this is shown for reference only." : null} avgCost={result.avg_cost} />
                   </div>
                 </>
               )}
@@ -412,7 +433,8 @@ export default function Scanner() {
                             <tr key={i}>
                               <td>{fmtDate(c.expiry)}</td>
                               <td className="mono num">{c.dte}</td>
-                              <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(c.strike)}</td>
+                              <td className="mono num" style={{ color: c.below_cost_basis ? 'var(--amber)' : 'var(--text)', fontWeight: 600 }}
+                                title={c.below_cost_basis ? 'Below your average cost' : undefined}>{c.below_cost_basis ? '▾ ' : ''}{money(c.strike)}</td>
                               <td className="mono num" style={{ color: 'var(--accent-light)' }}>{money(c.premium_price)}</td>
                               <td className="mono num">{pct(c.annualized_yield_pct)}</td>
                               <td className="mono num">{pct(c.upside_to_strike_pct)}</td>

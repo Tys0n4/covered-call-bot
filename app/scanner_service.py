@@ -14,12 +14,27 @@ from scoring import score_options, pick_best_options
 from market_hours import is_market_open
 
 
-def resolve_min_strike(current_price: float, config: ScannerConfig) -> float:
+def resolve_min_strike(current_price: float, config: ScannerConfig, avg_cost: float = 0.0) -> float:
     """
     Minimum acceptable strike = current_price * (1 + min_strike_pct_above_current).
     Set min_strike_pct_above_current to 0.25 for 25% OTM, 0.30 for 30% OTM.
+    With exclude_below_cost, strikes under your average cost are skipped too.
     """
-    return current_price * (1.0 + config.min_strike_pct_above_current)
+    min_strike = current_price * (1.0 + config.min_strike_pct_above_current)
+    if config.exclude_below_cost and avg_cost > 0:
+        min_strike = max(min_strike, avg_cost)
+    return min_strike
+
+
+def _below_cost_warning(label: str, pick, avg_cost: float) -> str | None:
+    """Selling a call below what you paid locks in a loss if the shares are called away."""
+    if pick is None or avg_cost <= 0 or float(pick["strike"]) >= avg_cost:
+        return None
+    loss = avg_cost - float(pick["strike"])
+    return (
+        f"The {label} pick's ${float(pick['strike']):,.2f} strike is below your ${avg_cost:,.2f} average cost. "
+        f"If your shares are called away you'd sell them ${loss:,.2f} per share below what you paid."
+    )
 
 
 def scan_covered_calls(
@@ -39,7 +54,7 @@ def scan_covered_calls(
             warnings=[f"Could not fetch price for {position.ticker}"],
         )
 
-    min_strike = resolve_min_strike(current_price, config)
+    min_strike = resolve_min_strike(current_price, config, position.avg_cost)
 
     raw_calls = get_call_options_in_dte_range(
         position.ticker,
@@ -101,7 +116,13 @@ def scan_covered_calls(
         )
 
     scored = score_options(enriched, config=config)
+    scored["below_cost_basis"] = (position.avg_cost > 0) & (scored["strike"] < position.avg_cost)
     income_pick, balanced_pick = pick_best_options(scored)
+
+    for label, pick in (("income", income_pick), ("balanced", balanced_pick)):
+        w = _below_cost_warning(label, pick, position.avg_cost)
+        if w:
+            warnings.append(w)
 
     return ScanResult(
         position=position,

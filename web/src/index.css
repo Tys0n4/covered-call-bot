@@ -42,6 +42,14 @@ body {
 
 #root { position: relative; z-index: 1; }
 
+.logo-mark {
+  width: 32px; height: 32px; flex-shrink: 0;
+  background: linear-gradient(135deg, #00c2ec, #6ae4ff);
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: #17202e;
+}
+
 .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
 
 /* Cards */

@@ -47,7 +47,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 | Data        | yfinance, Alpha Vantage API, pandas |
 | Frontend    | React, Vite, Tailwind CSS           |
 | State       | React Context API, localStorage     |
-| Persistence | JSON flat-file store                |
+| Persistence | Postgres (SQLite locally), SQLAlchemy |
 | Deployment  | Vercel (frontend), Railway (backend)|
 
 ---
@@ -116,6 +116,16 @@ Create `app/.env`:
 ```
 ALPHA_VANTAGE_KEY=your_key_here
 ```
+
+Server settings (set these on Railway, or export them locally):
+
+| Variable          | What it does |
+|-------------------|--------------|
+| `APP_PASSWORD`    | Password for the app's login screen. **Set this on any server others can reach**; without it the API is open to anyone. Leave unset for local development. |
+| `AUTH_SECRET`     | Optional. Key used to sign login tokens. Defaults to one derived from `APP_PASSWORD`, so changing the password logs everyone out. |
+| `AUTH_TOKEN_DAYS` | Optional. How long a login lasts (default 30). |
+| `DATABASE_URL`    | Postgres connection string. Leave unset to use a local SQLite file. |
+| `APP_TIMEZONE`    | Time zone for trade dates (default `America/Edmonton`). |
 
 ### 4. Set up your portfolio
 
@@ -200,16 +210,37 @@ class ScannerConfig:
 
 ## API Endpoints
 
-| Method | Endpoint           | Description                        |
-|--------|--------------------|------------------------------------|
-| GET    | `/portfolio`       | All tickers with contract stats    |
-| POST   | `/scan`            | Run scanner for a ticker           |
-| POST   | `/scan/save`       | Save planned positions             |
-| GET    | `/positions`       | Open positions (filter by ticker)  |
-| GET    | `/positions/all`   | All positions including closed     |
-| POST   | `/positions/close` | Mark a position as closed          |
-| GET    | `/manage`          | Evaluate positions for buyback     |
-| GET    | `/settings`        | Current scanner config             |
+When `APP_PASSWORD` is set, every endpoint except `/`, `/health` and `/auth/*`
+needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`).
+
+| Method | Endpoint             | Description                                   |
+|--------|----------------------|-----------------------------------------------|
+| GET    | `/auth/status`       | Whether a password is required                |
+| POST   | `/auth/login`        | Exchange the password for a login token       |
+| GET    | `/portfolio`         | All tickers with contract stats               |
+| POST   | `/portfolio`         | Add a stock you own                           |
+| PUT    | `/portfolio/{ticker}`| Change shares / average cost                  |
+| DELETE | `/portfolio/{ticker}`| Remove a stock (blocked while calls are open) |
+| POST   | `/scan`              | Run scanner for a ticker in your portfolio    |
+| POST   | `/scan/save`         | Save the recommended trade (checked against your shares and split) |
+| GET    | `/positions`         | Open positions (filter by ticker)             |
+| POST   | `/positions`         | Add a trade by hand (checked against your shares) |
+| GET    | `/positions/all`     | All positions including closed                |
+| POST   | `/positions/close`   | Mark a position as closed                     |
+| GET    | `/manage`            | Evaluate positions for buyback                |
+| GET    | `/settings`          | Your saved strategy                           |
+| PUT    | `/settings`          | Save your strategy                            |
+
+---
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The tests use a fake market and a temporary SQLite database, so they need no API keys or network.
 
 ---
 

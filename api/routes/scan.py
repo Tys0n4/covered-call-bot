@@ -2,20 +2,20 @@
 import math
 import sys
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
 from dataclasses import replace
 
-from strategy import effective_config
+from strategy import effective_config, load_strategy
 from market_hours import next_market_open
 from portfolio import load_portfolio
-from scanner_service import scan_covered_calls
+from scanner_service import resolve_min_strike, scan_covered_calls
 from planning_service import build_plan, compute_buyback_budget, get_allocation_targets
-from positions_store import load_open_positions, save_positions
+from positions_store import CoverageError, load_open_positions, save_positions
 from models import PlannedCall
-from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem
+from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem, TradeIn
 
 router = APIRouter(prefix="/scan", tags=["scanner"])
 
@@ -43,22 +43,22 @@ def _row_to_candidate(row) -> Candidate:
         quote_quality=str(row["quote_quality"]),
         income_score=_num(row.get("income_score")),
         balanced_score=_num(row.get("balanced_score")),
+        below_cost_basis=bool(row.get("below_cost_basis", False)),
     )
 
+
+# Handlers are plain `def` so FastAPI runs them in a worker thread: a scan
+# makes slow network calls that would otherwise freeze every other request.
 
 @router.post("", response_model=ScanResponse)
-async def run_scan(scan_config: ScanConfig):
-    """Run the covered call scanner for the specified ticker."""
-    portfolio = load_portfolio()
-
-    if not portfolio:
-        raise HTTPException(status_code=404, detail="No portfolio positions found.")
-
-    # Find matching ticker — fall back to first position if not specified
-    position = next(
-        (p for p in portfolio if p.ticker == scan_config.ticker),
-        portfolio[0]
-    )
+def run_scan(scan_config: ScanConfig):
+    """Run the covered call scanner for one stock in your portfolio."""
+    position = next((p for p in load_portfolio() if p.ticker == scan_config.ticker), None)
+    if position is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{scan_config.ticker} is not in your portfolio. Add it on the Dashboard first.",
+        )
 
     # Filters come from the Scanner page; split and buyback reserve from your saved strategy
     config = replace(
@@ -70,6 +70,7 @@ async def run_scan(scan_config: ScanConfig):
         min_volume=scan_config.min_volume,
         min_open_interest=scan_config.min_open_interest,
         target_delta=scan_config.target_delta,
+        exclude_below_cost=scan_config.exclude_below_cost,
     )
 
     scan = scan_covered_calls(position, config=config)
@@ -84,7 +85,7 @@ async def run_scan(scan_config: ScanConfig):
     planned = build_plan(scan, config=config, open_positions=ticker_open)
     targets = get_allocation_targets(position.shares, ticker_open, config)
 
-    min_strike = scan.current_price * (1 + config.min_strike_pct_above_current)
+    min_strike = resolve_min_strike(scan.current_price, config, position.avg_cost)
 
     candidates = []
     if not scan.candidates.empty:
@@ -110,6 +111,7 @@ async def run_scan(scan_config: ScanConfig):
             quote_quality=p.quote_quality,
             buyback_total=float(budget["buyback_total"]),
             per_contract_budget=float(budget["per_contract"]),
+            below_cost_basis=position.avg_cost > 0 and p.strike < position.avg_cost,
         ))
         gross_premium  += p.premium_total
         buyback_budget += budget["buyback_total"]
@@ -117,6 +119,7 @@ async def run_scan(scan_config: ScanConfig):
     return ScanResponse(
         ticker=position.ticker,
         current_price=scan.current_price,
+        avg_cost=position.avg_cost,
         min_strike=min_strike,
         candidates=candidates,
         income_pick=income_pick,
@@ -133,19 +136,27 @@ async def run_scan(scan_config: ScanConfig):
 
 
 @router.post("/save")
-async def save_scan_positions(positions_data: list[dict]):
-    """Save confirmed positions from a scan to open_positions.json."""
+def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_length=20)):
+    """
+    Save the recommended trade from a scan as open positions.
+
+    Refused (409) if your shares don't cover it, or if it no longer fits your
+    split, e.g. because the same scan was already saved.
+    """
     planned = [
         PlannedCall(
-            ticker=p["ticker"],
-            expiry=p["expiry"],
-            strike=p["strike"],
-            contracts=p["contracts"],
-            entry_price=p["entry_price"],
-            premium_total=p["premium_total"],
-            allocation_type=p["allocation_type"],
+            ticker=t.ticker,
+            expiry=t.expiry,
+            strike=t.strike,
+            contracts=t.contracts,
+            entry_price=t.entry_price,
+            premium_total=t.premium_total,
+            allocation_type=t.allocation_type,
         )
-        for p in positions_data
+        for t in trades
     ]
-    save_positions(planned)
+    try:
+        save_positions(planned, income_weight=load_strategy()["income_weight"])
+    except CoverageError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     return {"saved": len(planned)}

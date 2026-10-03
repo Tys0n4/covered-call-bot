@@ -5,12 +5,20 @@ Stores your covered call positions (open and closed) in the database
 """
 
 from __future__ import annotations
-from sqlalchemy import and_, insert, select, update
+from collections import defaultdict
+
+from sqlalchemy import and_, func, insert, select, update
+from sqlalchemy.engine import Connection
 
 from clock import local_today
-from db import get_engine, positions
+from db import get_engine, holdings, positions
 from market_hours import has_expired, market_today
 from models import PlannedCall
+from strategy import allocation_targets
+
+
+class CoverageError(ValueError):
+    """Saving these calls would sell more contracts than your shares cover."""
 
 
 def expire_finished_positions() -> int:
@@ -46,11 +54,73 @@ def load_open_positions() -> list[dict]:
     return rows
 
 
-def save_positions(planned: list[PlannedCall]) -> None:
-    """Add new planned positions as OPEN, stamped with today's date."""
+def _contracts_word(n: int) -> str:
+    return f"{n} contract{'' if n == 1 else 's'}"
+
+
+def _check_coverage(conn: Connection, planned: list[PlannedCall], income_weight: float | None) -> None:
+    """
+    Raise CoverageError unless every ticker's open + new contracts fit in its
+    shares (100 per contract). With income_weight, each side (Income /
+    Balanced) must also fit what the split still needs, which also stops the
+    same scan from being saved twice.
+    """
+    new_by_ticker: dict[str, dict[str, int]] = defaultdict(lambda: {"Income": 0, "Balanced": 0})
+    for p in planned:
+        new_by_ticker[p.ticker][p.allocation_type] = new_by_ticker[p.ticker].get(p.allocation_type, 0) + int(p.contracts)
+
+    for ticker, new in new_by_ticker.items():
+        # Lock the holding row (Postgres) so two saves can't both pass the check
+        shares = conn.execute(
+            select(holdings.c.shares).where(holdings.c.ticker == ticker).with_for_update()
+        ).scalar()
+        if shares is None:
+            raise CoverageError(f"{ticker} is not in your portfolio. Add it on the Dashboard first.")
+        total = int(shares) // 100
+
+        open_by_type = {
+            t: int(n) for t, n in conn.execute(
+                select(positions.c.allocation_type, func.sum(positions.c.contracts))
+                .where(and_(positions.c.ticker == ticker, positions.c.status == "OPEN"))
+                .group_by(positions.c.allocation_type)
+            ).all()
+        }
+        open_total = sum(open_by_type.values())
+        new_total = sum(new.values())
+        free = max(total - open_total, 0)
+        if new_total > free:
+            raise CoverageError(
+                f"Your {shares:,} {ticker} shares cover {_contracts_word(total)} and {open_total} "
+                f"already have calls sold, so only {free} more can be covered (not {new_total})."
+            )
+
+        if income_weight is not None:
+            t = allocation_targets(total, open_by_type.get("Income", 0), open_by_type.get("Balanced", 0), income_weight)
+            if new["Income"] > t["needed_income"] or new["Balanced"] > t["needed_balanced"]:
+                raise CoverageError(
+                    f"This trade no longer fits your {ticker} plan: it sells {new['Income']} income and "
+                    f"{new['Balanced']} balanced, but only {t['needed_income']} and {t['needed_balanced']} are "
+                    "still needed. It may already be saved; check Positions or scan again."
+                )
+
+
+def save_positions(
+    planned: list[PlannedCall],
+    *,
+    opened_at: str | None = None,
+    income_weight: float | None = None,
+) -> None:
+    """
+    Add new positions as OPEN, stamped with opened_at (default: today).
+
+    Refuses (CoverageError) anything your shares don't cover; pass
+    income_weight to also hold each side to your split. The check and the
+    insert happen in one transaction.
+    """
     if not planned:
         return
-    today = local_today()
+    expire_finished_positions()   # calls that have expired no longer use up shares
+    opened = opened_at or local_today()
     records = [
         {
             "ticker":           p.ticker,
@@ -63,14 +133,14 @@ def save_positions(planned: list[PlannedCall]) -> None:
             "quote_quality":    p.quote_quality,
             "allocation_type":  p.allocation_type,
             "status":           "OPEN",
-            "opened_at":        today,
+            "opened_at":        opened,
             "closed_at":        None,
         }
         for p in planned
     ]
     with get_engine().begin() as conn:
+        _check_coverage(conn, planned, income_weight)
         conn.execute(insert(positions), records)
-    print(f"  Saved {len(planned)} position(s)")
 
 
 def close_position(position_id: int, close_cost: float | None = None) -> bool:

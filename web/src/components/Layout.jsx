@@ -1,6 +1,7 @@
 // src/components/Layout.jsx
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, ScanLine, Briefcase, SlidersHorizontal } from 'lucide-react'
+import { LayoutGrid, ScanLine, Briefcase, SlidersHorizontal, LogOut } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 // Three main steps of the workflow: see where you stand, find a trade, look after it.
 const NAV = [
@@ -37,6 +38,7 @@ function NavItem({ to, label, hint, icon: Icon, small = false }) {
 }
 
 export default function Layout({ children }) {
+  const { authRequired, logout } = useAuth()
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       {/* Sidebar */}
@@ -53,13 +55,7 @@ export default function Layout({ children }) {
         {/* Logo */}
         <div style={{ padding: '28px 24px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32,
-              background: 'linear-gradient(135deg, #00c2ec, #6ae4ff)',
-              borderRadius: 9,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, fontWeight: 700, color: '#17202e',
-            }}>C</div>
+            <div className="logo-mark">C</div>
             <div style={{ lineHeight: 1.2 }}>
               <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em' }}>CovCall</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Covered call scanner</div>
@@ -73,6 +69,11 @@ export default function Layout({ children }) {
 
         <div style={{ padding: '12px 12px 24px', borderTop: '1px solid var(--border)' }}>
           <NavItem to="/strategy" label="Strategy" hint="Your rules" icon={SlidersHorizontal} small />
+          {authRequired && (
+            <button className="link-btn" onClick={logout} style={{ color: 'var(--text-muted)', fontSize: 13, padding: '6px 14px' }}>
+              <LogOut size={15} strokeWidth={1.75} /> Log out
+            </button>
+          )}
         </div>
       </aside>
 

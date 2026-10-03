@@ -8,6 +8,15 @@ from models import OpenCoveredCall
 from config import ScannerConfig, DEFAULT_CONFIG
 
 
+def _fetch_calls(ticker: str, expiry: str):
+    """The call side of one option chain, or None if it couldn't be fetched."""
+    try:
+        return yf.Ticker(ticker).option_chain(expiry).calls
+    except Exception as e:
+        print(f"  Error fetching chain for {ticker} {expiry}: {e}")
+        return None
+
+
 def get_current_option_price(
     ticker: str,
     expiry: str,
@@ -15,19 +24,24 @@ def get_current_option_price(
     *,
     mode: QuoteMode = "ask",   # use ask for buybacks — more conservative cost estimate
     strike_tolerance: float = DEFAULT_CONFIG.strike_match_tolerance,
+    chain_cache: dict | None = None,
 ) -> float:
     """
     Fetch current market price for an open call position via yfinance.
     Uses ask price by default for buyback cost estimates (conservative).
     Delegates quote selection to quote_policy for consistency.
+    Pass the same chain_cache dict across calls to fetch each chain only once.
     """
-    try:
-        tk = yf.Ticker(ticker)
-        chain = tk.option_chain(expiry)
-        calls = chain.calls.copy()
-    except Exception as e:
-        print(f"  Error fetching chain for {ticker} {expiry}: {e}")
+    key = (ticker, expiry)
+    if chain_cache is not None and key in chain_cache:
+        calls = chain_cache[key]
+    else:
+        calls = _fetch_calls(ticker, expiry)
+        if chain_cache is not None:
+            chain_cache[key] = calls
+    if calls is None:
         return 0.0
+    calls = calls.copy()
 
     if calls.empty or "strike" not in calls.columns:
         return 0.0
@@ -91,6 +105,7 @@ def evaluate_positions(
     Fetches current ask price for each and computes buyback recommendation.
     """
     results: list[OpenCoveredCall] = []
+    chain_cache: dict = {}
 
     for pos in positions:
         print(f"  Checking {pos['ticker']} {pos['expiry']} ${pos['strike']:.2f}...")
@@ -100,6 +115,7 @@ def evaluate_positions(
             strike=float(pos["strike"]),
             mode=price_mode,
             strike_tolerance=config.strike_match_tolerance,
+            chain_cache=chain_cache,
         )
         results.append(evaluate_position(pos, current_px, config=config))
 

@@ -1,19 +1,52 @@
 # api/schemas.py
 from __future__ import annotations
-from pydantic import BaseModel, Field
-from typing import Optional
+
+import re
+from datetime import date
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Same rule as app/portfolio.py: 1–10 characters, letters, digits, dot or dash
+_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+
+
+def _ticker(v: str) -> str:
+    t = (v or "").strip().upper()
+    if not _TICKER_RE.match(t):
+        raise ValueError(f"'{v}' is not a valid ticker symbol")
+    return t
+
+
+def _iso_date(v: str) -> str:
+    try:
+        return date.fromisoformat(str(v)[:10]).isoformat()
+    except ValueError:
+        raise ValueError("must be a date like 2026-10-16") from None
 
 
 class ScanConfig(BaseModel):
-    ticker: str = "SOFI"        # ← now dynamic
-    min_dte: int = 20
-    max_dte: int = 38
-    min_strike_pct: float = 0.20
-    min_premium: float = 0.05
-    min_volume: int = 10
-    min_open_interest: int = 50
-    income_weight: float = 0.70   # ignored: the split now comes from your saved strategy
-    target_delta: float = 0.22
+    """Filters from the Scanner page. The split and buyback reserve come from your saved strategy."""
+    ticker: str
+    min_dte: int = Field(default=20, ge=0, le=365)
+    max_dte: int = Field(default=38, ge=1, le=730)
+    min_strike_pct: float = Field(default=0.20, ge=0, le=1)          # 0.20 = strikes 20%+ above price
+    min_premium: float = Field(default=0.05, ge=0, le=1000)
+    min_volume: int = Field(default=10, ge=0, le=10_000_000)
+    min_open_interest: int = Field(default=50, ge=0, le=10_000_000)
+    target_delta: float = Field(default=0.22, gt=0, lt=1)
+    exclude_below_cost: bool = False   # skip strikes below your average cost per share
+
+    @field_validator("ticker")
+    @classmethod
+    def _norm_ticker(cls, v):
+        return _ticker(v)
+
+    @model_validator(mode="after")
+    def _dte_window(self):
+        if self.max_dte < self.min_dte:
+            raise ValueError("max_dte must be at least min_dte")
+        return self
 
 
 class Candidate(BaseModel):
@@ -29,6 +62,7 @@ class Candidate(BaseModel):
     quote_quality: str
     income_score: Optional[float]
     balanced_score: Optional[float]
+    below_cost_basis: bool = False   # strike is under your average cost per share
 
 
 class AllocationItem(BaseModel):
@@ -41,11 +75,13 @@ class AllocationItem(BaseModel):
     quote_quality: str
     buyback_total: float
     per_contract_budget: float
+    below_cost_basis: bool = False
 
 
 class ScanResponse(BaseModel):
     ticker: str
     current_price: float
+    avg_cost: float = 0.0
     min_strike: float
     candidates: list[Candidate]
     income_pick: Optional[Candidate]
@@ -60,17 +96,37 @@ class ScanResponse(BaseModel):
     next_market_open: Optional[str] = None   # ISO time of the next open, when closed
 
 
-class PositionIn(BaseModel):
+class TradeIn(BaseModel):
+    """A covered call you sold. Checked against your shares before it's saved."""
     ticker: str
     expiry: str
-    strike: float
-    contracts: int
-    entry_price: float
-    premium_total: float
-    premium_source: str = "MID"
-    quote_quality: str = "LIVE"
-    allocation_type: str
-    opened_at: str
+    strike: float = Field(gt=0, le=1_000_000)
+    contracts: int = Field(ge=1, le=100_000)
+    entry_price: float = Field(ge=0, le=1_000_000)        # premium per share
+    premium_total: float = Field(ge=0, le=1_000_000_000)  # premium for all contracts, in dollars
+    allocation_type: Literal["Income", "Balanced"]
+
+    @field_validator("ticker")
+    @classmethod
+    def _norm_ticker(cls, v):
+        return _ticker(v)
+
+    @field_validator("expiry")
+    @classmethod
+    def _norm_expiry(cls, v):
+        return _iso_date(v)
+
+
+class PositionIn(TradeIn):
+    """A trade added by hand (not from a scan)."""
+    premium_source: Literal["MID", "LAST", "BID", "ASK", "NONE"] = "MID"
+    quote_quality: Literal["LIVE", "STALE", "BAD"] = "LIVE"
+    opened_at: Optional[str] = None   # YYYY-MM-DD; today when left out
+
+    @field_validator("opened_at")
+    @classmethod
+    def _opened(cls, v):
+        return None if v in (None, "") else _iso_date(v)
 
 
 class PositionOut(BaseModel):

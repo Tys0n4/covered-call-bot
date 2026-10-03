@@ -72,3 +72,29 @@ def split_contracts(total_contracts: int, income_weight: float) -> tuple[int, in
     income = math.floor(total * income_weight + 0.5 + 1e-9)
     income = min(max(income, 0), total)
     return income, total - income
+
+
+def allocation_targets(total_contracts: int, open_income: int, open_balanced: int, income_weight: float) -> dict:
+    """
+    How many Income and Balanced contracts are still needed on one stock to
+    reach the split, given what's already open.
+
+    Never plans more contracts than the shares can cover. If the split was
+    changed while calls are open, one side can already be over its target;
+    the other side then only gets what is actually free.
+    """
+    total = max(int(total_contracts), 0)
+    target_income, target_balanced = split_contracts(total, income_weight)
+    free            = max(total - open_income - open_balanced, 0)
+    needed_income   = min(max(target_income - open_income, 0), free)
+    needed_balanced = min(max(target_balanced - open_balanced, 0), free - needed_income)
+    return {
+        "total_contracts":  total,
+        "target_income":    target_income,
+        "target_balanced":  target_balanced,
+        "open_income":      open_income,
+        "open_balanced":    open_balanced,
+        "needed_income":    needed_income,
+        "needed_balanced":  needed_balanced,
+        "available":        needed_income + needed_balanced,
+    }

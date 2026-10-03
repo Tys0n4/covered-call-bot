@@ -1,5 +1,6 @@
 // src/App.jsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import { TickerProvider } from './context/TickerContext'
 import Layout    from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -10,6 +11,7 @@ import Strategy  from './pages/Strategy'
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthProvider>
       <TickerProvider>
         <Layout>
           <Routes>
@@ -24,6 +26,7 @@ export default function App() {
           </Routes>
         </Layout>
       </TickerProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

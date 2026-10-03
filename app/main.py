@@ -13,7 +13,7 @@ from portfolio import load_portfolio
 from scanner_service import scan_covered_calls
 from planning_service import build_plan
 from management_service import run_management, prompt_close_position
-from positions_store import load_open_positions, save_positions
+from positions_store import CoverageError, load_open_positions, save_positions
 from reporting import (
     print_scan_header,
     print_overall_picks,
@@ -55,7 +55,11 @@ def run_scan(config=DEFAULT_CONFIG):
         answer = input().strip().lower()
 
         if answer == "y":
-            save_positions(positions)
+            try:
+                save_positions(positions)
+                print(f"  Saved {len(positions)} position(s)")
+            except CoverageError as e:
+                print(f"  Not saved: {e}")
         else:
             print("  Positions not saved.")
 

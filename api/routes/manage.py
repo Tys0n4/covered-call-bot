@@ -7,7 +7,7 @@ from fastapi import APIRouter
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
 from strategy import effective_config
-from positions_store import load_open_positions, list_all_positions
+from positions_store import load_open_positions
 from management import evaluate_positions
 from api.schemas import ManagementResponse, EvaluatedPosition
 
@@ -15,37 +15,25 @@ router = APIRouter(prefix="/manage", tags=["management"])
 
 
 @router.get("", response_model=ManagementResponse)
-async def evaluate_open_positions(ticker: Optional[str] = None):
+def evaluate_open_positions(ticker: Optional[str] = None):
     """
     Evaluate open positions for buyback. Optionally filter by ticker.
+
+    Plain `def` so FastAPI runs it in a worker thread: it fetches option
+    chains over the network, which would otherwise freeze other requests.
     """
-    all_open = load_open_positions()
-
+    open_positions = load_open_positions()
     if ticker:
-        open_positions = [p for p in all_open if p.get("ticker") == ticker]
-    else:
-        open_positions = all_open
+        open_positions = [p for p in open_positions if p.get("ticker") == ticker.upper()]
 
-    if not open_positions:
-        return ManagementResponse(
-            positions_evaluated=0,
-            buyback_recommended=0,
-            positions=[],
-        )
+    # evaluate_positions returns one result per position, in the same order,
+    # so pair them directly; matching by ticker/expiry/strike mixes up
+    # positions that share an option.
+    results = evaluate_positions(open_positions, config=effective_config()) if open_positions else []
 
-    results = evaluate_positions(open_positions, config=effective_config())
-
-    evaluated = []
-    for r in results:
-        matched = next(
-            (p for p in open_positions
-             if p["ticker"] == r.ticker
-             and p["expiry"] == r.expiry
-             and abs(p["strike"] - r.strike) < 0.01),
-            {}
-        )
-        evaluated.append(EvaluatedPosition(
-            id=matched.get("id", 0),
+    evaluated = [
+        EvaluatedPosition(
+            id=pos["id"],
             ticker=r.ticker,
             expiry=r.expiry,
             strike=r.strike,
@@ -55,10 +43,11 @@ async def evaluate_open_positions(ticker: Optional[str] = None):
             profit_capture_pct=r.profit_capture_pct,
             should_buy_back=r.should_buy_back,
             cost_to_close=round(r.current_option_price * r.contracts * 100, 2),
-            allocation_type=matched.get("allocation_type", ""),
-            opened_at=matched.get("opened_at", ""),
-        ))
-
+            allocation_type=pos.get("allocation_type", ""),
+            opened_at=pos.get("opened_at", ""),
+        )
+        for pos, r in zip(open_positions, results, strict=True)
+    ]
     evaluated.sort(key=lambda x: (not x.should_buy_back, -x.profit_capture_pct))
 
     return ManagementResponse(
