@@ -66,7 +66,7 @@ export default function HoldingModal({ holding, onClose, onSaved }) {
 
   return (
     <Modal onBackdrop={() => { if (!saving) onClose() }}>
-      <form className="card" onSubmit={handleSave} style={{ width: 460, padding: 28, animation: 'fadeUp 0.2s ease forwards' }} role="dialog" aria-modal="true" aria-labelledby="holding-title">
+      <form className="card" onSubmit={handleSave} style={{ width: '100%', maxWidth: 460, padding: 28, animation: 'fadeUp 0.2s ease forwards' }} role="dialog" aria-modal="true" aria-labelledby="holding-title">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
           <div id="holding-title" style={{ fontWeight: 700, fontSize: 20 }}>{editing ? `Edit ${holding.ticker}` : 'Add a stock'}</div>
           <button type="button" className="link-btn" style={{ color: 'var(--text-muted)', padding: 0 }} onClick={onClose} aria-label="Close" disabled={saving}><X size={20} /></button>
@@ -114,7 +114,7 @@ export default function HoldingModal({ holding, onClose, onSaved }) {
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 12, flexWrap: 'wrap' }}>
           <div>
             {editing && !confirmDelete && (
               <button type="button" className="link-btn" style={{ color: openCalls ? 'var(--text-muted)' : 'var(--red)', fontSize: 13 }}

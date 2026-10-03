@@ -1,7 +1,12 @@
 # api/main.py
-from fastapi import FastAPI
+import logging
+
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from api import auth
 from api.routes import scan, positions, manage, settings, portfolio
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(
     title="Covered Call Scanner API",
@@ -21,11 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(portfolio.router)
-app.include_router(scan.router)
-app.include_router(positions.router)
-app.include_router(manage.router)
-app.include_router(settings.router)
+# Everything except /auth, / and /health needs a login when APP_PASSWORD is set
+protected = [Depends(auth.require_auth)]
+app.include_router(auth.router)
+app.include_router(portfolio.router, dependencies=protected)
+app.include_router(scan.router,      dependencies=protected)
+app.include_router(positions.router, dependencies=protected)
+app.include_router(manage.router,    dependencies=protected)
+app.include_router(settings.router,  dependencies=protected)
+auth.warn_if_open()
 
 @app.get("/")
 async def root():

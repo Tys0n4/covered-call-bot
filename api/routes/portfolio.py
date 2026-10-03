@@ -2,7 +2,6 @@
 import sys
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
-from starlette.concurrency import run_in_threadpool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
@@ -90,8 +89,11 @@ def _check_covers_open_calls(ticker: str, shares: int) -> None:
         )
 
 
+# Handlers are plain `def` so FastAPI runs them in a worker thread; their
+# database and network calls would otherwise block every other request.
+
 @router.get("")
-async def get_portfolio():
+def get_portfolio():
     """
     Return all tickers in the portfolio with contract stats.
     Used by the frontend ticker selector and dashboard.
@@ -100,13 +102,13 @@ async def get_portfolio():
 
 
 @router.post("", status_code=201)
-async def add_holding(holding: HoldingIn):
+def add_holding(holding: HoldingIn):
     """Add a stock you own. Fails if the ticker is already in the portfolio (use PUT to edit)."""
     ticker = _valid_ticker(holding.ticker)
     if any(p.ticker == ticker for p in load_portfolio()):
         raise HTTPException(status_code=409, detail=f"{ticker} is already in your portfolio. Edit it instead.")
     # Covered calls need listed options; catch typos like "SOFII" here
-    if await run_in_threadpool(has_listed_options, ticker) is False:
+    if has_listed_options(ticker) is False:
         raise HTTPException(
             status_code=422,
             detail=f"Couldn't find listed options for {ticker}. Check the ticker symbol is right.",
@@ -116,7 +118,7 @@ async def add_holding(holding: HoldingIn):
 
 
 @router.put("/{ticker}")
-async def update_holding(ticker: str, update: HoldingUpdate):
+def update_holding(ticker: str, update: HoldingUpdate):
     """Change the share count or average cost of a stock you own."""
     t = _valid_ticker(ticker)
     if not any(p.ticker == t for p in load_portfolio()):
@@ -127,7 +129,7 @@ async def update_holding(ticker: str, update: HoldingUpdate):
 
 
 @router.delete("/{ticker}")
-async def remove_holding(ticker: str):
+def remove_holding(ticker: str):
     """Remove a stock from the portfolio. Blocked while it still has open calls."""
     t = _valid_ticker(ticker)
     open_contracts = _open_contracts(t)

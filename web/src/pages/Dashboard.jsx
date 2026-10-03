@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
 import HoldingModal from '../components/HoldingModal'
+import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, plural } from '../lib/format'
 
@@ -20,8 +21,8 @@ function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span className="ticker-pill" style={{ fontSize: 18 }}>{t.ticker}</span>
           <span className="hint" style={{ fontSize: 14 }}>{t.shares.toLocaleString()} shares · avg cost {money(t.avg_cost)}</span>
           <button className="btn-secondary" onClick={onEdit} style={{ padding: '5px 12px', fontSize: 13, borderRadius: 9 }} aria-label={`Edit ${t.ticker}`}>
@@ -67,7 +68,7 @@ function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
       </div>
 
       {/* Next step */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px', marginBottom: positions.length ? 14 : 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px', marginBottom: positions.length ? 14 : 0 }}>
         {t.available > 0 ? (
           <>
             <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>
@@ -88,6 +89,7 @@ function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
       {/* Details on request */}
       {positions.length > 0 && (
         <Collapsible label={`Show ${plural(positions.length, 'open call')}`} openLabel="Hide open calls">
+          <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr><th>Type</th><th className="num">Strike</th><th>Expires</th><th className="num">Contracts</th><th className="num">Collected</th></tr>
@@ -104,6 +106,7 @@ function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
               ))}
             </tbody>
           </table>
+          </div>
         </Collapsible>
       )}
     </div>
@@ -118,17 +121,26 @@ export default function Dashboard() {
   const [positions,    setPositions]    = useState([])
   const [allPositions, setAllPositions] = useState([])
   const [loading,      setLoading]      = useState(true)
+  const [loadFailed,   setLoadFailed]   = useState(false)
+  const [reloadKey,    setReloadKey]    = useState(0)
 
   useEffect(() => {
+    let cancelled = false
     Promise.all([getPortfolio(), getAllPositions()])
       .then(([portRes, posRes]) => {
+        if (cancelled) return
         setPortfolio(portRes.data)
         setPositions(posRes.data.filter(p => p.status === 'OPEN'))
         setAllPositions(posRes.data)
+        setLoadFailed(false)
+        applyPortfolio(portRes.data)
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+      .catch(() => { if (!cancelled) setLoadFailed(true) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [reloadKey, applyPortfolio])
+
+  const retry = () => { setLoading(true); setReloadKey(k => k + 1) }
 
   const openPremium    = positions.reduce((s, p) => s + p.premium_total, 0)
   const totalContracts = portfolio.reduce((s, t) => s + t.total_contracts, 0)
@@ -174,17 +186,19 @@ export default function Dashboard() {
         <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
           <div className="spinner" style={{ width: 36, height: 36 }} />
         </div>
+      ) : loadFailed ? (
+        <ServerDown onRetry={retry} />
       ) : (
         <>
           {/* Three numbers that matter */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 16, marginBottom: 32 }}>
+          <div className="grid-stats" style={{ marginBottom: 32 }}>
             <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
               <div className="stat-label">Premium from open calls <InfoTip text={TERMS.premium} size={12} /></div>
               <div className="stat-num" style={{ fontSize: 32, color: 'var(--green)' }}>{money(openPremium)}</div>
               {chartData.length >= 2 ? (
                 <>
                   <div style={{ height: 56, marginTop: 10, marginLeft: -8, marginRight: -8 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 300, height: 56 }}>
                       <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
                         <defs>
                           <linearGradient id="premiumFill" x1="0" y1="0" x2="0" y2="1">

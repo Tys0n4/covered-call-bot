@@ -1,12 +1,13 @@
 // src/pages/Scanner.jsx
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { runScan, savePositions } from '../api/client'
+import { runScan, savePositions, apiError } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
+import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
 
@@ -14,7 +15,8 @@ const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
   min_strike_pct: 0.20, min_premium: 0.05,
   min_volume: 10, min_open_interest: 50,
-  income_weight: 0.70, target_delta: 0.22,
+  target_delta: 0.22,
+  exclude_below_cost: false,
 }
 
 const STORAGE_KEY = 'scanner_config'
@@ -43,14 +45,18 @@ function loadConfig() {
     if (saved[f.name] !== null && saved[f.name] !== '' && inRange(f, v)) config[f.name] = v
   }
   if (config.max_dte < config.min_dte) { config.min_dte = DEFAULT_CONFIG.min_dte; config.max_dte = DEFAULT_CONFIG.max_dte }
+  config.exclude_below_cost = saved.exclude_below_cost === true
   return config
 }
 
-const toForm = config => Object.fromEntries(FIELDS.map(f => [f.name, String(config[f.name])]))
+const toForm = config => ({
+  ...Object.fromEntries(FIELDS.map(f => [f.name, String(config[f.name])])),
+  exclude_below_cost: !!config.exclude_below_cost,
+})
 
 // Turn the typed text into numbers, with a plain message for each problem
 function parseForm(form) {
-  const values = {}, errors = {}
+  const values = { exclude_below_cost: !!form.exclude_below_cost }, errors = {}
   for (const f of FIELDS) {
     const text = form[f.name]
     const v = Number(text)
@@ -101,7 +107,11 @@ function Fact({ label, tip, value, color }) {
   )
 }
 
-function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan }) {
+function BelowCostBadge() {
+  return <span className="badge badge-amber" title={TERMS.belowCost}>Below your cost</span>
+}
+
+function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCost }) {
   if (!pick) return null
   const called = pick.delta != null ? `~${Math.round(pick.delta * 100)}%` : 'n/a'
   return (
@@ -112,9 +122,14 @@ function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan }) {
       </div>
       <div className="hint" style={{ marginBottom: 16 }}>{notInPlan || subtitle}</div>
       <div style={notInPlan ? { opacity: 0.55 } : undefined}>
-      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>
+      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: pick.below_cost_basis ? 8 : 16 }}>
         {money(pick.strike)} strike <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>· expires {fmtDate(pick.expiry)}</span>
       </div>
+      {pick.below_cost_basis && (
+        <div className="hint" style={{ color: 'var(--amber)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <BelowCostBadge /> {money(avgCost - pick.strike)}/share loss on your shares if they're called away.
+        </div>
+      )}
       <div className="facts" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <Fact label="You collect (1 contract)" tip={TERMS.premium} value={money(pick.premium_per_contract ?? pick.premium_price * 100)} color="var(--green)" />
         <Fact label="Yearly return"            tip={TERMS.yield}   value={pct(pick.annualized_yield_pct)} />
@@ -135,7 +150,7 @@ function HowItWorks() {
   return (
     <div className="card" style={{ marginTop: 24 }}>
       <div className="section-title" style={{ marginBottom: 16 }}>How it works</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+      <div className="grid-steps">
         {steps.map(([t, d], i) => (
           <div key={t} style={{ display: 'flex', gap: 12 }}>
             <div style={{ width: 28, height: 28, borderRadius: 99, background: 'var(--accent-dim)', color: 'var(--accent-light)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
@@ -151,7 +166,7 @@ function HowItWorks() {
 }
 
 export default function Scanner() {
-  const { selected } = useTicker()
+  const { selected, loaded, loadError, refresh } = useTicker()
   const [form, setForm]       = useState(() => toForm(loadConfig()))   // boxes, exactly as typed
   const [result, setResult]   = useState(null)
   const [loading, setLoading] = useState(false)
@@ -182,7 +197,7 @@ export default function Scanner() {
       const res = await runScan({ ...config, ticker: selected })
       setResult(res.data)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Scan failed. Is the API running?')
+      setError(apiError(e, 'Scan failed. Is the API running?'))
     } finally {
       setLoading(false)
     }
@@ -197,13 +212,14 @@ export default function Scanner() {
     }))
     setSaving(true)
     try { await savePositions(payload); setSaved(true) }
-    catch { setError('Could not save the trade. Is the API running?') }
+    catch (e) { setError(apiError(e, 'Could not save the trade. Is the API running?')) }
     finally { setSaving(false) }
   }
 
   const filterSummary = filtersValid
     ? `Calls expiring in ${config.min_dte}–${config.max_dte} days, with strikes at least ` +
-      `${Math.round(config.min_strike_pct * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.`
+      `${Math.round(config.min_strike_pct * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.` +
+      (config.exclude_below_cost ? ' Strikes below your average cost are skipped.' : '')
     : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
 
   const planned = result?.planned_positions || []
@@ -226,7 +242,9 @@ export default function Scanner() {
         subtitle={selected ? `Find a covered call to sell on your ${selected} shares.` : 'Find a covered call to sell on your shares.'}
       />
 
-      {!selected && (
+      {!selected && loadError && <ServerDown onRetry={() => refresh().catch(() => {})} />}
+
+      {!selected && loaded && !loadError && (
         <div className="callout callout-amber">
           <AlertTriangle size={18} strokeWidth={1.75} /> <span>Add a stock you own on the <Link to="/" style={{ color: 'inherit', fontWeight: 700 }}>Dashboard</Link> to start scanning.</span>
         </div>
@@ -236,7 +254,7 @@ export default function Scanner() {
         <>
           {/* Scan bar */}
           <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px 24px', flexWrap: 'wrap' }}>
               <div>
                 <div className="section-title">What we'll look for</div>
                 <div className="section-sub" style={{ maxWidth: 680, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}</div>
@@ -255,11 +273,16 @@ export default function Scanner() {
                 </button>
               }
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+              <div className="grid-filters">
                 {FIELDS.map(f => (
                   <Field key={f.name} field={f} text={form[f.name]} error={fieldErrors[f.name]} onChange={updateField} />
                 ))}
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, fontSize: 14, color: 'var(--text-dim)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.exclude_below_cost} onChange={e => updateField('exclude_below_cost', e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+                Skip strikes below my average cost <InfoTip text={TERMS.belowCost} />
+              </label>
             </Collapsible>
           </div>
 
@@ -309,7 +332,7 @@ export default function Scanner() {
               {/* 1. The recommendation */}
               {planned.length > 0 && (
                 <div className="rec-card" style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px 24px', marginBottom: 20, flexWrap: 'wrap' }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-light)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                         Recommended trade
@@ -327,13 +350,14 @@ export default function Scanner() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                     {planned.map((p, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px 16px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span>
                           <span style={{ fontSize: 15 }}>
                             Sell <strong>{plural(p.contracts, 'contract')}</strong> at the <strong>{money(p.strike)}</strong> strike, expiring <strong>{fmtDate(p.expiry)}</strong>
                           </span>
                           <span className="hint">({money(p.entry_price)} per share)</span>
+                          {p.below_cost_basis && <BelowCostBadge />}
                         </div>
                         <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
                       </div>
@@ -341,7 +365,7 @@ export default function Scanner() {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-                    <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px 40px' }}>
+                    <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)' }}>
                       <Fact label="Premium"                tip={TERMS.premium} value={money(result.gross_premium)} />
                       <Fact label="Set aside for buyback"  tip={TERMS.buyback} value={money(result.buyback_budget)} />
                       <Fact label="You keep"               value={money(result.net_premium)} color="var(--green)" />
@@ -379,11 +403,11 @@ export default function Scanner() {
               {(result.income_pick || result.balanced_pick) && (
                 <>
                   <div className="section-title" style={{ marginBottom: 12 }}>Top picks</div>
-                  <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+                  <div className="pick-row" style={{ marginBottom: 24 }}>
                     <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#6ae4ff"
-                      notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} />
+                      notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} avgCost={result.avg_cost} />
                     <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#5aa9e6"
-                      notInPlan={splitTarget.balanced === 0 ? "Your split puts all of this stock's contracts in income, so this is shown for reference only." : null} />
+                      notInPlan={splitTarget.balanced === 0 ? "Your split puts all of this stock's contracts in income, so this is shown for reference only." : null} avgCost={result.avg_cost} />
                   </div>
                 </>
               )}
@@ -392,7 +416,7 @@ export default function Scanner() {
               {result.candidates.length > 0 && (
                 <div className="card">
                   <Collapsible label={`See all ${plural(result.candidates.length, 'option')}`} openLabel="Hide the full list">
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className="table-scroll">
                       <table className="data-table">
                         <thead>
                           <tr>
@@ -412,7 +436,8 @@ export default function Scanner() {
                             <tr key={i}>
                               <td>{fmtDate(c.expiry)}</td>
                               <td className="mono num">{c.dte}</td>
-                              <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(c.strike)}</td>
+                              <td className="mono num" style={{ color: c.below_cost_basis ? 'var(--amber)' : 'var(--text)', fontWeight: 600 }}
+                                title={c.below_cost_basis ? 'Below your average cost' : undefined}>{c.below_cost_basis ? '▾ ' : ''}{money(c.strike)}</td>
                               <td className="mono num" style={{ color: 'var(--accent-light)' }}>{money(c.premium_price)}</td>
                               <td className="mono num">{pct(c.annualized_yield_pct)}</td>
                               <td className="mono num">{pct(c.upside_to_strike_pct)}</td>

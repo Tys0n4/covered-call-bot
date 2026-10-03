@@ -18,9 +18,9 @@ export function TickerSwitcher() {
 
 export default function PageHeader({ title, subtitle, showTicker = false, actions }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, marginBottom: 32 }}>
+    <div className="page-header">
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
           <h1 className="page-title">{title}</h1>
           {showTicker && <TickerSwitcher />}
         </div>

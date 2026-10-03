@@ -7,7 +7,7 @@ export default function Modal({ children, onBackdrop, blur = true }) {
     <div
       onMouseDown={e => { if (onBackdrop && e.target === e.currentTarget) onBackdrop() }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 100, padding: 24, overflowY: 'auto',
+        position: 'fixed', inset: 0, zIndex: 100, padding: 16, overflowY: 'auto',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'rgba(0,0,0,0.65)', backdropFilter: blur ? 'blur(4px)' : undefined,
       }}
