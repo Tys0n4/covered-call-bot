@@ -70,6 +70,13 @@ class Candidate(BaseModel):
     spans_ex_dividend: bool = False  # expires on/after the next ex-dividend date
 
 
+class PremiumCheck(BaseModel):
+    """Are premiums rich or thin right now? (core/volatility.py)"""
+    level: Literal["rich", "normal", "thin"]
+    implied_vol: float      # what near-the-money options are priced for, per year (0.30 = 30%)
+    realized_vol: float     # how much the stock actually moved over the last 20 trading days, per year
+
+
 class AllocationItem(BaseModel):
     allocation_type: str
     expiry: str
@@ -98,6 +105,7 @@ class ScanResponse(BaseModel):
     net_premium: float                       # premium − buyback reserve − estimated fees
     estimated_fees: float = 0.0              # commission for the planned contracts
     fee_per_contract: float = 0.0            # your usual commission per contract
+    premium_check: Optional[PremiumCheck] = None
     warnings: list[str]
     quotes_live: bool = True                 # False = priced at last trades (market closed)
     earnings_date: Optional[str] = None      # next earnings date, if known

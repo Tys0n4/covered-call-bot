@@ -189,6 +189,8 @@ The scanner fetches the full options chain for a ticker within a configurable DT
 
 Each option is priced at what you can realistically get when selling: a quarter of the way from the bid to the ask, not the midpoint, so wide spreads cost you in the ranking. Your usual commission per contract is subtracted (learned from the fees you've recorded, $0.65 until then), and yields are on what's left. Options that pay less than the commission are dropped.
 
+Each scan also says whether premiums are **rich**, **normal** or **thin** right now: it compares the yearly move near-the-money options are priced for (implied volatility) with how much the stock actually moved over the last 20 trading days. Rich (implied at least 1.25× realized) is a good time to sell; thin (implied below realized) means you're paid less than the risk, and waiting may pay more.
+
 Surviving candidates are scored on two dimensions:
 
 - **Income score** — weighted by annualized yield and volume
@@ -222,7 +224,11 @@ You can run a check by hand from the Actions tab (*Buy-back alerts → Run workf
 
 ### Performance
 
-A call's result is realized when it finishes. Net = premium − fees − buyback cost. Assigned calls also record the gain or loss on the shares: (strike − your cost per share) × shares. Yearly return is net premium on the cost of the shares covered, weighted by how long each call was open. Bought-back calls with no cost entered are flagged and left out of the totals.
+A call's result is realized when it finishes. Net = premium − fees − buyback cost.
+
+The page opens with the honest bottom line: what selling calls added **compared with just holding the shares**. That's the premium kept, minus any gain given up when shares were called away below their market price that day (the stock's close on the assignment date minus the strike). Bought-back calls already include any rise in the stock in their buyback cost, and expired calls capped nothing.
+
+ Assigned calls also record the gain or loss on the shares: (strike − your cost per share) × shares. Yearly return is net premium on the cost of the shares covered, weighted by how long each call was open. Bought-back calls with no cost entered are flagged and left out of the totals.
 
 ---
 

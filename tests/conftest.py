@@ -24,6 +24,9 @@ EVENTS: dict[str, dict] = {}
 # Fake daily closes: (ticker, "YYYY-MM-DD") -> close
 CLOSES: dict[tuple[str, str], float] = {}
 
+# Fake recent price history (oldest first) per ticker, for realized volatility; tests may set it
+HISTORY: dict[str, list[float]] = {}
+
 
 def fake_expiries() -> tuple[str, ...]:
     today = date.today()
@@ -56,6 +59,8 @@ class FakeTicker:
     def history(self, start=None, end=None, period=None):
         if start and (self.symbol, start) in CLOSES:
             return pd.DataFrame({"Close": [CLOSES[(self.symbol, start)]]})
+        if period and self.symbol in HISTORY:
+            return pd.DataFrame({"Close": HISTORY[self.symbol]})
         return pd.DataFrame({"Close": []})
 
     def option_chain(self, expiry: str):
@@ -76,6 +81,7 @@ def fake_market(monkeypatch):
     cache.clear()
     EVENTS.clear()
     CLOSES.clear()
+    HISTORY.clear()
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)
     monkeypatch.setattr(scanner, "get_current_price", lambda t: PRICES.get(t))
     monkeypatch.setattr(scanner, "is_market_open", lambda: True)

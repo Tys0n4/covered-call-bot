@@ -132,6 +132,7 @@ def run_scan(scan_config: ScanConfig):
         net_premium=gross_premium - buyback_budget - est_fees,
         estimated_fees=est_fees,
         fee_per_contract=scan.fee_per_contract,
+        premium_check=scan.premium_check,
         warnings=scan.warnings,
         quotes_live=scan.quotes_live,
         earnings_date=scan.events.get("earnings_date"),

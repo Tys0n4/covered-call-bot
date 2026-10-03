@@ -11,6 +11,7 @@ import MoneyInput from '../components/MoneyInput'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
 import OptionsTable, { EventBadges } from '../components/OptionsTable'
+import PremiumCheck from '../components/PremiumCheck'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
 import { moneyValue, splitFees } from '../lib/pnl'
@@ -349,6 +350,7 @@ export default function Scanner() {
                   </span>
                 )}
               </div>
+              <PremiumCheck check={result.premium_check} />
 
               {lastPrices && (
                 <div className="callout callout-amber" style={{ marginBottom: 20 }}>

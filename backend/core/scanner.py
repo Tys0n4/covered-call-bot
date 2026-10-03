@@ -13,6 +13,7 @@ from core.filters import filter_covered_calls
 from core.calculations import add_option_metrics
 from core.greeks import add_estimated_delta
 from core.fees import typical_fee_per_contract
+from core.volatility import premium_check
 from core.scoring import score_options, pick_best_options
 from core.market_hours import is_market_open
 
@@ -127,6 +128,7 @@ def scan_covered_calls(
     )
 
     events = get_events(position.ticker)
+    check = premium_check(position.ticker, raw_calls, current_price)
     if not filtered.empty:
         filtered = _add_event_flags(filtered, events)
         if config.avoid_earnings and events.get("earnings_date"):
@@ -164,7 +166,7 @@ def scan_covered_calls(
             position=position, current_price=current_price, candidates=pd.DataFrame(),
             income_pick=None, balanced_pick=None, quotes_live=quotes_live, events=events,
             warnings=warnings + ["Every matching option pays less than the commission to sell it."],
-            fee_per_contract=fee,
+            fee_per_contract=fee, premium_check=check,
         )
 
     missing_delta = enriched["delta"].isna().sum()
@@ -194,4 +196,5 @@ def scan_covered_calls(
         quotes_live=quotes_live,
         events=events,
         fee_per_contract=fee,
+        premium_check=check,
     )

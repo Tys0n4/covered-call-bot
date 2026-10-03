@@ -21,6 +21,7 @@ CHAIN_TTL = 60
 EXPIRIES_TTL = 600
 EVENTS_TTL = 6 * 3600
 CLOSE_TTL = 12 * 3600
+HISTORY_TTL = 3600
 
 
 def cached(key: tuple, ttl: float, fetch: Callable[[], T]) -> T:

@@ -59,3 +59,4 @@ class ScanResult:
     quotes_live: bool = True        # False = last traded prices (market closed / no live quotes)
     events: dict = field(default_factory=dict)   # upcoming earnings_date / ex_dividend_date
     fee_per_contract: float = 0.0   # commission per contract used for the estimates
+    premium_check: dict | None = None   # rich / normal / thin (see volatility.py)
