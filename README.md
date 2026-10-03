@@ -76,7 +76,6 @@ covered-call-bot/
 │   │   ├── market_hours.py   # NYSE hours, holidays, early closes
 │   │   ├── db.py             # Database tables (Postgres, or SQLite locally)
 │   │   └── ...               # filters, quotes, calculations, greeks, scoring, strategy, ...
-│   └── data/                 # Demo data that seeds a new local database
 ├── tests/                    # pytest suite (fake market, temporary database)
 ├── web/                      # React frontend (Vite), deployed to Vercel
 │   └── src/
@@ -141,7 +140,7 @@ uvicorn api.main:app --app-dir backend --reload --port 8000
 
 API docs available at [http://localhost:8000/docs](http://localhost:8000/docs)
 
-Without `DATABASE_URL`, a local SQLite database is created at `backend/data/covcall.db` and filled with demo stocks and trades the first time. Add your own stocks from the Dashboard.
+Without `DATABASE_URL`, an empty local SQLite database is created at `backend/covcall.db`. Add your stocks from the Dashboard.
 
 ### 5. Install and start the frontend
 

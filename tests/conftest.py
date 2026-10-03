@@ -83,10 +83,8 @@ def fake_market(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path, monkeypatch):
-    """Each test gets its own empty SQLite database (no seeding from app/data)."""
+    """Each test gets its own empty SQLite database."""
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test.db'}")
-    monkeypatch.setattr(db, "read_seed_holdings", lambda *a, **k: [])
-    monkeypatch.setattr(db, "read_seed_positions", lambda *a, **k: [])
     monkeypatch.setattr(db, "_engine", None)
     yield
     if db._engine is not None:
