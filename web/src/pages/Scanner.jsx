@@ -34,12 +34,17 @@ const STORAGE_KEY = 'scanner_config'
 const FIELDS = [
   { name: 'min_dte',           label: 'Shortest expiry (days)',      tip: TERMS.dte,         kind: 'int', min: 1,    max: 60 },
   { name: 'max_dte',           label: 'Longest expiry (days)',       tip: TERMS.dte,         kind: 'int', min: 1,    max: 120 },
-  { name: 'min_strike_pct',    label: 'Min. distance above price',   tip: TERMS.minStrike,   kind: 'dec', min: 0.05, max: 0.5 },
+  { name: 'min_strike_pct',    label: 'Min. distance above price',   tip: TERMS.minStrike,   kind: 'dec', min: 0.05, max: 0.5, pct: true },
   { name: 'min_premium',       label: 'Min. premium per share ($)',  tip: TERMS.minPremium,  kind: 'dec', min: 0.01, max: 1000 },
   { name: 'min_volume',        label: 'Min. daily volume',           tip: TERMS.volume,      kind: 'int', min: 1,    max: 1000000 },
   { name: 'min_open_interest', label: 'Min. open interest',          tip: TERMS.openInt,     kind: 'int', min: 1,    max: 1000000 },
-  { name: 'target_delta',      label: 'Balanced pick target',        tip: TERMS.targetDelta, kind: 'dec', min: 0.05, max: 0.5 },
+  { name: 'target_delta',      label: 'Balanced pick: chance called', tip: TERMS.targetDelta, kind: 'dec', min: 0.05, max: 0.5, pct: true },
 ]
+// Fields with pct: true are typed as percentages (20 = 20%) but stored and
+// sent to the API as fractions (0.20), with min/max in stored units.
+const toShown = (f, v) => (f.pct ? String(Math.round(v * 10000) / 100) : String(v))
+const fromShown = (f, text) => (f.pct ? Number(text) / 100 : Number(text))
+const shownLimit = (f, v) => (f.pct ? `${Math.round(v * 100)}%` : v.toLocaleString())
 
 const inRange = (f, v) => Number.isFinite(v) && v >= f.min && v <= f.max && (f.kind !== 'int' || Number.isInteger(v))
 
@@ -59,7 +64,7 @@ function loadConfig() {
 }
 
 const toForm = config => ({
-  ...Object.fromEntries(FIELDS.map(f => [f.name, String(config[f.name])])),
+  ...Object.fromEntries(FIELDS.map(f => [f.name, toShown(f, config[f.name])])),
   ...Object.fromEntries(TOGGLES.map(t => [t.name, !!config[t.name]])),
 })
 
@@ -68,9 +73,9 @@ function parseForm(form) {
   const values = Object.fromEntries(TOGGLES.map(t => [t.name, !!form[t.name]])), errors = {}
   for (const f of FIELDS) {
     const text = form[f.name]
-    const v = Number(text)
+    const v = fromShown(f, text)
     if (text === '' || text === '.') errors[f.name] = 'Enter a number'
-    else if (!inRange(f, v)) errors[f.name] = `Must be ${f.kind === 'int' ? 'a whole number ' : ''}between ${f.min} and ${f.max.toLocaleString()}`
+    else if (!inRange(f, v)) errors[f.name] = `Must be ${f.kind === 'int' ? 'a whole number ' : ''}between ${shownLimit(f, f.min)} and ${shownLimit(f, f.max)}`
     else values[f.name] = v
   }
   if (!errors.min_dte && !errors.max_dte && values.max_dte < values.min_dte) {
@@ -94,14 +99,17 @@ function Field({ field, text, error, onChange }) {
   return (
     <div>
       <label className="label" htmlFor={id}>{field.label} <InfoTip text={field.tip} /></label>
-      <input
-        id={id} type="text" className="input" autoComplete="off"
-        inputMode={field.kind === 'int' ? 'numeric' : 'decimal'}
-        value={text}
-        aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined}
-        onChange={e => onChange(field.name, cleanInput(e.target.value, field.kind))}
-        style={error ? { borderColor: 'var(--red)' } : undefined}
-      />
+      <div style={{ position: 'relative' }}>
+        <input
+          id={id} type="text" className="input" autoComplete="off"
+          inputMode={field.kind === 'int' ? 'numeric' : 'decimal'}
+          value={text}
+          aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined}
+          onChange={e => onChange(field.name, cleanInput(e.target.value, field.kind))}
+          style={{ ...(field.pct ? { paddingRight: 32 } : {}), ...(error ? { borderColor: 'var(--red)' } : {}) }}
+        />
+        {field.pct && <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>%</span>}
+      </div>
       {error && <div id={`${id}-err`} style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 5 }}>{error}</div>}
     </div>
   )

@@ -15,7 +15,7 @@ export const TERMS = {
   available:  'Contracts you can still sell. Each contract covers 100 shares.',
   buyback:    'Money set aside to buy the option back early if it becomes cheap.',
   profit:     'How much of the original premium you have kept so far. Buying back near the target locks in the gain.',
-  minStrike:  'Only show strikes at least this far above today’s price (0.20 = 20%).',
+  minStrike:  'Only show strikes at least this far above today’s price. 20% on a $100 stock means strikes of $120 or more.',
   minPremium: 'Ignore options paying less than this per share.',
   volume:     'Minimum contracts traded today. Higher means easier to trade.',
   openInt:    'Minimum open contracts. Higher means a more active, reliable market.',
@@ -24,5 +24,5 @@ export const TERMS = {
   exDividend: 'The stock goes ex-dividend before this option expires. If it is above the strike, the buyer may exercise early to collect the dividend.',
   net:        'Premium collected minus what you paid to buy it back and any fees. Gains or losses on shares that were called away are on the Performance page.',
   fill:       'The price your broker actually sold each option for. It starts at the quote shown here; change it if your fill was different.',
-  targetDelta:'The balanced pick aims for this delta (0.22 ≈ 22% chance of being called away).',
+  targetDelta:'The balanced pick aims for about this chance of the stock ending above the strike (delta). 22% is a common middle ground.',
 }
