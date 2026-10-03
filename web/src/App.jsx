@@ -1,12 +1,20 @@
 // src/App.jsx
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { TickerProvider } from './context/TickerContext'
 import Layout    from './components/Layout'
-import Dashboard from './pages/Dashboard'
-import Scanner   from './pages/Scanner'
-import Positions from './pages/Positions'
-import Strategy  from './pages/Strategy'
+
+// Each page loads on demand, so the first screen doesn't wait for the others
+// (the Dashboard's chart library is the biggest piece).
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Scanner   = lazy(() => import('./pages/Scanner'))
+const Positions = lazy(() => import('./pages/Positions'))
+const Strategy  = lazy(() => import('./pages/Strategy'))
+
+const pageLoading = (
+  <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><div className="spinner" style={{ width: 36, height: 36 }} /></div>
+)
 
 export default function App() {
   return (
@@ -14,6 +22,7 @@ export default function App() {
       <AuthProvider>
       <TickerProvider>
         <Layout>
+          <Suspense fallback={pageLoading}>
           <Routes>
             <Route path="/"          element={<Dashboard />} />
             <Route path="/scanner"   element={<Scanner />}   />
@@ -24,6 +33,7 @@ export default function App() {
             {/* Settings became Strategy; keep old links working */}
             <Route path="/settings"  element={<Navigate to="/strategy" replace />} />
           </Routes>
+          </Suspense>
         </Layout>
       </TickerProvider>
       </AuthProvider>

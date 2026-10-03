@@ -7,6 +7,7 @@ import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, Ch
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
+import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
 
@@ -149,7 +150,7 @@ function HowItWorks() {
   return (
     <div className="card" style={{ marginTop: 24 }}>
       <div className="section-title" style={{ marginBottom: 16 }}>How it works</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+      <div className="grid-steps">
         {steps.map(([t, d], i) => (
           <div key={t} style={{ display: 'flex', gap: 12 }}>
             <div style={{ width: 28, height: 28, borderRadius: 99, background: 'var(--accent-dim)', color: 'var(--accent-light)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
@@ -165,7 +166,7 @@ function HowItWorks() {
 }
 
 export default function Scanner() {
-  const { selected } = useTicker()
+  const { selected, loaded, loadError, refresh } = useTicker()
   const [form, setForm]       = useState(() => toForm(loadConfig()))   // boxes, exactly as typed
   const [result, setResult]   = useState(null)
   const [loading, setLoading] = useState(false)
@@ -241,7 +242,9 @@ export default function Scanner() {
         subtitle={selected ? `Find a covered call to sell on your ${selected} shares.` : 'Find a covered call to sell on your shares.'}
       />
 
-      {!selected && (
+      {!selected && loadError && <ServerDown onRetry={() => refresh().catch(() => {})} />}
+
+      {!selected && loaded && !loadError && (
         <div className="callout callout-amber">
           <AlertTriangle size={18} strokeWidth={1.75} /> <span>Add a stock you own on the <Link to="/" style={{ color: 'inherit', fontWeight: 700 }}>Dashboard</Link> to start scanning.</span>
         </div>
@@ -251,7 +254,7 @@ export default function Scanner() {
         <>
           {/* Scan bar */}
           <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px 24px', flexWrap: 'wrap' }}>
               <div>
                 <div className="section-title">What we'll look for</div>
                 <div className="section-sub" style={{ maxWidth: 680, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}</div>
@@ -270,7 +273,7 @@ export default function Scanner() {
                 </button>
               }
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+              <div className="grid-filters">
                 {FIELDS.map(f => (
                   <Field key={f.name} field={f} text={form[f.name]} error={fieldErrors[f.name]} onChange={updateField} />
                 ))}
@@ -329,7 +332,7 @@ export default function Scanner() {
               {/* 1. The recommendation */}
               {planned.length > 0 && (
                 <div className="rec-card" style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px 24px', marginBottom: 20, flexWrap: 'wrap' }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-light)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                         Recommended trade
@@ -347,7 +350,7 @@ export default function Scanner() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                     {planned.map((p, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px 16px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span>
                           <span style={{ fontSize: 15 }}>
@@ -362,7 +365,7 @@ export default function Scanner() {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-                    <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px 40px' }}>
+                    <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)' }}>
                       <Fact label="Premium"                tip={TERMS.premium} value={money(result.gross_premium)} />
                       <Fact label="Set aside for buyback"  tip={TERMS.buyback} value={money(result.buyback_budget)} />
                       <Fact label="You keep"               value={money(result.net_premium)} color="var(--green)" />
@@ -400,7 +403,7 @@ export default function Scanner() {
               {(result.income_pick || result.balanced_pick) && (
                 <>
                   <div className="section-title" style={{ marginBottom: 12 }}>Top picks</div>
-                  <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+                  <div className="pick-row" style={{ marginBottom: 24 }}>
                     <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#6ae4ff"
                       notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} avgCost={result.avg_cost} />
                     <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#5aa9e6"
@@ -413,7 +416,7 @@ export default function Scanner() {
               {result.candidates.length > 0 && (
                 <div className="card">
                   <Collapsible label={`See all ${plural(result.candidates.length, 'option')}`} openLabel="Hide the full list">
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className="table-scroll">
                       <table className="data-table">
                         <thead>
                           <tr>

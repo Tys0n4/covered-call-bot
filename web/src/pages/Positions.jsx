@@ -9,6 +9,7 @@ import { AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpC
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Modal from '../components/Modal'
+import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
 import { fmtDate, daysUntil, money, plural } from '../lib/format'
 
@@ -27,7 +28,7 @@ function ConfirmModal({ position, evaluation, onConfirm, onCancel, loading, erro
   const cost = costText === '' || costText === '.' ? null : Number(costText)
   return (
     <Modal onBackdrop={() => { if (!loading) onCancel() }}>
-      <div className="card" style={{ width: 440, padding: 32, border: '1px solid rgba(240,71,95,0.3)', animation: 'fadeUp 0.2s ease forwards' }}>
+      <div className="card" role="dialog" aria-modal="true" aria-label="Mark this call as closed" style={{ width: '100%', maxWidth: 440, padding: 28, border: '1px solid rgba(240,71,95,0.3)', animation: 'fadeUp 0.2s ease forwards' }}>
         <AlertTriangle size={24} strokeWidth={1.75} color="var(--red)" style={{ marginBottom: 12 }} />
         <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 8 }}>Mark this call as closed?</div>
         <div style={{ color: 'var(--text-dim)', fontSize: 14, marginBottom: 24, lineHeight: 1.6 }}>
@@ -112,7 +113,7 @@ function PositionCard({ p, evaluation, checked, onClose }) {
   const buy = evaluation?.should_buy_back
   return (
     <div className="card" style={{ borderColor: buy ? 'rgba(52,237,179,0.35)' : undefined }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 32, alignItems: 'center' }}>
+      <div className="grid-split">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span>
@@ -166,11 +167,7 @@ export default function Positions() {
     let cancelled = false
     getAllPositions()
       .then(r => { if (!cancelled) setFetched({ key: fetchKey, positions: r.data }) })
-      .catch(() => {
-        if (cancelled) return
-        setFetched({ key: fetchKey, positions: [] })
-        setError('Could not load positions. Is the API running?')
-      })
+      .catch(() => { if (!cancelled) setFetched({ key: fetchKey, positions: [], failed: true }) })
     return () => { cancelled = true }
   }, [fetchKey])
 
@@ -183,8 +180,8 @@ export default function Positions() {
     try {
       const res = await getManagement(selected)
       setEvals(Object.fromEntries(res.data.positions.map(e => [e.id, e])))
-    } catch {
-      setError('Could not check prices. Is the API running?')
+    } catch (e) {
+      setError(apiError(e, 'Could not check prices. Is the API running?'))
     } finally {
       setChecking(false)
     }
@@ -213,7 +210,7 @@ export default function Positions() {
         title="Positions"
         showTicker
         subtitle={`Your covered calls${selected ? ` on ${selected}` : ''} and what to do with each one.`}
-        actions={open.length > 0 && (
+        actions={open.length > 0 && !fetched.failed && (
           <button className="btn-primary" onClick={handleCheck} disabled={checking || !selected}>
             {checking ? <><span className="spinner" /> Checking prices…</> : <><RefreshCw size={15} strokeWidth={2} /> Check prices</>}
           </button>
@@ -226,6 +223,7 @@ export default function Positions() {
         </div>
       )}
 
+      {fetched.failed && !loading ? <ServerDown onRetry={reload} /> : <>
       <div className="tabs" style={{ marginBottom: 20 }}>
         <button className={`tab ${tab === 'OPEN' ? 'active' : ''}`} onClick={() => setTab('OPEN')}>Open ({open.length})</button>
         <button className={`tab ${tab === 'CLOSED' ? 'active' : ''}`} onClick={() => setTab('CLOSED')}>History ({closed.length})</button>
@@ -262,7 +260,7 @@ export default function Positions() {
         )
       ) : (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
             <div className="hint">
               {historyScope === 'all' ? 'Every finished call, including stocks you no longer hold.' : `Finished calls on ${selected || 'this stock'}.`}
             </div>
@@ -274,6 +272,7 @@ export default function Positions() {
           {closed.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No finished calls yet.</div>
           ) : (
+            <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
@@ -302,9 +301,11 @@ export default function Positions() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
+      </>}
     </div>
   )
 }
