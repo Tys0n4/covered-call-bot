@@ -6,6 +6,7 @@ import { apiError, getPerformance, getStrategy } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
+import EmptyState from '../components/EmptyState'
 import { PerformanceSkeleton } from '../components/Skeleton'
 import Collapsible from '../components/Collapsible'
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -102,14 +103,10 @@ export default function Performance() {
       {header}
 
       {s.calls_finished === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: 60 }}>
-          <TrendingUp size={28} strokeWidth={1.75} style={{ opacity: 0.4, marginBottom: 10 }} />
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No finished calls yet</div>
-          <div className="hint">
-            Results show up here once a call is bought back, expires or is assigned.
-            {s.open_calls > 0 && <> You have {plural(s.open_calls, 'open call')} worth {money(s.open_premium)} in premium.</>}
-          </div>
-        </div>
+        <EmptyState icon={TrendingUp} title="No finished calls yet">
+          Results show up here once a call is bought back, expires or is assigned.
+          {s.open_calls > 0 && <> You have {plural(s.open_calls, 'open call')} worth {money(s.open_premium)} in premium.</>}
+        </EmptyState>
       ) : (
         <>
           {s.missing_costs > 0 && (

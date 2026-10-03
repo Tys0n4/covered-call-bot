@@ -13,6 +13,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
+import EmptyState, { AddStockLink } from '../components/EmptyState'
 import { PositionsSkeleton } from '../components/Skeleton'
 import ActionMenu from '../components/ActionMenu'
 import AssignmentReview from '../components/AssignmentReview'
@@ -296,13 +297,15 @@ export default function Positions() {
       {loading ? (
         <PositionsSkeleton />
       ) : tab === 'OPEN' ? (
-        open.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: 60 }}>
-            <Layers size={28} strokeWidth={1.75} style={{ opacity: 0.4, marginBottom: 10 }} />
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No open calls{scope === 'stock' && selected ? ` on ${selected}` : ''}</div>
-            <div className="hint" style={{ marginBottom: 18 }}>Run a scan to find one to sell, or add one you sold with your broker.</div>
-            <Link to="/scanner"><button className="btn-primary"><ScanLine size={15} strokeWidth={2} /> Go to Scanner</button></Link>
-          </div>
+        tickers.length === 0 ? (
+          <EmptyState icon={Layers} title="Add a stock first" action={<AddStockLink />}>
+            Covered calls are sold against shares you own. Add your stocks, then scan for a call or record one you sold with your broker.
+          </EmptyState>
+        ) : open.length === 0 ? (
+          <EmptyState icon={Layers} title={`No open calls${scope === 'stock' && selected ? ` on ${selected}` : ''}`}
+            action={<Link to="/scanner" className="btn-primary" style={{ textDecoration: 'none' }}><ScanLine size={15} strokeWidth={2} /> Go to Scanner</Link>}>
+            Run a scan to find one to sell, or add one you sold with your broker.
+          </EmptyState>
         ) : (
           <>
             {evals && (
