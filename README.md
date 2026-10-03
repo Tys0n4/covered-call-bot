@@ -40,7 +40,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 *Demo portfolio with simulated market data.*
 
-**Dashboard** — premium from open calls, contracts working, and what's ready to sell for each stock.
+**Dashboard** — a "Needs attention" list (calls to buy back, contracts to sell, calls expiring soon, your monthly goal), then one row per stock.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -48,7 +48,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ![Scanner](docs/screenshots/scanner.png)
 
-**Positions** — "Check prices" shows which calls are ready to buy back; each call can be closed, rolled, edited or deleted.
+**Positions** — every open call across your stocks, with live prices checked automatically to show which are ready to buy back. Roll and Close sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone.
 
 ![Positions](docs/screenshots/positions.png)
 
@@ -56,7 +56,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ![Roll a call](docs/screenshots/roll.png)
 
-**Performance** — what you kept after buybacks and fees, yearly return on capital, gains on shares called away, month by month.
+**Performance** — what you kept after buybacks and fees, yearly return on capital, gains on shares called away, and a month-by-month chart against your goal.
 
 ![Performance](docs/screenshots/performance.png)
 
@@ -182,14 +182,14 @@ Open [http://localhost:5173](http://localhost:5173)
 
 The scanner fetches the full options chain for a ticker within a configurable DTE (days to expiry) window. Each candidate is filtered by:
 
-- Minimum strike % above current price (default 20% OTM)
+- Minimum strike % above current price (default and lowest allowed: 15% OTM)
 - Minimum premium, volume, and open interest
 - Maximum bid-ask spread as a % of mid price
 
 Surviving candidates are scored on two dimensions:
 
 - **Income score** — weighted by annualized yield and volume
-- **Balanced score** — weighted by delta proximity to target (0.22), upside %, and annualized yield
+- **Balanced score** — weighted by delta proximity to a fixed 12% target, upside %, and annualized yield
 
 ### Allocation
 
@@ -216,11 +216,11 @@ Scanner defaults live in `backend/core/config.py`; your split, buyback target, r
 class ScannerConfig:
     min_dte: int = 20
     max_dte: int = 38
-    min_strike_pct_above_current: float = 0.20
+    min_strike_pct_above_current: float = 0.15
     min_premium: float = 0.05
     min_volume: int = 10
     min_open_interest: int = 50
-    target_delta: float = 0.22
+    target_delta: float = 0.12
     income_weight: float = 0.70
     buyback_budget_pct: float = 0.15
     profit_capture_target_pct: float = 80.0

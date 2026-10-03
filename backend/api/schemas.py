@@ -7,6 +7,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from core.config import MIN_STRIKE_PCT
+
 # Same rule as app/portfolio.py: 1–10 characters, letters, digits, dot or dash
 _TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 
@@ -30,11 +32,10 @@ class ScanConfig(BaseModel):
     ticker: str
     min_dte: int = Field(default=20, ge=0, le=365)
     max_dte: int = Field(default=38, ge=1, le=730)
-    min_strike_pct: float = Field(default=0.20, ge=0, le=1)          # 0.20 = strikes 20%+ above price
+    min_strike_pct: float = Field(default=MIN_STRIKE_PCT, ge=MIN_STRIKE_PCT, le=1)   # 0.15 = strikes 15%+ above price
     min_premium: float = Field(default=0.05, ge=0, le=1000)
     min_volume: int = Field(default=10, ge=0, le=10_000_000)
     min_open_interest: int = Field(default=50, ge=0, le=10_000_000)
-    target_delta: float = Field(default=0.22, gt=0, lt=1)
     exclude_below_cost: bool = False   # skip strikes below your average cost per share
     avoid_earnings: bool = False       # skip expiries on or after the next earnings date
 

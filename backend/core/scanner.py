@@ -39,30 +39,6 @@ def _below_cost_warning(label: str, pick, avg_cost: float) -> str | None:
     )
 
 
-def _target_delta_warning(scored: pd.DataFrame, config: ScannerConfig) -> str | None:
-    """
-    The balanced pick aims for target_delta. If no candidate gets within half
-    of it (e.g. a 20%-above-price minimum only leaves ~3% deltas), both picks
-    end up as near-identical far strikes, so say why.
-    """
-    deltas = pd.to_numeric(scored.get("delta"), errors="coerce").dropna()
-    if deltas.empty:
-        return None
-    target = config.target_delta
-    closest = float(deltas.iloc[(deltas - target).abs().argmin()])
-    if abs(closest - target) <= target * 0.5:
-        return None
-    hint = (
-        f"lower \"Min. distance above price\" (now {config.min_strike_pct_above_current:.0%}) or the target"
-        if closest < target else "raise the target or the minimum distance"
-    )
-    return (
-        f"No option comes close to your {target:.0%} balanced target for the chance of being called "
-        f"(the closest is {closest:.0%}), so the balanced pick is just the best of what's left. "
-        f"To get nearer the target, {hint}."
-    )
-
-
 def _fmt_day(iso: str) -> str:
     d = datetime.strptime(iso, "%Y-%m-%d")
     return f"{d:%b} {d.day}"
@@ -190,10 +166,6 @@ def scan_covered_calls(
     scored = score_options(enriched, config=config)
     scored["below_cost_basis"] = (position.avg_cost > 0) & (scored["strike"] < position.avg_cost)
     income_pick, balanced_pick = pick_best_options(scored)
-
-    w = _target_delta_warning(scored, config)
-    if w:
-        warnings.append(w)
 
     for label, pick in (("income", income_pick), ("balanced", balanced_pick)):
         w = _below_cost_warning(label, pick, position.avg_cost)

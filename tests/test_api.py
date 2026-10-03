@@ -76,7 +76,7 @@ def test_scan_unknown_ticker_is_404_not_another_stock(client, nvda):
 
 @pytest.mark.parametrize("bad", [
     {"min_strike_pct": -5},
-    {"target_delta": 0},
+    {"min_strike_pct": 0.10},   # below the 15% floor
     {"min_dte": 50, "max_dte": 10},
     {"min_premium": -1},
     {"ticker": "bad ticker!"},
@@ -167,12 +167,11 @@ def test_manage_keeps_ids_for_positions_on_the_same_option(client, nvda):
     assert all(e["current_option_price"] > 0 for e in evaluated)
 
 
-def test_scan_explains_unreachable_target_delta(client, nvda):
-    # 20%+ above price leaves only tiny deltas in the fake market
-    far = client.post("/scan", json={"ticker": "NVDA"}).json()
-    assert any("No option comes close to your 22% balanced target" in w for w in far["warnings"])
-    near = client.post("/scan", json={"ticker": "NVDA", "min_strike_pct": 0.02}).json()
-    assert not any("No option comes close" in w for w in near["warnings"])
+def test_scan_has_no_target_delta_setting(client, nvda):
+    # The balanced pick's target is fixed (12%); older clients that still send one are ignored
+    scan = client.post("/scan", json={"ticker": "NVDA", "target_delta": 0.22})
+    assert scan.status_code == 200
+    assert not any("balanced target" in w for w in scan.json()["warnings"])
 
 
 # --- Earnings / ex-dividend -----------------------------------------------------
