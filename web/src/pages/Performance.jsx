@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, TrendingUp } from 'lucide-react'
-import { apiError, getPerformance } from '../api/client'
+import { apiError, getPerformance, getStrategy } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
 import Collapsible from '../components/Collapsible'
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { fmtDate, money, pct, plural } from '../lib/format'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -34,6 +35,34 @@ function Stat({ label, tip, value, sub }) {
   )
 }
 
+// Kept per month, oldest first, with the monthly goal as a dashed line
+function MonthlyChart({ months, goal }) {
+  const data = months.slice().reverse().map(m => ({ label: fmtMonth(m.month), kept: m.option_net }))
+  const short = v => `$${Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v)}`
+  return (
+    <div style={{ height: 240 }}>
+      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height: 240 }}>
+        <BarChart data={data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
+          <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.06)" />
+          <XAxis dataKey="label" tick={{ fill: '#8a94a6', fontSize: 12 }} axisLine={false} tickLine={false} />
+          <YAxis tickFormatter={short} tick={{ fill: '#8a94a6', fontSize: 12 }} axisLine={false} tickLine={false} width={52} />
+          <Tooltip
+            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+            contentStyle={{ background: '#202a3e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, fontSize: 12 }}
+            labelStyle={{ color: '#cdd0d6' }} itemStyle={{ color: '#ffffff' }}
+            formatter={v => [money(v), 'Kept']}
+          />
+          {goal > 0 && <ReferenceLine y={goal} ifOverflow="extendDomain" stroke="#f5a524" strokeDasharray="4 4"
+            label={{ value: `Goal ${short(goal)}`, position: 'insideTopRight', fill: '#f5a524', fontSize: 11 }} />}
+          <Bar dataKey="kept" radius={[6, 6, 0, 0]} maxBarSize={56}>
+            {data.map(d => <Cell key={d.label} fill={d.kept < 0 ? '#f0475f' : '#34edb3'} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
 function resultLabel(t) {
   if (t.status === 'EXPIRED') return 'Expired'
   if (t.status === 'ASSIGNED') return <span className="badge badge-amber">Assigned</span>
@@ -44,12 +73,14 @@ export default function Performance() {
   const [data, setData]       = useState(null)
   const [failed, setFailed]   = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [goal, setGoal]       = useState(0)        // monthly goal from the Strategy page (0 = off)
 
   useEffect(() => {
     let cancelled = false
     getPerformance()
       .then(r => { if (!cancelled) { setData(r.data); setFailed(null) } })
       .catch(e => { if (!cancelled) setFailed(apiError(e, null) || true) })
+    getStrategy().then(r => { if (!cancelled) setGoal(r.data.monthly_goal || 0) }).catch(() => {})
     return () => { cancelled = true }
   }, [reloadKey])
 
@@ -62,6 +93,8 @@ export default function Performance() {
   const s = data.summary
   const year = new Date().getFullYear()
   const monthName = new Date().toLocaleDateString('en-CA', { month: 'long' })
+  // When every finished call closed this year, "this year" and "all time" are the same number
+  const allThisYear = data.trades.every(t => (t.closed_at || '').startsWith(String(year)))
 
   return (
     <div className="fade-up">
@@ -87,10 +120,16 @@ export default function Performance() {
             </div>
           )}
 
-          <div className="grid-4" style={{ marginBottom: 16 }}>
-            <Stat label={`Kept in ${monthName}`} tip={TIPS.realized} value={signed(s.realized_this_month)} />
-            <Stat label={`Kept in ${year}`} tip={TIPS.realized} value={signed(s.realized_this_year)} />
-            <Stat label="Kept all time" tip={TIPS.realized} value={signed(s.realized_all_time)} sub={`from ${plural(s.calls_finished, 'finished call')}`} />
+          <div className={allThisYear ? 'grid-3' : 'grid-4'} style={{ marginBottom: 16 }}>
+            <Stat label={`Kept in ${monthName}`} tip={TIPS.realized} value={signed(s.realized_this_month)}
+              sub={goal > 0 ? `of ${money(goal, 0)} goal` : undefined} />
+            {allThisYear
+              ? <Stat label={`Kept in ${year}`} tip={TIPS.realized} value={signed(s.realized_this_year)}
+                  sub={`from ${plural(s.calls_finished, 'finished call')}, all this year`} />
+              : <>
+                  <Stat label={`Kept in ${year}`} tip={TIPS.realized} value={signed(s.realized_this_year)} />
+                  <Stat label="Kept all time" tip={TIPS.realized} value={signed(s.realized_all_time)} sub={`from ${plural(s.calls_finished, 'finished call')}`} />
+                </>}
             <Stat label="Yearly return" tip={TIPS.annualized} value={s.annualized_return_pct == null ? '—' : pct(s.annualized_return_pct)}
               sub="on the cost of the shares covered" />
           </div>
@@ -103,6 +142,11 @@ export default function Performance() {
 
           <div className="section-title" style={{ marginBottom: 12 }}>Month by month</div>
           {s.missing_costs > 0 && <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>* Kept leaves out calls with no buyback cost entered.</div>}
+          {data.months.length > 1 && (
+            <div className="card" style={{ marginBottom: 16, padding: '20px 16px 12px' }}>
+              <MonthlyChart months={data.months} goal={goal} />
+            </div>
+          )}
           <div className="card" style={{ marginBottom: 24, padding: 8 }}>
             <div className="table-scroll">
               <table className="data-table">
@@ -149,7 +193,7 @@ export default function Performance() {
                   <tbody>
                     {data.trades.map(t => (
                       <tr key={t.id}>
-                        <td>{fmtDate(t.closed_at)}</td>
+                        <td className="nowrap">{fmtDate(t.closed_at)}</td>
                         <td className="mono" style={{ color: 'var(--text)', fontWeight: 700 }}>{t.ticker}</td>
                         <td className="mono num">{money(t.strike)}</td>
                         <td className="mono num">{t.contracts}</td>
