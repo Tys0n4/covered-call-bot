@@ -1,16 +1,10 @@
 // src/components/dialogs/ConfirmDialog.jsx — "Are you sure?" for actions like delete or undo
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Modal from './Modal'
 
 export default function ConfirmDialog({ title, children, confirmLabel, danger = false, onConfirm, onCancel }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-
-  useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape' && !busy) onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onCancel])
 
   const confirm = async () => {
     setBusy(true); setError(null)
@@ -19,7 +13,7 @@ export default function ConfirmDialog({ title, children, confirmLabel, danger = 
   }
 
   return (
-    <Modal onBackdrop={() => { if (!busy) onCancel() }}>
+    <Modal onDismiss={() => { if (!busy) onCancel() }}>
       <div className="card" role="alertdialog" aria-modal="true" aria-label={title}
         style={{ width: '100%', maxWidth: 420, padding: 26, animation: 'fadeUp 0.2s ease forwards' }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{title}</div>

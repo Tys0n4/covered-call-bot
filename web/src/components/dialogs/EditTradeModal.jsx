@@ -44,7 +44,7 @@ export default function EditTradeModal({ position: p, onDone, onCancel }) {
   }
 
   return (
-    <Modal onBackdrop={() => { if (!busy) onCancel() }}>
+    <Modal onDismiss={() => { if (!busy) onCancel() }}>
       <div className="card" role="dialog" aria-modal="true" aria-label="Edit trade"
         style={{ width: '100%', maxWidth: 460, padding: 28, animation: 'fadeUp 0.2s ease forwards' }}>
         <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 4 }}>Edit trade</div>

@@ -1,5 +1,5 @@
 // src/components/dialogs/HoldingModal.jsx — add a stock you own, or edit/remove one
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { X, AlertTriangle, Trash2 } from 'lucide-react'
 import { addHolding, updateHolding, deleteHolding, apiError } from '../../api/client'
 import InfoTip from '../InfoTip'
@@ -14,13 +14,6 @@ export default function HoldingModal({ holding, onClose, onSaved }) {
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
-
-  // Close on Escape
-  useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape' && !saving) onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, saving])
 
   const sharesNum  = Number.parseInt(shares, 10)
   const costNum    = Number.parseFloat(avgCost)
@@ -65,7 +58,7 @@ export default function HoldingModal({ holding, onClose, onSaved }) {
   }
 
   return (
-    <Modal onBackdrop={() => { if (!saving) onClose() }}>
+    <Modal onDismiss={() => { if (!saving) onClose() }}>
       <form className="card" onSubmit={handleSave} style={{ width: '100%', maxWidth: 460, padding: 28, animation: 'fadeUp 0.2s ease forwards' }} role="dialog" aria-modal="true" aria-labelledby="holding-title">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
           <div id="holding-title" style={{ fontWeight: 700, fontSize: 20 }}>{editing ? `Edit ${holding.ticker}` : 'Add a stock'}</div>
