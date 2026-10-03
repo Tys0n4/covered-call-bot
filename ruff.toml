@@ -1,0 +1,9 @@
+# Python lint settings (run: ruff check app api tests)
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "B"]   # pycodestyle errors, pyflakes, bugbear
+ignore = [
+    "E501",  # long lines are fine
+    "B008",  # FastAPI's Depends()/Body() in argument defaults is the intended pattern
+]

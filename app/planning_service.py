@@ -1,11 +1,14 @@
 # planning_service.py
 from __future__ import annotations
+import logging
 import math
 
 from config import ScannerConfig, DEFAULT_CONFIG
 from models import ScanResult, PlannedCall
 from positions import create_positions_from_plan
 from strategy import allocation_targets
+
+log = logging.getLogger(__name__)
 
 
 def get_allocation_targets(
@@ -55,15 +58,15 @@ def build_plan(
     targets = get_allocation_targets(position.shares, open_positions, config)
 
     if targets["available"] == 0:
-        print(f"\n  ⚠  No contracts available — all {targets['total_contracts']} are already open.")
+        log.info("%s: no contracts available, all %d are already open", position.ticker, targets["total_contracts"])
         return []
 
-    # Show allocation summary
-    print(f"\n  Portfolio allocation summary:")
-    print(f"    Total contracts:     {targets['total_contracts']}")
-    print(f"    Target income (70%): {targets['target_income']}  |  Open: {targets['open_income']}  |  Still needed: {targets['needed_income']}")
-    print(f"    Target balanced (30%): {targets['target_balanced']}  |  Open: {targets['open_balanced']}  |  Still needed: {targets['needed_balanced']}")
-    print(f"    Contracts to plan:   {targets['available']}")
+    log.info(
+        "%s plan: %d contracts, income %d (open %d, need %d), balanced %d (open %d, need %d)",
+        position.ticker, targets["total_contracts"],
+        targets["target_income"], targets["open_income"], targets["needed_income"],
+        targets["target_balanced"], targets["open_balanced"], targets["needed_balanced"],
+    )
 
     raw_plan = []
 

@@ -73,7 +73,7 @@ def _valid_ticker(ticker: str) -> str:
     try:
         return normalize_ticker(ticker)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 def _check_covers_open_calls(ticker: str, shares: int) -> None:

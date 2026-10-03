@@ -249,3 +249,28 @@ def test_nothing_to_undo_on_open_or_expired(client, nvda):
     assert client.post(f"/positions/{pid}/undo").status_code == 409
     _expire(pid)
     assert client.post(f"/positions/{pid}/undo").status_code == 409
+
+
+# --- Delete / add by hand -------------------------------------------------------------
+
+def test_delete_open_call_entered_by_mistake(client, nvda):
+    pid = _sell(client, contracts=5)
+    assert client.delete(f"/positions/{pid}").status_code == 200
+    assert all(p["id"] != pid for p in client.get("/positions/all").json())
+    _sell(client, contracts=5)                               # shares are free again
+
+
+def test_finished_calls_cannot_be_deleted(client, nvda):
+    pid = _sell(client)
+    client.post("/positions/close", json={"position_id": pid, "close_cost": 10})
+    assert client.delete(f"/positions/{pid}").status_code == 404
+    assert client.delete("/positions/9999").status_code == 404
+
+
+def test_rolled_call_is_undone_not_deleted(client, nvda):
+    old = _sell(client)
+    new = client.post(f"/positions/{old}/roll", json={
+        "close_cost": 100, "expiry": _expiry(60), "strike": 130, "contracts": 2, "entry_price": 1,
+    }).json()["opened"]
+    r = client.delete(f"/positions/{new}")
+    assert r.status_code == 409 and "Undo the roll" in r.json()["detail"]
