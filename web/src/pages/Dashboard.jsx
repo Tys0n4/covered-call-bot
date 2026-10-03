@@ -1,115 +1,64 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getPortfolio, getAllPositions, getAssignmentReview } from '../api/client'
+import { getPortfolio, getAllPositions, getAssignmentReview, getManagement, getPerformance, getStrategy } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle } from 'lucide-react'
+import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, Target, BadgeDollarSign } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
-import Collapsible from '../components/Collapsible'
+import ActionMenu from '../components/ActionMenu'
 import HoldingModal from '../components/dialogs/HoldingModal'
 import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
-import { fmtDate, money, plural } from '../lib/format'
+import { daysUntil, fmtDate, money, plural } from '../lib/format'
 
-function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
+// One line in the "Needs attention" box
+function Attention({ icon: Icon, tone, children, action }) {
+  return (
+    <div className="attention-row">
+      <span className={`attention-icon tone-${tone}`}><Icon size={16} strokeWidth={2} /></span>
+      <div className="attention-body">{children}</div>
+      {action}
+    </div>
+  )
+}
+
+// Compact row per stock: shares, how many contracts are working, and the next step
+function StockRow({ ticker: t, positions, onScan, onPositions, onEdit }) {
   const collected = positions.reduce((s, p) => s + p.premium_total - (p.open_fees || 0), 0)
   const total = t.total_contracts || 0
   const w = n => (total > 0 ? `${(n / total) * 100}%` : '0%')
-
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span className="ticker-pill" style={{ fontSize: 18 }}>{t.ticker}</span>
-          <span className="hint" style={{ fontSize: 14 }}>{t.shares.toLocaleString()} shares · avg cost {money(t.avg_cost)}</span>
-          <button className="btn-secondary" onClick={onEdit} style={{ padding: '5px 12px', fontSize: 13, borderRadius: 9 }} aria-label={`Edit ${t.ticker}`}>
-            <Pencil size={13} strokeWidth={2} /> Edit
-          </button>
+    <div className="stock-row">
+      <div className="stock-name">
+        <span className="ticker-pill">{t.ticker}</span>
+        <span className="hint">{t.shares.toLocaleString()} shares · avg {money(t.avg_cost)}</span>
+      </div>
+      <div className="stock-bar">
+        <div style={{ fontSize: 13.5, marginBottom: 6 }}>
+          <strong>{t.open_total}</strong><span className="muted"> of {plural(total, 'contract')} working</span>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div className="stat-num" style={{ fontSize: 20, color: 'var(--green)' }}>{money(collected)}</div>
-          <div className="hint">collected from open calls</div>
+        <div className="split-bar" title={`Income ${t.open_income}, Balanced ${t.open_balanced}, not sold ${t.available}`}>
+          <div style={{ width: w(t.open_income), background: 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
+          <div style={{ width: w(t.open_balanced), background: 'linear-gradient(90deg, #3b8fd0, var(--blue))' }} />
         </div>
       </div>
-
-      {/* One-line status + bar */}
-      <div style={{ fontSize: 16, marginBottom: 10 }}>
-        <strong>{t.open_total} of {plural(total, 'contract')}</strong> working
-        {t.available > 0 && <> · <strong style={{ color: 'var(--amber)' }}>{t.available} ready to sell</strong></>}
-        <span style={{ marginLeft: 6 }}><InfoTip text={TERMS.available} /></span>
+      <div className="stock-num">
+        <div className="mono" style={{ color: collected > 0 ? 'var(--green)' : 'var(--text-muted)', fontWeight: 600 }}>{money(collected)}</div>
+        <div className="hint">open premium</div>
       </div>
-      <div style={{ height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', display: 'flex', marginBottom: 10 }}>
-        <div style={{ width: w(t.open_income), background: 'linear-gradient(90deg, var(--accent), var(--accent-light))', transition: 'width 0.5s' }} />
-        <div style={{ width: w(t.open_balanced), background: 'linear-gradient(90deg, #3b8fd0, var(--blue))', transition: 'width 0.5s' }} />
+      <div className="stock-actions">
+        {t.available > 0
+          ? <button className="btn-primary" onClick={onScan} style={{ padding: '7px 14px', fontSize: 13 }}><ScanLine size={14} strokeWidth={2} /> Sell {t.available}</button>
+          : <span className="badge badge-green"><CheckCircle2 size={13} strokeWidth={2} /> Covered</span>}
+        <ActionMenu label={`Actions for ${t.ticker}`} items={[
+          { label: 'View positions', icon: Layers, onClick: onPositions },
+          { label: 'Scan for a call', icon: ScanLine, onClick: onScan },
+          { label: 'Edit shares or cost', icon: Pencil, onClick: onEdit },
+        ]} />
       </div>
-      <div style={{ display: 'flex', gap: 20, fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, flexWrap: 'wrap' }}>
-        {/* Hide a side your split doesn't use, unless calls of that kind are still open */}
-        {(t.target_income > 0 || t.open_income > 0) && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--accent-light)' }} />
-            {t.target_income > 0 ? <>Income: {t.open_income} of {t.target_income}</> : <>Income: {t.open_income} open (not in your split)</>}
-            <InfoTip text={TERMS.income} size={12} />
-          </span>
-        )}
-        {(t.target_balanced > 0 || t.open_balanced > 0) && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--blue)' }} />
-            {t.target_balanced > 0 ? <>Balanced: {t.open_balanced} of {t.target_balanced}</> : <>Balanced: {t.open_balanced} open (not in your split)</>}
-            <InfoTip text={TERMS.balanced} size={12} />
-          </span>
-        )}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 99, background: 'rgba(255,255,255,0.18)' }} />
-          Not sold: {t.available}
-        </span>
-      </div>
-
-      {/* Next step */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px', marginBottom: positions.length ? 14 : 0 }}>
-        {t.available > 0 ? (
-          <>
-            <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>
-              <strong style={{ color: 'var(--text)' }}>Next step:</strong> find a call for your {plural(t.available, 'unused contract')}.
-            </span>
-            <button className="btn-primary" onClick={onScan} style={{ padding: '9px 18px' }}><ScanLine size={15} strokeWidth={2} /> Scan {t.ticker}</button>
-          </>
-        ) : (
-          <>
-            <span style={{ fontSize: 14, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <CheckCircle2 size={16} color="var(--green)" /> All contracts are working. Check if any are ready to buy back.
-            </span>
-            <button className="btn-secondary" onClick={onPositions} style={{ padding: '9px 18px' }}>View positions <ArrowRight size={15} /></button>
-          </>
-        )}
-      </div>
-
-      {/* Details on request */}
-      {positions.length > 0 && (
-        <Collapsible label={`Show ${plural(positions.length, 'open call')}`} openLabel="Hide open calls">
-          <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr><th>Type</th><th className="num">Strike</th><th>Expires</th><th className="num">Contracts</th><th className="num">Collected</th></tr>
-            </thead>
-            <tbody>
-              {positions.map(p => (
-                <tr key={p.id}>
-                  <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span></td>
-                  <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(p.strike)}</td>
-                  <td>{fmtDate(p.expiry)}</td>
-                  <td className="mono num">{p.contracts}</td>
-                  <td className="mono num" style={{ color: 'var(--green)' }}>{money(p.premium_total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </Collapsible>
-      )}
     </div>
   )
 }
@@ -126,6 +75,8 @@ export default function Dashboard() {
   const [loadFailed,   setLoadFailed]   = useState(false)
   const [reloadKey,    setReloadKey]    = useState(0)
   const [reviewCount,  setReviewCount]  = useState(0)   // expired calls that may have been assigned
+  const [readyIds,     setReadyIds]     = useState(null) // ids of calls ready to buy back (null = not checked yet)
+  const [goal,         setGoal]         = useState(null) // { target, kept, month } when a monthly goal is set
 
   useEffect(() => {
     let cancelled = false
@@ -142,6 +93,16 @@ export default function Dashboard() {
       .finally(() => { if (!cancelled) setLoading(false) })
     getAssignmentReview()
       .then(r => { if (!cancelled) setReviewCount(r.data.length) })
+      .catch(() => {})
+    // Live option prices are slower, so they fill in after the page shows
+    getManagement()
+      .then(r => { if (!cancelled) setReadyIds(new Set(r.data.positions.filter(e => e.should_buy_back).map(e => e.id))) })
+      .catch(() => {})
+    Promise.all([getStrategy(), getPerformance()])
+      .then(([st, perf]) => {
+        if (cancelled || !(st.data.monthly_goal > 0)) return
+        setGoal({ target: st.data.monthly_goal, kept: perf.data.summary.realized_this_month, month: perf.data.summary.month })
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [reloadKey, applyPortfolio])
@@ -165,6 +126,16 @@ export default function Dashboard() {
   }, [allPositions])
 
   const go = (ticker, path) => { selectTicker(ticker); navigate(path) }
+
+  // What needs doing: buybacks, calls expiring within a week, unsold contracts, the monthly goal
+  const ready     = readyIds ? positions.filter(p => readyIds.has(p.id)) : []
+  const expiring  = positions.filter(p => { const d = daysUntil(p.expiry); return d != null && d >= 0 && d <= 7 })
+                      .sort((a, b) => a.expiry.localeCompare(b.expiry))
+  const unsold    = portfolio.filter(t => t.available > 0)
+  const goalPct   = goal ? Math.max(0, Math.round((goal.kept / goal.target) * 100)) : 0
+  const goalMonth = goal ? new Date(Number(goal.month.slice(0, 4)), Number(goal.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-CA', { month: 'long' }) : ''
+  const callList  = list => list.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)}`).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '')
+  const allClear  = reviewCount === 0 && ready.length === 0 && expiring.length === 0 && unsold.length === 0
 
   // The API returns the updated portfolio after every add/edit/remove
   const handleSaved = (rows, ticker) => {
@@ -198,13 +169,55 @@ export default function Dashboard() {
         <ServerDown onRetry={retry} />
       ) : (
         <>
-          {reviewCount > 0 && (
-            <div className="callout callout-amber" style={{ marginBottom: 20, alignItems: 'center' }}>
-              <AlertTriangle size={18} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1 }}>
-                {reviewCount === 1 ? 'A call' : `${reviewCount} calls`} expired with the stock above the strike, so your shares may have been called away.
-              </span>
-              <Link to="/positions" className="link-btn" style={{ color: 'inherit' }}>Review <ArrowRight size={15} /></Link>
+          {portfolio.length > 0 && (
+            <div className="card attention" style={{ marginBottom: 20 }}>
+              <div className="section-title" style={{ marginBottom: 6 }}>Needs attention</div>
+              {reviewCount > 0 && (
+                <Attention icon={AlertTriangle} tone="amber"
+                  action={<Link to="/positions" className="link-btn">Review <ArrowRight size={14} /></Link>}>
+                  {reviewCount === 1 ? 'A call' : `${reviewCount} calls`} expired with the stock above the strike. Were your shares called away?
+                </Attention>
+              )}
+              {ready.length > 0 && (
+                <Attention icon={BadgeDollarSign} tone="green"
+                  action={<Link to="/positions" className="link-btn">Buy back <ArrowRight size={14} /></Link>}>
+                  <strong>{plural(ready.length, 'call')}</strong> {ready.length === 1 ? 'is' : 'are'} ready to buy back: <span className="muted">{callList(ready)}</span>
+                </Attention>
+              )}
+              {expiring.length > 0 && (
+                <Attention icon={CalendarClock} tone="blue"
+                  action={<Link to="/positions" className="link-btn">View <ArrowRight size={14} /></Link>}>
+                  <strong>{plural(expiring.length, 'call')}</strong> {expiring.length === 1 ? 'expires' : 'expire'} within a week: <span className="muted">{expiring.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)} on ${fmtDate(p.expiry)}`).join(', ')}{expiring.length > 3 ? ` and ${expiring.length - 3} more` : ''}</span>
+                </Attention>
+              )}
+              {unsold.map(t => (
+                <Attention key={t.ticker} icon={ScanLine} tone="accent"
+                  action={<button className="link-btn" onClick={() => go(t.ticker, '/scanner')}>Scan {t.ticker} <ArrowRight size={14} /></button>}>
+                  <strong>{plural(t.available, `${t.ticker} contract`)}</strong> ready to sell
+                </Attention>
+              ))}
+              {goal && (
+                <Attention icon={Target} tone={goalPct >= 100 ? 'green' : 'accent'}
+                  action={<Link to="/performance" className="link-btn">Results <ArrowRight size={14} /></Link>}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+                    <span>Kept in {goalMonth}: <strong style={{ color: goal.kept < 0 ? 'var(--red)' : 'var(--text)' }}>{money(goal.kept)}</strong> <span className="muted">of {money(goal.target, 0)} goal</span></span>
+                    <span className="mono nowrap" style={{ color: goalPct >= 100 ? 'var(--green)' : 'var(--text-dim)' }}>{goalPct >= 100 ? 'Goal reached' : `${goalPct}%`}</span>
+                  </div>
+                  <div className="progress-bar" style={{ maxWidth: 420 }}>
+                    <div className="progress-fill" style={{ width: `${Math.min(goalPct, 100)}%`, background: goalPct >= 100 ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : undefined }} />
+                  </div>
+                </Attention>
+              )}
+              {allClear && (
+                <Attention icon={CheckCircle2} tone="green">
+                  Nothing to do right now. Every contract is working{readyIds ? ' and no call is ready to buy back' : ''}.
+                </Attention>
+              )}
+              {readyIds === null && positions.length > 0 && (
+                <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 10 }}>
+                  <span className="spinner" style={{ width: 12, height: 12 }} /> Checking which calls are ready to buy back…
+                </div>
+              )}
             </div>
           )}
 
@@ -274,16 +287,23 @@ export default function Dashboard() {
               <button className="btn-primary" onClick={() => setEditing('new')}><Plus size={16} strokeWidth={2} /> Add your first stock</button>
             </div>
           ) : (
-            portfolio.map(t => (
-              <TickerCard
-                key={t.ticker}
-                ticker={t}
-                positions={positions.filter(p => p.ticker === t.ticker)}
-                onScan={() => go(t.ticker, '/scanner')}
-                onPositions={() => go(t.ticker, '/positions')}
-                onEdit={() => setEditing(t)}
-              />
-            ))
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              {portfolio.map(t => (
+                <StockRow
+                  key={t.ticker}
+                  ticker={t}
+                  positions={positions.filter(p => p.ticker === t.ticker)}
+                  onScan={() => go(t.ticker, '/scanner')}
+                  onPositions={() => go(t.ticker, '/positions')}
+                  onEdit={() => setEditing(t)}
+                />
+              ))}
+              <div className="split-legend">
+                <span><i style={{ background: 'var(--accent-light)' }} /> Income <InfoTip text={TERMS.income} size={12} /></span>
+                <span><i style={{ background: 'var(--blue)' }} /> Balanced <InfoTip text={TERMS.balanced} size={12} /></span>
+                <span><i style={{ background: 'rgba(255,255,255,0.18)' }} /> Not sold</span>
+              </div>
+            </div>
           )}
         </>
       )}
