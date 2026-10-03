@@ -14,12 +14,12 @@ export default function ConfirmDialog({ title, children, confirmLabel, danger = 
 
   return (
     <Modal onDismiss={() => { if (!busy) onCancel() }}>
-      <div className="card" role="alertdialog" aria-modal="true" aria-label={title}
-        style={{ width: '100%', maxWidth: 420, padding: 26, animation: 'fadeUp 0.2s ease forwards' }}>
+      <div className="card dialog-card" role="alertdialog" aria-modal="true" aria-label={title}
+        style={{ maxWidth: 420 }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{title}</div>
         <div className="hint" style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.55 }}>{children}</div>
         {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 22 }}>
+        <div className="dialog-actions" style={{ marginTop: 22 }}>
           <button className="btn-secondary" onClick={onCancel} disabled={busy} autoFocus>Cancel</button>
           <button className={danger ? 'btn-danger' : 'btn-primary'} style={danger ? { padding: '10px 18px', fontSize: 14 } : undefined}
             onClick={confirm} disabled={busy}>

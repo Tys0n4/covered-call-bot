@@ -680,8 +680,29 @@ body { font-size: 15px; line-height: 1.5; }
 /* --- Dialogs ---------------------------------------------------------------- */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 100; padding: 16px; overflow-y: auto;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
   background: rgba(0, 0, 0, 0.65);
+}
+/* Centred when it fits; starts at the top (and scrolls) when it's taller than the screen */
+.modal-backdrop > * { margin: auto 0; }
+.dialog-card { width: 100%; padding: 28px; animation: fadeUp 0.2s ease forwards; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dialog-actions { display: flex; gap: 12px; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .modal-backdrop { padding: 10px; }
+  .dialog-card { padding: 20px; }
+  /* Buttons stay on screen at the bottom while the form scrolls */
+  .dialog-actions {
+    position: sticky; bottom: -10px; z-index: 1;
+    margin-left: -20px; margin-right: -20px; margin-bottom: -20px;
+    padding: 14px 20px 20px; background: var(--bg-card);
+    border-top: 1px solid var(--border); border-radius: 0 0 18px 18px;
+  }
+  .dialog-actions > button { flex: 1; justify-content: center; }
+}
+@media (max-width: 340px) {
+  .form-grid { grid-template-columns: 1fr; }
 }
 
 /* --- Keyboard focus: one accent ring everywhere ---------------------------- */

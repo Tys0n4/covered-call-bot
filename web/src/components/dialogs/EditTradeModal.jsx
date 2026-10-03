@@ -45,15 +45,15 @@ export default function EditTradeModal({ position: p, onDone, onCancel }) {
 
   return (
     <Modal onDismiss={() => { if (!busy) onCancel() }}>
-      <div className="card" role="dialog" aria-modal="true" aria-label="Edit trade"
-        style={{ width: '100%', maxWidth: 460, padding: 28, animation: 'fadeUp 0.2s ease forwards' }}>
+      <div className="card dialog-card" role="dialog" aria-modal="true" aria-label="Edit trade"
+        style={{ maxWidth: 460 }}>
         <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 4 }}>Edit trade</div>
         <div className="hint" style={{ marginBottom: 18 }}>
           {p.ticker} · {money(p.strike)} call · expires {fmtDate(p.expiry)} · {plural(p.contracts, 'contract')}.
           Fix what was recorded so your results are right.
         </div>
 
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="form-grid" style={{ gap: 12 }}>
           <MoneyInput id="edit-fill" label="Sold for (per share)" value={fill} onChange={setFill} error={fillError}
             hint={fillError ? null : `Premium ${money(premium)}`} />
           <MoneyInput id="edit-open-fees" label="Fees when sold" value={openFees} onChange={setOpenFees} />
@@ -65,7 +65,7 @@ export default function EditTradeModal({ position: p, onDone, onCancel }) {
         </div>
 
         {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 20 }}>
+        <div className="dialog-actions" style={{ marginTop: 20 }}>
           <button className="btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={submit} disabled={busy || !!fillError || !dirty}>
             {busy ? <><span className="spinner" /> Saving…</> : 'Save changes'}

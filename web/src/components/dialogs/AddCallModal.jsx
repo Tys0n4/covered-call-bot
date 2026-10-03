@@ -67,12 +67,12 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
 
   return (
     <Modal onDismiss={() => { if (!busy) onCancel() }}>
-      <div className="card" role="dialog" aria-modal="true" aria-label="Add a call"
-        style={{ width: '100%', maxWidth: 520, padding: 28, animation: 'fadeUp 0.2s ease forwards' }}>
+      <div className="card dialog-card" role="dialog" aria-modal="true" aria-label="Add a call"
+        style={{ maxWidth: 520 }}>
         <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 4 }}>Add a call</div>
         <div className="hint" style={{ marginBottom: 18 }}>Record a covered call you sold with your broker. It's checked against your shares.</div>
 
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="form-grid" style={{ gap: 12 }}>
           {field('add-ticker', 'Stock',
             <select id="add-ticker" className="input" value={ticker} onChange={e => setTicker(e.target.value)}>
               {tickers.map(t => <option key={t.ticker} value={t.ticker}>{t.ticker}</option>)}
@@ -105,7 +105,7 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
             : 'Add the stock on the Dashboard first.'}
         </div>
         {error && <div role="alert" style={{ marginTop: 10, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 20 }}>
+        <div className="dialog-actions" style={{ marginTop: 20 }}>
           <button className="btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={submit} disabled={busy || !holding}>
             {busy ? <><span className="spinner" /> Saving…</> : 'Add call'}
