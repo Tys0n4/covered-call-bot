@@ -233,7 +233,10 @@ export default function Dashboard() {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="hint">All-time total: {money(chartData[chartData.length - 1].total)} from {plural(chartData.length, 'call')}</div>
+                  <div className="hint">
+                    {money(chartData[chartData.length - 1].total)} collected from {plural(chartData.length, 'call')} all time ·{' '}
+                    <Link to="/performance" style={{ color: 'var(--accent-light)' }}>net results</Link>
+                  </div>
                 </>
               ) : (
                 <div className="hint" style={{ marginTop: 'auto', paddingTop: 12 }}>A trend line appears once you've sold 2 or more calls.</div>

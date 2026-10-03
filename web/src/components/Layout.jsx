@@ -1,13 +1,14 @@
 // src/components/Layout.jsx — sidebar on desktop; top bar + bottom tabs on phones
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, ScanLine, Briefcase, SlidersHorizontal, LogOut } from 'lucide-react'
+import { LayoutGrid, ScanLine, Briefcase, TrendingUp, SlidersHorizontal, LogOut } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
-// Three main steps of the workflow: see where you stand, find a trade, look after it.
+// The workflow: see where you stand, find a trade, look after it, see how it went.
 const NAV = [
   { to: '/',          label: 'Dashboard', hint: 'Overview',          icon: LayoutGrid },
   { to: '/scanner',   label: 'Scanner',   hint: 'Find a trade',      icon: ScanLine },
   { to: '/positions', label: 'Positions', hint: 'Manage your calls', icon: Briefcase },
+  { to: '/performance', label: 'Performance', hint: 'Your results',  icon: TrendingUp },
 ]
 const STRATEGY = { to: '/strategy', label: 'Strategy', hint: 'Your rules', icon: SlidersHorizontal }
 

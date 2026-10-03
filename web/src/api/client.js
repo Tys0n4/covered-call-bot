@@ -49,6 +49,7 @@ export const getAssignmentReview = ()        => api.get('/positions/assignment-r
 export const runScan         = (config)      => api.post('/scan', config)
 export const savePositions   = (data)        => api.post('/scan/save', data)
 export const getManagement   = (ticker)      => api.get('/manage',        { params: ticker ? { ticker } : {} })
+export const getPerformance  = ()            => api.get('/performance')
 
 // Your stock holdings (saved to the database by the API)
 export const addHolding      = (data)        => api.post('/portfolio', data)

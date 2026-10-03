@@ -43,7 +43,9 @@ def test_password_protects_every_data_route(client, monkeypatch):
     assert client.get("/health").status_code == 200
     assert client.get("/auth/status").json() == {"auth_required": True}
     for method, url in [("get", "/portfolio"), ("get", "/positions"), ("get", "/manage"),
-                        ("get", "/settings"), ("post", "/scan"), ("delete", "/portfolio/AAPL")]:
+                        ("get", "/settings"), ("get", "/performance"), ("get", "/positions/assignment-review"),
+                        ("post", "/positions/1/roll"), ("post", "/positions/1/assign"),
+                        ("post", "/scan"), ("delete", "/portfolio/AAPL")]:
         assert getattr(client, method)(url).status_code == 401, url
 
     assert client.post("/auth/login", json={"password": "nope"}).status_code == 401
