@@ -182,7 +182,7 @@ Open [http://localhost:5173](http://localhost:5173)
 
 The scanner fetches the full options chain for a ticker within a configurable DTE (days to expiry) window. Each candidate is filtered by:
 
-- Minimum strike % above current price (default 20% OTM)
+- Minimum strike % above current price (default and lowest allowed: 15% OTM)
 - Minimum premium, volume, and open interest
 - Maximum bid-ask spread as a % of mid price
 
@@ -216,7 +216,7 @@ Scanner defaults live in `backend/core/config.py`; your split, buyback target, r
 class ScannerConfig:
     min_dte: int = 20
     max_dte: int = 38
-    min_strike_pct_above_current: float = 0.20
+    min_strike_pct_above_current: float = 0.15
     min_premium: float = 0.05
     min_volume: int = 10
     min_open_interest: int = 50

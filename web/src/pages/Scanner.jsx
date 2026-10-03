@@ -15,7 +15,7 @@ import { moneyValue, splitFees } from '../lib/pnl'
 
 const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
-  min_strike_pct: 0.20, min_premium: 0.05,
+  min_strike_pct: 0.15, min_premium: 0.05,
   min_volume: 10, min_open_interest: 50,
   target_delta: 0.22,
   exclude_below_cost: false,
@@ -34,7 +34,7 @@ const STORAGE_KEY = 'scanner_config'
 const FIELDS = [
   { name: 'min_dte',           label: 'Shortest expiry (days)',      tip: TERMS.dte,         kind: 'int', min: 1,    max: 60 },
   { name: 'max_dte',           label: 'Longest expiry (days)',       tip: TERMS.dte,         kind: 'int', min: 1,    max: 120 },
-  { name: 'min_strike_pct',    label: 'Min. distance above price',   tip: TERMS.minStrike,   kind: 'dec', min: 0.05, max: 0.5, pct: true },
+  { name: 'min_strike_pct',    label: 'Min. distance above price',   tip: TERMS.minStrike,   kind: 'dec', min: 0.15, max: 0.5, pct: true },
   { name: 'min_premium',       label: 'Min. premium per share ($)',  tip: TERMS.minPremium,  kind: 'dec', min: 0.01, max: 1000 },
   { name: 'min_volume',        label: 'Min. daily volume',           tip: TERMS.volume,      kind: 'int', min: 1,    max: 1000000 },
   { name: 'min_open_interest', label: 'Min. open interest',          tip: TERMS.openInt,     kind: 'int', min: 1,    max: 1000000 },

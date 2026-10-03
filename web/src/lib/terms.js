@@ -15,7 +15,7 @@ export const TERMS = {
   available:  'Contracts you can still sell. Each contract covers 100 shares.',
   buyback:    'Money set aside to buy the option back early if it becomes cheap.',
   profit:     'How much of the original premium you have kept so far. Buying back near the target locks in the gain.',
-  minStrike:  'Only show strikes at least this far above today’s price. 20% on a $100 stock means strikes of $120 or more.',
+  minStrike:  'Only show strikes at least this far above today’s price (15% or more). 15% on a $100 stock means strikes of $115 or more.',
   minPremium: 'Ignore options paying less than this per share.',
   volume:     'Minimum contracts traded today. Higher means easier to trade.',
   openInt:    'Minimum open contracts. Higher means a more active, reliable market.',

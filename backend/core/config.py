@@ -1,6 +1,9 @@
 # config.py
 from dataclasses import dataclass
 
+# Strikes closer than this to the stock price are never considered
+MIN_STRIKE_PCT = 0.15
+
 
 @dataclass(frozen=True)
 class ScannerConfig:
@@ -9,7 +12,7 @@ class ScannerConfig:
     max_dte: int = 38
 
     # --- Strike constraints ---
-    min_strike_pct_above_current: float = 0.20   # 20% OTM minimum
+    min_strike_pct_above_current: float = MIN_STRIKE_PCT   # 15% OTM minimum
     max_strike_multiple: float = 1.40
     exclude_below_cost: bool = False             # skip strikes under your average cost per share
     avoid_earnings: bool = False                 # skip expiries on or after the next earnings date

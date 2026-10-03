@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from core.config import ScannerConfig, DEFAULT_CONFIG
+from core.config import MIN_STRIKE_PCT, ScannerConfig, DEFAULT_CONFIG
 from core.models import PortfolioPosition, ScanResult
 from core.market_data import get_current_price, get_events
 from core.options_data import get_call_options_in_dte_range
@@ -42,7 +42,7 @@ def _below_cost_warning(label: str, pick, avg_cost: float) -> str | None:
 def _target_delta_warning(scored: pd.DataFrame, config: ScannerConfig) -> str | None:
     """
     The balanced pick aims for target_delta. If no candidate gets within half
-    of it (e.g. a 20%-above-price minimum only leaves ~3% deltas), both picks
+    of it (e.g. a 15%-above-price minimum only leaves ~3% deltas), both picks
     end up as near-identical far strikes, so say why.
     """
     deltas = pd.to_numeric(scored.get("delta"), errors="coerce").dropna()
@@ -52,10 +52,14 @@ def _target_delta_warning(scored: pd.DataFrame, config: ScannerConfig) -> str | 
     closest = float(deltas.iloc[(deltas - target).abs().argmin()])
     if abs(closest - target) <= target * 0.5:
         return None
-    hint = (
-        f"lower \"Min. distance above price\" (now {config.min_strike_pct_above_current:.0%}) or the target"
-        if closest < target else "raise the target or the minimum distance"
-    )
+    distance = config.min_strike_pct_above_current
+    if closest > target:
+        hint = "raise the target or the minimum distance"
+    elif distance > MIN_STRIKE_PCT + 1e-9:
+        hint = f"lower \"Min. distance above price\" (now {distance:.0%}, lowest {MIN_STRIKE_PCT:.0%}) or the target"
+    else:
+        hint = "lower the target"
+
     return (
         f"No option comes close to your {target:.0%} balanced target for the chance of being called "
         f"(the closest is {closest:.0%}), so the balanced pick is just the best of what's left. "
