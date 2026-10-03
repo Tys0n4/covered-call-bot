@@ -15,7 +15,7 @@ import requests
 import yfinance as yf
 from dotenv import load_dotenv
 
-from core.cache import CLOSE_TTL, EVENTS_TTL, PRICE_TTL, cached
+from core.cache import CLOSE_TTL, EVENTS_TTL, HISTORY_TTL, PRICE_TTL, cached
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")   # backend/.env (local development)
 
@@ -124,3 +124,16 @@ def get_close_on(ticker_symbol: str, day: str) -> float | None:
             log.warning("Yahoo close for %s on %s failed: %s", ticker_symbol, day, e)
             return None
     return cached(("close", ticker_symbol, day), CLOSE_TTL, fetch)
+
+
+def get_recent_closes(ticker_symbol: str) -> list[float] | None:
+    """Daily closing prices for about the last three months, oldest first, or None."""
+    def fetch():
+        try:
+            hist = yf.Ticker(ticker_symbol).history(period="3mo")
+            closes = hist["Close"].dropna() if not hist.empty else []
+            return [float(c) for c in closes] or None
+        except Exception as e:
+            log.warning("Yahoo history for %s failed: %s", ticker_symbol, e)
+            return None
+    return cached(("history", ticker_symbol), HISTORY_TTL, fetch)

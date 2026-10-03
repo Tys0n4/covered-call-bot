@@ -40,7 +40,10 @@ def evaluate_open_positions(ticker: Optional[str] = None):
             current_option_price=r.current_option_price,
             profit_capture_pct=r.profit_capture_pct,
             should_buy_back=r.should_buy_back,
-            cost_to_close=round(r.current_option_price * r.contracts * 100, 2),
+            action=r.action,
+            days_left=r.days_left,
+            stock_price=r.stock_price,
+            cost_to_close=r.cost_to_close,
             allocation_type=pos.get("allocation_type", ""),
             opened_at=pos.get("opened_at", ""),
         )

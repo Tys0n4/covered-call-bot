@@ -12,6 +12,12 @@ worthless (EXPIRED) or exercised (ASSIGNED).
 
 A bought-back call with no buyback cost entered has an unknown result; it is
 counted separately and left out of the totals rather than guessed at.
+
+Compared with just holding the shares (no calls sold):
+  covered calls added = option net, minus the upside given up on assigned calls
+  upside given up     = (stock's close on the assignment day - strike) x shares
+A bought-back call's buyback cost already reflects any rise in the stock, and
+an expired call capped nothing, so only assignments give up upside.
 """
 from __future__ import annotations
 
@@ -71,14 +77,23 @@ def trade_result(p: dict, avg_costs: dict[str, float]) -> dict:
     }
 
 
-def compute_performance(positions: list[dict], avg_costs: dict[str, float], today: str) -> dict:
-    """Summary, month-by-month results and every finished trade (newest first)."""
+def compute_performance(positions: list[dict], avg_costs: dict[str, float], today: str,
+                        assignment_closes: dict[int, float] | None = None) -> dict:
+    """
+    Summary, month-by-month results and every finished trade (newest first).
+    assignment_closes: the stock's close on the day each assigned call (by id) was
+    exercised, for comparing with just holding; missing ones are counted as unknown.
+    """
+    assignment_closes = assignment_closes or {}
     rolled_ids = {p["rolled_from"] for p in positions if p.get("rolled_from")}
     trades = []
     for p in positions:
         if p["status"] in FINISHED and p.get("closed_at"):
             t = trade_result(p, avg_costs)
             t["rolled"] = p["id"] in rolled_ids
+            t["upside_given_up"] = None
+            if p["status"] == "ASSIGNED" and p["id"] in assignment_closes:
+                t["upside_given_up"] = round((assignment_closes[p["id"]] - float(p["strike"])) * int(p["contracts"]) * 100, 2)
             trades.append(t)
     trades.sort(key=lambda t: (t["closed_at"], t["id"]), reverse=True)
     known = [t for t in trades if t["option_net"] is not None]
@@ -110,6 +125,11 @@ def compute_performance(positions: list[dict], avg_costs: dict[str, float], toda
     capital_years = sum(t["capital"] * t["days_held"] / 365 for t in known)
     open_calls = [p for p in positions if p["status"] == "OPEN"]
 
+    # Compared with just holding the shares
+    assigned = [t for t in trades if t["status"] == "ASSIGNED"]
+    given_up = round(sum(t["upside_given_up"] for t in assigned if t["upside_given_up"] is not None), 2)
+    kept = sum(t["option_net"] for t in known)
+
     return {
         "summary": {
             "month": today[:7],                     # "this month", in your time zone (APP_TIMEZONE)
@@ -123,6 +143,9 @@ def compute_performance(positions: list[dict], avg_costs: dict[str, float], toda
             "missing_costs": len(trades) - len(known),
             "open_calls": len(open_calls),
             "open_premium": round(sum(_n(p["premium_total"]) - _n(p.get("open_fees")) for p in open_calls), 2),
+            "vs_holding": round(kept - given_up, 2),          # what covered calls added vs just holding
+            "upside_given_up": given_up,                      # on shares called away below their market price
+            "upside_unknown": sum(1 for t in assigned if t["upside_given_up"] is None),
         },
         "months": month_rows,
         "trades": trades,

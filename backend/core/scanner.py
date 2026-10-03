@@ -12,6 +12,8 @@ from core.options_data import get_call_options_in_dte_range
 from core.filters import filter_covered_calls
 from core.calculations import add_option_metrics
 from core.greeks import add_estimated_delta
+from core.fees import typical_fee_per_contract
+from core.volatility import premium_check
 from core.scoring import score_options, pick_best_options
 from core.market_hours import is_market_open
 
@@ -126,6 +128,7 @@ def scan_covered_calls(
     )
 
     events = get_events(position.ticker)
+    check = premium_check(position.ticker, raw_calls, current_price)
     if not filtered.empty:
         filtered = _add_event_flags(filtered, events)
         if config.avoid_earnings and events.get("earnings_date"):
@@ -154,7 +157,17 @@ def scan_covered_calls(
         warnings.append(f"{bad_quote_count} candidate(s) have STALE or BAD quotes — verify on broker.")
 
     enriched = add_estimated_delta(filtered, current_price, risk_free_rate=config.risk_free_rate)
-    enriched = add_option_metrics(enriched, current_price)
+    fee = typical_fee_per_contract()
+    enriched = add_option_metrics(enriched, current_price, fee_per_contract=fee)
+    # An option whose commission eats the whole premium isn't income
+    enriched = enriched[enriched["net_per_contract"] > 0]
+    if enriched.empty:
+        return ScanResult(
+            position=position, current_price=current_price, candidates=pd.DataFrame(),
+            income_pick=None, balanced_pick=None, quotes_live=quotes_live, events=events,
+            warnings=warnings + ["Every matching option pays less than the commission to sell it."],
+            fee_per_contract=fee, premium_check=check,
+        )
 
     missing_delta = enriched["delta"].isna().sum()
     if missing_delta > 0:
@@ -182,4 +195,6 @@ def scan_covered_calls(
         warnings=warnings,
         quotes_live=quotes_live,
         events=events,
+        fee_per_contract=fee,
+        premium_check=check,
     )

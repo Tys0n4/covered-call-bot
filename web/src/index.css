@@ -757,3 +757,16 @@ body { font-size: 15px; line-height: 1.5; }
 .switch input:checked + span::after { transform: translateX(16px); }
 .switch input:focus-visible + span { outline: 2px solid var(--accent-light); outline-offset: 2px; }
 .switch input:disabled + span { opacity: 0.5; }
+
+/* --- Scanner: premium check ------------------------------------------------- */
+.premium-check {
+  display: flex; gap: 10px; align-items: flex-start; margin: -8px 0 20px;
+  padding: 10px 14px; border-radius: 12px; font-size: 13.5px; line-height: 1.5;
+  border: 1px solid var(--border); color: var(--text-dim);
+}
+.premium-check strong { color: var(--text); }
+.premium-rich   { background: var(--green-dim); border-color: rgba(52,237,179,0.25); }
+.premium-rich svg:first-child { color: var(--green); }
+.premium-thin   { background: var(--amber-dim); border-color: rgba(245,165,36,0.25); }
+.premium-thin svg:first-child { color: var(--amber); }
+.premium-normal svg:first-child { color: var(--text-muted); }

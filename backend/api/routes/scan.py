@@ -32,6 +32,7 @@ def _row_to_candidate(row) -> Candidate:
         strike=float(row["strike"]),
         premium_price=float(row["premium_price"]),
         premium_per_contract=float(row["premium_per_contract"]),
+        net_per_contract=float(row.get("net_per_contract", row["premium_per_contract"])),
         annualized_yield_pct=float(row.get("annualized_yield_pct", 0)),
         upside_to_strike_pct=float(row["upside_to_strike_pct"]),
         delta=_num(row.get("delta")),
@@ -114,6 +115,8 @@ def run_scan(scan_config: ScanConfig):
         gross_premium  += p.premium_total
         buyback_budget += budget["buyback_total"]
 
+    est_fees = round(scan.fee_per_contract * sum(p.contracts for p in planned), 2)
+
     return ScanResponse(
         ticker=position.ticker,
         current_price=scan.current_price,
@@ -126,7 +129,10 @@ def run_scan(scan_config: ScanConfig):
         planned_positions=planned_positions,
         gross_premium=gross_premium,
         buyback_budget=buyback_budget,
-        net_premium=gross_premium - buyback_budget,
+        net_premium=gross_premium - buyback_budget - est_fees,
+        estimated_fees=est_fees,
+        fee_per_contract=scan.fee_per_contract,
+        premium_check=scan.premium_check,
         warnings=scan.warnings,
         quotes_live=scan.quotes_live,
         earnings_date=scan.events.get("earnings_date"),

@@ -21,6 +21,7 @@ const TIPS = {
   winRate:    'Share of finished calls that made money after buybacks and fees.',
   open:       'Premium from calls that are still open. It is not yours for sure until they finish: buying back costs some of it.',
   shareGains: 'Profit or loss on shares that were called away: (strike − your cost per share) × shares.',
+  vsHolding:  'What selling calls added compared with just holding the same shares: the premium you kept after buybacks and fees, minus any gain you gave up when shares were called away below their market price that day. Bought-back calls already include any rise in the stock in their buyback cost.',
 }
 
 const signed = (v, color = true) => (
@@ -61,6 +62,30 @@ function MonthlyChart({ months, goal }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+    </div>
+  )
+}
+
+// The honest bottom line: did selling calls beat just holding the shares?
+function Scorecard({ s }) {
+  const v = s.vs_holding
+  if (v == null) return null
+  const kept = s.realized_all_time
+  return (
+    <div className="card scorecard" style={{ marginBottom: 16 }}>
+      <div className="stat-label">Compared with just holding your shares <InfoTip text={TIPS.vsHolding} size={12} /></div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span className="stat-num" style={{ fontSize: 30, color: v >= 0 ? 'var(--green)' : 'var(--red)' }}>{v >= 0 ? '+' : '−'}{money(Math.abs(v))}</span>
+        <span style={{ fontSize: 15, color: 'var(--text-dim)' }}>{v >= 0 ? 'added' : 'lost'} by selling covered calls</span>
+      </div>
+      <div className="hint" style={{ marginTop: 6 }}>
+        {money(kept)} premium kept
+        {s.upside_given_up > 0 && <> − {money(s.upside_given_up)} of gains given up when shares were called away</>}
+        {s.upside_given_up < 0 && <> + {money(-s.upside_given_up)} from shares called away above their market price</>}
+        {!s.upside_given_up && ', and no gains given up on shares called away'}
+        .
+        {s.upside_unknown > 0 && <> {plural(s.upside_unknown, 'assignment')} without a stock price for that day {s.upside_unknown === 1 ? 'is' : 'are'} left out.</>}
+      </div>
     </div>
   )
 }
@@ -117,6 +142,8 @@ export default function Performance() {
               </span>
             </div>
           )}
+
+          <Scorecard s={s} />
 
           <div className={allThisYear ? 'grid-3' : 'grid-4'} style={{ marginBottom: 16 }}>
             <Stat label={`Kept in ${monthName}`} tip={TIPS.realized} value={signed(s.realized_this_month)}
