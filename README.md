@@ -40,7 +40,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 *Demo portfolio with simulated market data.*
 
-**Dashboard** — premium from open calls, contracts working, and what's ready to sell for each stock.
+**Dashboard** — a "Needs attention" list (calls to buy back, contracts to sell, calls expiring soon, your monthly goal), then one row per stock.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -48,7 +48,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ![Scanner](docs/screenshots/scanner.png)
 
-**Positions** — "Check prices" shows which calls are ready to buy back; each call can be closed, rolled, edited or deleted.
+**Positions** — every open call across your stocks, with live prices checked automatically to show which are ready to buy back. Roll and Close sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone.
 
 ![Positions](docs/screenshots/positions.png)
 
@@ -56,7 +56,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ![Roll a call](docs/screenshots/roll.png)
 
-**Performance** — what you kept after buybacks and fees, yearly return on capital, gains on shares called away, month by month.
+**Performance** — what you kept after buybacks and fees, yearly return on capital, gains on shares called away, and a month-by-month chart against your goal.
 
 ![Performance](docs/screenshots/performance.png)
 
