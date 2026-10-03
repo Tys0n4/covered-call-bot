@@ -9,6 +9,7 @@ import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
 import MoneyInput from '../components/MoneyInput'
 import ServerDown from '../components/ServerDown'
+import OptionsTable, { EventBadges } from '../components/OptionsTable'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
 import { moneyValue, splitFees } from '../lib/pnl'
@@ -126,14 +127,6 @@ function Fact({ label, tip, value, color }) {
 
 function BelowCostBadge() {
   return <span className="badge badge-amber" title={TERMS.belowCost}>Below your cost</span>
-}
-
-// Earnings / ex-dividend before expiry
-function EventBadges({ option }) {
-  return <>
-    {option.spans_earnings && <span className="badge badge-amber" title={TERMS.earnings}>Earnings</span>}
-    {option.spans_ex_dividend && <span className="badge badge-blue" title={TERMS.exDividend}>Ex-div</span>}
-  </>
 }
 
 function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCost }) {
@@ -490,39 +483,7 @@ export default function Scanner() {
               {result.candidates.length > 0 && (
                 <div className="card">
                   <Collapsible label={`See all ${plural(result.candidates.length, 'option')}`} openLabel="Hide the full list">
-                    <div className="table-scroll">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>Expires</th>
-                            <th className="num">Days left</th>
-                            <th className="num">Strike <InfoTip text={TERMS.strike} size={12} /></th>
-                            <th className="num">Premium <InfoTip text={TERMS.premium} size={12} /></th>
-                            <th className="num">Yearly return <InfoTip text={TERMS.yield} size={12} /></th>
-                            <th className="num">Room to rise <InfoTip text={TERMS.upside} size={12} /></th>
-                            <th className="num">Called chance <InfoTip text={TERMS.delta} size={12} /></th>
-                            <th className="num">Spread <InfoTip text={TERMS.spread} size={12} /></th>
-                            <th>Quote <InfoTip text={TERMS.quote} size={12} /></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {result.candidates.map((c, i) => (
-                            <tr key={i}>
-                              <td><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>{fmtDate(c.expiry)} <EventBadges option={c} /></span></td>
-                              <td className="mono num">{c.dte}</td>
-                              <td className="mono num" style={{ color: c.below_cost_basis ? 'var(--amber)' : 'var(--text)', fontWeight: 600 }}
-                                title={c.below_cost_basis ? 'Below your average cost' : undefined}>{c.below_cost_basis ? '▾ ' : ''}{money(c.strike)}</td>
-                              <td className="mono num" style={{ color: 'var(--accent-light)' }}>{money(c.premium_price)}</td>
-                              <td className="mono num">{pct(c.annualized_yield_pct)}</td>
-                              <td className="mono num">{pct(c.upside_to_strike_pct)}</td>
-                              <td className="mono num">{c.delta != null ? `${Math.round(c.delta * 100)}%` : 'n/a'}</td>
-                              <td className="mono num">{pct(c.spread_pct)}</td>
-                              <td><span className={`badge badge-${c.quote_quality === 'LIVE' ? 'green' : c.quote_quality === 'STALE' ? 'amber' : 'red'}`}>{c.quote_quality}</span></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <OptionsTable candidates={result.candidates} />
                   </Collapsible>
                 </div>
               )}

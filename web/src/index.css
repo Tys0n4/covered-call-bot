@@ -655,3 +655,21 @@ body { font-size: 15px; line-height: 1.5; }
   .attention-body { flex-basis: calc(100% - 44px); }
   .attention-row .link-btn { margin-left: 44px; }
 }
+
+/* --- Scanner: options table ------------------------------------------------ */
+.sort-btn {
+  display: inline-flex; align-items: center; gap: 4px; background: none; border: none; padding: 0;
+  font: inherit; color: inherit; cursor: pointer; white-space: nowrap;
+}
+.sort-btn:hover, .sort-btn.active { color: var(--text); }
+.sort-btn svg { opacity: 0.55; }
+.sort-btn.active svg { opacity: 1; color: var(--accent-light); }
+.options-table .group-row td {
+  background: rgba(255,255,255,0.03); padding-top: 10px; padding-bottom: 10px;
+  font-weight: 600; color: var(--text);
+}
+.options-table tr.group-row:hover td { background: rgba(255,255,255,0.03); }
+.event-mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  border-radius: 6px; font-size: 11px; font-weight: 700; vertical-align: middle;
+}
