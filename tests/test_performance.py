@@ -49,6 +49,7 @@ def test_summary_and_months():
     ]
     r = compute_performance(positions, {}, today="2026-10-03")
     s = r["summary"]
+    assert s["month"] == "2026-10"
     assert s["realized_this_month"] == 0          # -100 + 100
     assert s["realized_this_year"] == 200
     assert s["realized_all_time"] == 200

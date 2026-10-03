@@ -1,7 +1,8 @@
 // src/pages/Strategy.jsx — your covered call strategy, saved to the database
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, RotateCcw, Download } from 'lucide-react'
-import { getStrategy, saveStrategy, getPortfolio, getAllPositions, apiError } from '../api/client'
+import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformance, apiError } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import { DEFAULT_STRATEGY, splitContracts } from '../lib/strategy'
@@ -52,6 +53,7 @@ export default function Strategy() {
   const [positions, setPositions] = useState([])
   const [holdings, setHoldings] = useState([])
   const [exporting, setExporting] = useState(false)
+  const [perf, setPerf]         = useState(null)    // /performance summary + months
 
   useEffect(() => {
     getStrategy()
@@ -59,24 +61,21 @@ export default function Strategy() {
       .catch(e => setLoadError(apiError(e, 'Could not load your strategy. Is the API running?')))
     getAllPositions().then(r => setPositions(r.data)).catch(() => {})
     getPortfolio().then(r => setHoldings(r.data)).catch(() => {})
+    getPerformance().then(r => setPerf(r.data)).catch(() => {})
   }, [])
 
-  // Premium from calls sold this calendar month (open or closed)
-  const now = new Date()
-  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const monthName = now.toLocaleDateString('en-CA', { month: 'long' })
-  // Net premium this month = premium from calls sold this month
-  //                          − what you paid to buy calls back this month
-  const soldThisMonth   = positions.filter(p => (p.opened_at || '').startsWith(monthKey))
-  const closedThisMonth = positions.filter(p => p.status === 'CLOSED' && (p.closed_at || '').startsWith(monthKey))
-  const monthCollected  = soldThisMonth.reduce((sum, p) => sum + p.premium_total, 0)
-  const monthBuybacks   = closedThisMonth.reduce((sum, p) => sum + (p.close_cost || 0), 0)
-  const monthFees       = soldThisMonth.reduce((sum, p) => sum + (p.open_fees || 0), 0) +
-                          closedThisMonth.reduce((sum, p) => sum + (p.close_fees || 0), 0)
-  const monthMissingCost = closedThisMonth.filter(p => p.close_cost == null).length
-  const monthPremium = monthCollected - monthBuybacks - monthFees
-  const monthCount = soldThisMonth.length
-  const goalPct = draft?.monthly_goal > 0 ? Math.max(0, Math.round((monthPremium / draft.monthly_goal) * 100)) : 0
+  // The goal tracks what you KEPT this month: the same number as the
+  // Performance page (calls that finished this month, net of buybacks and
+  // fees). Calls sold this month that are still open count once they finish.
+  const monthKey  = perf?.summary.month
+  const monthName = monthKey
+    ? new Date(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)) - 1, 1).toLocaleDateString('en-CA', { month: 'long' })
+    : ''
+  const monthRow  = perf?.months.find(m => m.month === monthKey)
+  const monthKept = perf?.summary.realized_this_month ?? 0
+  const openSoldThisMonth = positions.filter(p => p.status === 'OPEN' && monthKey && (p.opened_at || '').startsWith(monthKey))
+  const openPremium = openSoldThisMonth.reduce((sum, p) => sum + p.premium_total - (p.open_fees || 0), 0)
+  const goalPct = draft?.monthly_goal > 0 ? Math.max(0, Math.round((monthKept / draft.monthly_goal) * 100)) : 0
 
   const exportHoldings = async () => {
     setExporting(true)
@@ -181,8 +180,8 @@ export default function Strategy() {
           </Section>
 
           {/* 4. Monthly goal */}
-          <Section title="Monthly income goal" hint="Set a premium target for each month and track it here. Leave at 0 to turn it off.">
-            <label className="label" htmlFor="goal">Premium you'd like to collect each month</label>
+          <Section title="Monthly income goal" hint="A target for the premium you keep each month, after buybacks and fees. Leave at 0 to turn it off.">
+            <label className="label" htmlFor="goal">Premium you'd like to keep each month</label>
             <div style={{ position: 'relative', maxWidth: 220, marginBottom: 16 }}>
               <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
               <input id="goal" className="input" type="text" inputMode="numeric" autoComplete="off" placeholder="0" maxLength={7}
@@ -195,22 +194,30 @@ export default function Strategy() {
                 }}
                 style={{ paddingLeft: 28 }} />
             </div>
-            {draft.monthly_goal > 0 && (
+            {draft.monthly_goal > 0 && perf && (
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8 }}>
-                  <span>{monthName} so far: <strong style={{ color: monthPremium < 0 ? 'var(--red)' : 'var(--green)' }}>{money(monthPremium)}</strong> of {money(draft.monthly_goal, 0)} <span className="muted">(net)</span></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, gap: 12 }}>
+                  <span>Kept in {monthName}: <strong style={{ color: monthKept < 0 ? 'var(--red)' : 'var(--green)' }}>{money(monthKept)}</strong> of {money(draft.monthly_goal, 0)}</span>
                   <span className="mono" style={{ color: goalPct >= 100 ? 'var(--green)' : 'var(--text-dim)' }}>{goalPct}%</span>
                 </div>
                 <div className="progress-bar">
                   <div className="progress-fill" style={{ width: `${Math.min(goalPct, 100)}%`, background: goalPct >= 100 ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : undefined }} />
                 </div>
                 <div className="hint" style={{ marginTop: 8 }}>
-                  {goalPct >= 100 ? 'Goal reached this month.' : `${money(Math.max(draft.monthly_goal - monthPremium, 0))} to go`}
-                  {' · '}{money(monthCollected)} collected from {plural(monthCount, 'call')}
-                  {monthBuybacks > 0 && <> − {money(monthBuybacks)} paid to buy back</>}
-                  {monthFees > 0 && <> − {money(monthFees)} fees</>}
-                  {monthMissingCost > 0 && <span style={{ color: 'var(--amber)' }}> · {plural(monthMissingCost, 'buyback')} closed without a cost entered</span>}
+                  {goalPct >= 100 ? 'Goal reached this month.' : `${money(Math.max(draft.monthly_goal - monthKept, 0))} to go`}
+                  {monthRow && <> · {plural(monthRow.calls, 'call')} finished: {money(monthRow.premium)} collected
+                    {monthRow.buybacks > 0 && <> − {money(monthRow.buybacks)} bought back</>}
+                    {monthRow.fees > 0 && <> − {money(monthRow.fees)} fees</>}</>}
+                  {monthRow?.missing_costs > 0 && (
+                    <span style={{ color: 'var(--amber)' }}> · {plural(monthRow.missing_costs, 'buyback')} without a cost (<Link to="/positions?tab=history&scope=all" style={{ color: 'inherit' }}>add it</Link>)</span>
+                  )}
                 </div>
+                {openPremium > 0 && (
+                  <div className="hint" style={{ marginTop: 4 }}>
+                    Plus {money(openPremium)} from {plural(openSoldThisMonth.length, 'call')} sold this month that {openSoldThisMonth.length === 1 ? 'is' : 'are'} still open. It counts once {openSoldThisMonth.length === 1 ? 'it finishes' : 'they finish'}.
+                  </div>
+                )}
+                <div className="hint" style={{ marginTop: 4 }}>Same numbers as the <Link to="/performance" style={{ color: 'var(--accent-light)' }}>Performance</Link> page.</div>
               </>
             )}
           </Section>
