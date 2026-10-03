@@ -11,11 +11,18 @@ import pandas as pd
 import pytest
 import yfinance
 
+import cache
 import db
 import scanner_service
 
 # Fake stock prices; any other ticker "doesn't exist"
 PRICES = {"NVDA": 100.0, "AAPL": 200.0}
+
+# Fake calendar events per ticker (Yahoo's Ticker.calendar shape); tests may change it
+EVENTS: dict[str, dict] = {}
+
+# Fake daily closes: (ticker, "YYYY-MM-DD") -> close
+CLOSES: dict[tuple[str, str], float] = {}
 
 
 def fake_expiries() -> tuple[str, ...]:
@@ -38,6 +45,19 @@ class FakeTicker:
     def options(self):
         return fake_expiries() if self.symbol in PRICES else ()
 
+    @property
+    def fast_info(self):
+        return {"last_price": PRICES.get(self.symbol)}
+
+    @property
+    def calendar(self):
+        return EVENTS.get(self.symbol, {})
+
+    def history(self, start=None, end=None, period=None):
+        if start and (self.symbol, start) in CLOSES:
+            return pd.DataFrame({"Close": [CLOSES[(self.symbol, start)]]})
+        return pd.DataFrame({"Close": []})
+
     def option_chain(self, expiry: str):
         price = PRICES[self.symbol]
         rows = []
@@ -53,6 +73,9 @@ class FakeTicker:
 
 @pytest.fixture(autouse=True)
 def fake_market(monkeypatch):
+    cache.clear()
+    EVENTS.clear()
+    CLOSES.clear()
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)
     monkeypatch.setattr(scanner_service, "get_current_price", lambda t: PRICES.get(t))
     monkeypatch.setattr(scanner_service, "is_market_open", lambda: True)
