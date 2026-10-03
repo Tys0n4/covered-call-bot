@@ -1,30 +1,37 @@
 // src/pages/Positions.jsx
 // One place for your covered calls: what's open, whether to buy back, and history.
-// (This page replaces the old separate Positions and Manage pages.)
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getAllPositions, getManagement, getAssignmentReview, deletePosition, apiError } from '../api/client'
+import {
+  apiError, assignPosition, deletePosition, getAllPositions, getAssignmentReview, getManagement, undoPosition,
+} from '../api/client'
 import { useTicker } from '../context/TickerContext'
-import { AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus } from 'lucide-react'
+import { useToast } from '../context/ToastContext'
+import {
+  AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck,
+} from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
+import ActionMenu from '../components/ActionMenu'
+import AssignmentReview from '../components/AssignmentReview'
 import CloseModal from '../components/dialogs/CloseModal'
 import RollModal from '../components/dialogs/RollModal'
-import AssignmentReview from '../components/AssignmentReview'
 import EditTradeModal from '../components/dialogs/EditTradeModal'
 import AddCallModal from '../components/dialogs/AddCallModal'
-import HistoryActions from '../components/HistoryActions'
+import ConfirmDialog from '../components/dialogs/ConfirmDialog'
 import { TERMS } from '../lib/terms'
 import { fmtDate, daysUntil, money, plural } from '../lib/format'
 import { optionNet, resultLabel, totalFees } from '../lib/pnl'
 
-function StatusPanel({ evaluation, checked }) {
-  if (!checked) {
-    return <div className="hint">Not checked yet. Use <strong style={{ color: 'var(--text-dim)' }}>Check prices</strong> to see if it's time to buy back.</div>
-  }
+const SCOPE_KEY = 'positions_scope'
+const loadScope = () => { try { return localStorage.getItem(SCOPE_KEY) === 'stock' ? 'stock' : 'all' } catch { return 'all' } }
+const saveScope = s => { try { localStorage.setItem(SCOPE_KEY, s) } catch { /* storage unavailable */ } }
+
+function StatusPanel({ evaluation, checking, failed }) {
   if (!evaluation) {
-    return <div className="hint">No price data for this call.</div>
+    if (checking) return <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 14, height: 14 }} /> Checking the price…</div>
+    return <div className="hint">{failed ? "Couldn't check prices." : 'No price data for this call.'}</div>
   }
   if (!(evaluation.current_option_price > 0)) {
     return (
@@ -55,32 +62,25 @@ function StatusPanel({ evaluation, checked }) {
         <div className="progress-fill" style={{ width: `${kept}%`, background: buy ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
-        {evaluation.current_option_price > 0
-          ? (buy
-              ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> and locks in the gain.</>
-              : <>It would cost {money(evaluation.cost_to_close)} to buy back today. Not worth it yet.</>)
-          : <span style={{ color: 'var(--amber)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><AlertTriangle size={13} strokeWidth={1.75} /> Couldn't get the current price. Check it with your broker.</span>}
+        {buy
+          ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> and locks in the gain.</>
+          : <>It would cost {money(evaluation.cost_to_close)} to buy back today. Not worth it yet.</>}
       </div>
     </div>
   )
 }
 
-function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit, onDeleted, onError }) {
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const remove = async () => {
-    setDeleting(true)
-    try { await deletePosition(p.id); onDeleted() }
-    catch (e) { onError(apiError(e, 'Could not delete this call. Is the API running?')); setDeleting(false); setConfirmDelete(false) }
-  }
+function PositionCard({ p, showTicker, evaluation, checking, failed, onClose, onRoll, onEdit, onDelete }) {
   const days = daysUntil(p.expiry)
   const buy = evaluation?.should_buy_back
   return (
     <div className="card" style={{ borderColor: buy ? 'rgba(52,237,179,0.35)' : undefined }}>
       <div className="grid-split">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+            {showTicker && <span className="ticker-tag">{p.ticker}</span>}
             <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span>
+            {p.rolled_from && <span className="badge badge-blue">Rolled</span>}
             <span className="hint">Opened {fmtDate(p.opened_at)}</span>
           </div>
           <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>
@@ -92,38 +92,23 @@ function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit, onDelet
             {plural(p.contracts, 'contract')} · sold at {money(p.entry_price)}/share · collected{' '}
             <strong style={{ color: 'var(--green)' }}>{money(p.premium_total)}</strong>
             {p.open_fees > 0 && <span className="muted"> ({money(p.open_fees)} fees)</span>}
-            {p.rolled_from && <span className="badge badge-blue" style={{ marginLeft: 8 }}>Rolled</span>}
           </div>
         </div>
         <div>
-          <StatusPanel evaluation={evaluation} checked={checked} />
-          {confirmDelete ? (
-            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 14, fontSize: 13, flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--text)' }}>Delete this call? Only for one entered by mistake.</span>
-              <button className="btn-danger" style={{ padding: '6px 12px' }} onClick={remove} disabled={deleting}>
-                {deleting ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Yes, delete'}
-              </button>
-              <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
-            </div>
-          ) : (
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
-            {!p.rolled_from && (
-              <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setConfirmDelete(true)}
-                title="Remove a call entered by mistake">
-                Delete
-              </button>
-            )}
-            <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => onEdit(p)}>
-              Edit
+          <StatusPanel evaluation={evaluation} checking={checking} failed={failed} />
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+            <button className="btn-secondary" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => onRoll(p)}>
+              <Repeat size={14} strokeWidth={2} /> Roll
             </button>
-            <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => onRoll(p)}>
-              <Repeat size={13} strokeWidth={2} /> Roll
+            <button className={buy ? 'btn-primary' : 'btn-secondary'} style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => onClose(p)}>
+              {buy ? 'Buy back & close' : 'Close'}
             </button>
-            <button className="link-btn" style={{ color: buy ? 'var(--green)' : 'var(--text-muted)', fontSize: 13 }} onClick={() => onClose(p)}>
-              {buy ? 'I bought it back: close' : 'Close'}
-            </button>
+            <ActionMenu label={`More actions for the ${money(p.strike)} ${p.ticker} call`} items={[
+              { label: 'Edit fill or fees', icon: Pencil, onClick: () => onEdit(p) },
+              // A rolled call is undone from History so the original call reopens
+              !p.rolled_from && { label: 'Delete (entered by mistake)', icon: Trash2, danger: true, onClick: () => onDelete(p) },
+            ]} />
           </div>
-          )}
         </div>
       </div>
     </div>
@@ -132,25 +117,22 @@ function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit, onDelet
 
 export default function Positions() {
   const { selected, tickers, selectTicker, refresh: refreshTickers } = useTicker()
+  const toast = useToast()
+  const [params] = useSearchParams()
+  const [tab, setTab]         = useState(params.get('tab') === 'history' ? 'CLOSED' : 'OPEN')
+  const [scope, setScopeState] = useState(() => params.get('scope') === 'all' ? 'all' : params.get('scope') === 'stock' ? 'stock' : loadScope())
+  const setScope = s => { setScopeState(s); saveScope(s) }
+
   const [reloadKey, setReloadKey] = useState(0)
   const [fetched, setFetched]     = useState({ key: null, positions: [] })
-  const [params] = useSearchParams()
-  const [tab, setTab]             = useState(params.get('tab') === 'history' ? 'CLOSED' : 'OPEN')
-  const [closingPos, setClosingPos] = useState(null)   // position in the Close dialog
-  const [rollingPos, setRollingPos] = useState(null)   // position in the Roll dialog
   const [review, setReview]       = useState([])       // expired calls that may have been assigned
-  const [evals, setEvals]         = useState(null)   // id -> evaluation, after "Check prices"
-  const [checking, setChecking]   = useState(false)
   const [error, setError]         = useState(null)
-  const [historyScope, setHistoryScope] = useState(params.get('scope') === 'all' ? 'all' : 'stock')   // 'stock' | 'all'
-  const [editingPos, setEditingPos] = useState(null)   // position in the Edit dialog
-  const [adding, setAdding]       = useState(false)    // Add a call dialog
 
-  // Price checks and errors belong to one stock; clear them when you switch
-  const [shownFor, setShownFor] = useState(selected)
-  if (shownFor !== selected) {
-    setShownFor(selected); setEvals(null); setError(null)
-  }
+  const [closingPos, setClosingPos] = useState(null)   // Close dialog
+  const [rollingPos, setRollingPos] = useState(null)   // Roll dialog
+  const [editingPos, setEditingPos] = useState(null)   // Edit dialog
+  const [adding, setAdding]       = useState(false)    // Add a call dialog
+  const [confirm, setConfirm]     = useState(null)     // { title, body, confirmLabel, danger, run }
 
   // Load every trade (all stocks, incl. ones you've removed); filter on screen
   const fetchKey = String(reloadKey)
@@ -170,51 +152,114 @@ export default function Positions() {
   const positions = fetched.positions
   const reload    = () => setReloadKey(k => k + 1)
 
-  const handleCheck = async () => {
-    setChecking(true); setError(null)
-    try {
-      const res = await getManagement(selected)
-      setEvals(Object.fromEntries(res.data.positions.map(e => [e.id, e])))
-    } catch (e) {
-      setError(apiError(e, 'Could not check prices. Is the API running?'))
-    } finally {
-      setChecking(false)
-    }
-  }
+  const inScope   = p => scope === 'all' || p.ticker === selected
+  const open      = positions.filter(p => p.status === 'OPEN' && inScope(p))
+  const finished  = positions.filter(p => p.status !== 'OPEN')
+  const closed    = finished.filter(inScope)
+    .slice().sort((a, b) => (b.closed_at || '').localeCompare(a.closed_at || '') || b.id - a.id)
+  const rolledIds = new Set(positions.filter(p => p.rolled_from).map(p => p.rolled_from))
+
+  // Prices are checked automatically whenever the open calls change; "Refresh" re-checks
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [prices, setPrices] = useState({ key: null, evals: null, failed: false })
+  const checkTicker = scope === 'all' ? null : selected
+  const priceKey = `${fetchKey}|${checkTicker}|${refreshKey}`
+  const hasOpen = !loading && open.length > 0
+  useEffect(() => {
+    if (!hasOpen) return
+    let cancelled = false
+    getManagement(checkTicker)
+      .then(r => { if (!cancelled) setPrices({ key: priceKey, evals: Object.fromEntries(r.data.positions.map(e => [e.id, e])), failed: false }) })
+      .catch(e => { if (!cancelled) { setPrices({ key: priceKey, evals: null, failed: true }); setError(apiError(e, 'Could not check prices. Is the API running?')) } })
+    return () => { cancelled = true }
+  }, [priceKey, hasOpen, checkTicker])
+  const checking = hasOpen && prices.key !== priceKey
+  const evals = prices.key === priceKey ? prices.evals : null
+  const readyCount = evals ? open.filter(p => evals[p.id]?.should_buy_back).length : 0
 
   // After any change to a call: reload trades and the portfolio (contracts in use, shares)
   const afterChange = () => {
-    setClosingPos(null); setRollingPos(null); setEditingPos(null); setEvals(null); setError(null)
+    setClosingPos(null); setRollingPos(null); setEditingPos(null); setConfirm(null); setError(null)
     reload()
-    refreshTickers().catch(() => {})   // contracts in use (and shares, after an assignment) changed
+    refreshTickers().catch(() => {})
   }
 
-  const open      = positions.filter(p => p.status === 'OPEN' && p.ticker === selected)
-  const finished  = positions.filter(p => p.status !== 'OPEN')
-  const rolledIds = new Set(positions.filter(p => p.rolled_from).map(p => p.rolled_from))
-  const closed    = (historyScope === 'all' ? finished : finished.filter(p => p.ticker === selected))
-    .slice().sort((a, b) => (b.closed_at || '').localeCompare(a.closed_at || '') || b.id - a.id)
-  const readyCount = evals ? open.filter(p => evals[p.id]?.should_buy_back).length : 0
+  // Toast with an Undo that reverses the change (backend /undo)
+  const undoable = (message, id) => toast(message, {
+    action: {
+      label: 'Undo',
+      onClick: async () => {
+        try { await undoPosition(id); afterChange(); toast('Undone') }
+        catch (e) { toast(apiError(e, "Couldn't undo that."), { tone: 'error' }) }
+      },
+    },
+  })
+
+  const askDelete = p => setConfirm({
+    title: 'Delete this call?',
+    body: <>Only for a call entered by mistake. The {money(p.strike)} {p.ticker} call ({plural(p.contracts, 'contract')}) is removed and its contracts are free again. This can't be undone.</>,
+    confirmLabel: 'Delete call', danger: true,
+    run: async () => { await deletePosition(p.id); afterChange(); toast(`${p.ticker} ${money(p.strike)} call deleted`) },
+  })
+  const askUndo = p => {
+    const rolled = rolledIds.has(p.id)
+    const what = p.status === 'ASSIGNED'
+      ? <>Your {(p.contracts * 100).toLocaleString()} {p.ticker} shares go back into your holding and the call returns to {p.expiry < new Date().toISOString().slice(0, 10) ? 'expired' : 'open'}.</>
+      : rolled ? <>The new call from this roll is removed and this {money(p.strike)} call is open again.</>
+        : <>The {money(p.strike)} {p.ticker} call is open again and its buyback cost is cleared.</>
+    setConfirm({
+      title: p.status === 'ASSIGNED' ? 'Undo the assignment?' : rolled ? 'Undo the roll?' : 'Reopen this call?',
+      body: what, confirmLabel: 'Undo',
+      run: async () => {
+        const r = await undoPosition(p.id)
+        afterChange()
+        toast(p.status === 'ASSIGNED' ? `Assignment undone: ${r.data.shares_returned.toLocaleString()} shares returned` : rolled ? 'Roll undone' : 'Call reopened')
+      },
+    })
+  }
+  const askCalledAway = p => setConfirm({
+    title: 'Were your shares called away?',
+    body: <>Records that the {money(p.strike)} {p.ticker} call was exercised: {(p.contracts * 100).toLocaleString()} shares leave your holding and you keep the full premium.</>,
+    confirmLabel: 'Record assignment',
+    run: async () => { await assignPosition(p.id); afterChange(); undoable(`Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`, p.id) },
+  })
+  // ConfirmDialog shows errors thrown by run()
+  const runConfirm = async () => {
+    try { await confirm.run() } catch (e) { throw new Error(apiError(e, 'Could not save that. Is the API running?'), { cause: e }) }
+  }
+
+  const sortedOpen = open.slice().sort((a, b) =>
+    (evals?.[b.id]?.should_buy_back ? 1 : 0) - (evals?.[a.id]?.should_buy_back ? 1 : 0)
+    || a.expiry.localeCompare(b.expiry) || a.ticker.localeCompare(b.ticker))
 
   return (
     <div className="fade-up">
-      {closingPos && <CloseModal position={closingPos} evaluation={evals?.[closingPos.id]}
-        onDone={afterChange} onCancel={() => setClosingPos(null)} />}
+      {closingPos && <CloseModal position={closingPos} evaluation={evals?.[closingPos.id]} onCancel={() => setClosingPos(null)}
+        onDone={how => {
+          const p = closingPos
+          afterChange()
+          undoable(how === 'assigned'
+            ? `Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`
+            : `${p.ticker} ${money(p.strike)} call closed`, p.id)
+        }} />}
+      {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]} onCancel={() => setRollingPos(null)}
+        onDone={() => { const p = rollingPos; afterChange(); undoable(`${p.ticker} call rolled`, p.id) }} />}
+      {editingPos && <EditTradeModal position={editingPos} onCancel={() => setEditingPos(null)}
+        onDone={() => { afterChange(); toast('Trade updated') }} />}
       {adding && <AddCallModal tickers={tickers} defaultTicker={selected} onCancel={() => setAdding(false)}
-        onDone={(t) => { setAdding(false); if (t !== selected) selectTicker(t); setTab('OPEN'); afterChange('added') }} />}
-      {editingPos && <EditTradeModal position={editingPos} onDone={() => afterChange('edited')} onCancel={() => setEditingPos(null)} />}
-      {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]}
-        onDone={() => afterChange('rolled')} onCancel={() => setRollingPos(null)} />}
+        onDone={t => { setAdding(false); if (t !== selected) selectTicker(t); setTab('OPEN'); afterChange(); toast(`${t} call added`) }} />}
+      {confirm && <ConfirmDialog title={confirm.title} confirmLabel={confirm.confirmLabel} danger={confirm.danger}
+        onConfirm={runConfirm} onCancel={() => setConfirm(null)}>{confirm.body}</ConfirmDialog>}
 
       <PageHeader
         title="Positions"
-        showTicker
-        subtitle={`Your covered calls${selected ? ` on ${selected}` : ''} and what to do with each one.`}
+        showTicker={scope === 'stock'}
+        subtitle={scope === 'all' ? 'Your covered calls on every stock and what to do with each one.' : `Your covered calls on ${selected || 'this stock'} and what to do with each one.`}
         actions={!fetched.failed && tickers.length > 0 && <>
           <button className="btn-secondary" onClick={() => setAdding(true)}><Plus size={15} strokeWidth={2} /> Add a call</button>
           {open.length > 0 && (
-            <button className="btn-primary" onClick={handleCheck} disabled={checking || !selected}>
-              {checking ? <><span className="spinner" /> Checking prices…</> : <><RefreshCw size={15} strokeWidth={2} /> Check prices</>}
+            <button className="btn-secondary" onClick={() => setRefreshKey(k => k + 1)} disabled={checking} title="Check the latest option prices again">
+              {checking ? <><span className="spinner" /> Checking…</> : <><RefreshCw size={15} strokeWidth={2} /> Refresh prices</>}
             </button>
           )}
         </>}
@@ -227,11 +272,23 @@ export default function Positions() {
       )}
 
       {fetched.failed && !loading ? <ServerDown onRetry={reload} /> : <>
-      <AssignmentReview items={review} onChanged={() => afterChange('assigned')} />
+      <AssignmentReview items={review} onChanged={(kind, p) => {
+        afterChange()
+        if (kind === 'assigned') undoable(`Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`, p.id)
+        else toast(`${p.ticker} ${money(p.strike)} call marked as not assigned`)
+      }} />
 
-      <div className="tabs" style={{ marginBottom: 20 }}>
-        <button className={`tab ${tab === 'OPEN' ? 'active' : ''}`} onClick={() => setTab('OPEN')}>Open ({open.length})</button>
-        <button className={`tab ${tab === 'CLOSED' ? 'active' : ''}`} onClick={() => setTab('CLOSED')}>History ({closed.length})</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div className="tabs">
+          <button className={`tab ${tab === 'OPEN' ? 'active' : ''}`} onClick={() => setTab('OPEN')}>Open ({open.length})</button>
+          <button className={`tab ${tab === 'CLOSED' ? 'active' : ''}`} onClick={() => setTab('CLOSED')}>History ({closed.length})</button>
+        </div>
+        <div className="tabs" role="group" aria-label="Which stocks">
+          <button className={`tab ${scope === 'all' ? 'active' : ''}`} onClick={() => setScope('all')}>All stocks</button>
+          <button className={`tab ${scope === 'stock' ? 'active' : ''}`} onClick={() => setScope('stock')} disabled={!selected}>
+            {selected || 'One stock'}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -240,8 +297,8 @@ export default function Positions() {
         open.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: 60 }}>
             <Layers size={28} strokeWidth={1.75} style={{ opacity: 0.4, marginBottom: 10 }} />
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No open calls{selected ? ` on ${selected}` : ''}</div>
-            <div className="hint" style={{ marginBottom: 18 }}>Run a scan to find one to sell.</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No open calls{scope === 'stock' && selected ? ` on ${selected}` : ''}</div>
+            <div className="hint" style={{ marginBottom: 18 }}>Run a scan to find one to sell, or add one you sold with your broker.</div>
             <Link to="/scanner"><button className="btn-primary"><ScanLine size={15} strokeWidth={2} /> Go to Scanner</button></Link>
           </div>
         ) : (
@@ -254,26 +311,17 @@ export default function Positions() {
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {open
-                .slice()
-                .sort((a, b) => (evals?.[b.id]?.should_buy_back ? 1 : 0) - (evals?.[a.id]?.should_buy_back ? 1 : 0))
-                .map(p => (
-                  <PositionCard key={p.id} p={p} evaluation={evals?.[p.id]} checked={!!evals} onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos}
-                    onDeleted={() => afterChange('deleted')} onError={setError} />
-                ))}
+              {sortedOpen.map(p => (
+                <PositionCard key={p.id} p={p} showTicker={scope === 'all'} evaluation={evals?.[p.id]} checking={checking} failed={prices.failed}
+                  onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
+              ))}
             </div>
           </>
         )
       ) : (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-            <div className="hint">
-              {historyScope === 'all' ? 'Every finished call, including stocks you no longer hold.' : `Finished calls on ${selected || 'this stock'}.`}
-            </div>
-            <div className="tabs" role="group" aria-label="Which stocks">
-              <button className={`tab ${historyScope === 'stock' ? 'active' : ''}`} onClick={() => setHistoryScope('stock')}>This stock</button>
-              <button className={`tab ${historyScope === 'all' ? 'active' : ''}`} onClick={() => setHistoryScope('all')}>All stocks ({finished.length})</button>
-            </div>
+          <div className="hint" style={{ marginBottom: 12 }}>
+            {scope === 'all' ? 'Every finished call, including stocks you no longer hold.' : `Finished calls on ${selected || 'this stock'}.`}
           </div>
           {closed.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No finished calls yet.</div>
@@ -282,7 +330,7 @@ export default function Positions() {
             <table className="data-table">
               <thead>
                 <tr>
-                  {historyScope === 'all' && <th>Stock</th>}
+                  {scope === 'all' && <th>Stock</th>}
                   <th>Type</th><th className="num">Strike</th><th>Expiry</th><th className="num">Contracts</th>
                   <th>Result</th><th className="num">Collected</th><th className="num">Paid to close</th><th className="num">Fees</th>
                   <th className="num">Net <InfoTip text={TERMS.net} size={12} /></th><th>Closed</th><th><span className="sr-only">Actions</span></th>
@@ -296,12 +344,12 @@ export default function Positions() {
                   const label = resultLabel(p, rolledIds)
                   return (
                     <tr key={p.id}>
-                      {historyScope === 'all' && <td className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>{p.ticker}</td>}
+                      {scope === 'all' && <td className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>{p.ticker}</td>}
                       <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span></td>
                       <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(p.strike)}</td>
-                      <td>{fmtDate(p.expiry)}</td>
+                      <td className="nowrap">{fmtDate(p.expiry)}</td>
                       <td className="mono num">{p.contracts}</td>
-                      <td>{label === 'Assigned' ? <span className="badge badge-amber">Assigned</span> : label}</td>
+                      <td className="nowrap">{label === 'Assigned' ? <span className="badge badge-amber">Assigned</span> : label}</td>
                       <td className="mono num" style={{ color: 'var(--green)' }}>{money(p.premium_total)}</td>
                       <td className="mono num">
                         {cost == null
@@ -310,9 +358,14 @@ export default function Positions() {
                       </td>
                       <td className="mono num">{fees ? money(fees) : <span className="muted">—</span>}</td>
                       <td className="mono num" style={{ color: net == null ? 'var(--text-muted)' : net >= 0 ? 'var(--text)' : 'var(--red)' }}>{net == null ? '—' : money(net)}</td>
-                      <td className="muted">{fmtDate(p.closed_at)}</td>
+                      <td className="muted nowrap">{fmtDate(p.closed_at)}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <HistoryActions p={p} rolled={rolledIds.has(p.id)} onEdit={setEditingPos} onChanged={afterChange} onError={setError} />
+                        <ActionMenu label={`Actions for the ${money(p.strike)} ${p.ticker} call`} items={[
+                          { label: 'Edit', icon: Pencil, onClick: () => setEditingPos(p) },
+                          p.status === 'EXPIRED'
+                            ? { label: 'Shares were called away', icon: UserCheck, onClick: () => askCalledAway(p) }
+                            : { label: rolledIds.has(p.id) ? 'Undo roll' : p.status === 'ASSIGNED' ? 'Undo assignment' : 'Reopen (undo close)', icon: Undo2, onClick: () => askUndo(p) },
+                        ]} />
                       </td>
                     </tr>
                   )
