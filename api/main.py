@@ -4,7 +4,7 @@ import logging
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import auth
-from api.routes import scan, positions, manage, settings, portfolio
+from api.routes import scan, positions, manage, settings, portfolio, performance
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -34,6 +34,7 @@ app.include_router(scan.router,      dependencies=protected)
 app.include_router(positions.router, dependencies=protected)
 app.include_router(manage.router,    dependencies=protected)
 app.include_router(settings.router,  dependencies=protected)
+app.include_router(performance.router, dependencies=protected)
 auth.warn_if_open()
 
 @app.get("/")

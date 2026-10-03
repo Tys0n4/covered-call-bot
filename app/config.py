@@ -12,6 +12,7 @@ class ScannerConfig:
     min_strike_pct_above_current: float = 0.20   # 20% OTM minimum
     max_strike_multiple: float = 1.40
     exclude_below_cost: bool = False             # skip strikes under your average cost per share
+    avoid_earnings: bool = False                 # skip expiries on or after the next earnings date
 
     # --- Quote quality ---
     min_premium: float = 0.10

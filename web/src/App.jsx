@@ -11,6 +11,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Scanner   = lazy(() => import('./pages/Scanner'))
 const Positions = lazy(() => import('./pages/Positions'))
 const Strategy  = lazy(() => import('./pages/Strategy'))
+const Performance = lazy(() => import('./pages/Performance'))
 
 const pageLoading = (
   <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><div className="spinner" style={{ width: 36, height: 36 }} /></div>
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/positions" element={<Positions />} />
             {/* Manage was merged into Positions; keep old links working */}
             <Route path="/manage"    element={<Navigate to="/positions" replace />} />
+            <Route path="/performance" element={<Performance />} />
             <Route path="/strategy"  element={<Strategy />}  />
             {/* Settings became Strategy; keep old links working */}
             <Route path="/settings"  element={<Navigate to="/strategy" replace />} />

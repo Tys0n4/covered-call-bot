@@ -50,10 +50,15 @@ positions = Table(
     Column("premium_source",  String(16), nullable=False, default="NONE"),
     Column("quote_quality",   String(16), nullable=False, default="BAD"),
     Column("allocation_type", String(16), nullable=False),
-    Column("status",          String(10), nullable=False, default="OPEN", index=True),
+    Column("status",          String(10), nullable=False, default="OPEN", index=True),  # OPEN, CLOSED, EXPIRED, ASSIGNED
     Column("opened_at",       String(10), nullable=False),
     Column("closed_at",       String(10), nullable=True),
     Column("close_cost",      Float,   nullable=True),   # what you paid to buy it back ($ total)
+    Column("open_fees",       Float,   nullable=True),   # commissions/fees when selling ($ total)
+    Column("close_fees",      Float,   nullable=True),   # commissions/fees when buying back ($ total)
+    Column("cost_basis",      Float,   nullable=True),   # your avg cost per share when the call was sold
+    Column("rolled_from",     Integer, nullable=True),   # id of the call this one replaced (a roll)
+    Column("assignment_reviewed", Integer, nullable=True),  # 1 = you confirmed whether it was assigned
 )
 
 
@@ -115,7 +120,10 @@ def _add_missing_columns(engine: Engine) -> None:
     create_all() makes missing tables but never changes existing ones, so add
     any column introduced after a table was first created (safe to re-run).
     """
-    added_later = {"positions": [positions.c.close_cost]}
+    added_later = {"positions": [
+        positions.c.close_cost, positions.c.open_fees, positions.c.close_fees,
+        positions.c.cost_basis, positions.c.rolled_from, positions.c.assignment_reviewed,
+    ]}
     insp = inspect(engine)
     for table_name, cols in added_later.items():
         existing = {c["name"] for c in insp.get_columns(table_name)}

@@ -1,11 +1,13 @@
 # scanner_service.py
 from __future__ import annotations
 
+from datetime import datetime
+
 import pandas as pd
 
 from config import ScannerConfig, DEFAULT_CONFIG
 from models import PortfolioPosition, ScanResult
-from market_data import get_current_price
+from market_data import get_current_price, get_events
 from options_data import get_call_options_in_dte_range
 from filters import filter_covered_calls
 from calculations import add_option_metrics
@@ -58,6 +60,39 @@ def _target_delta_warning(scored: pd.DataFrame, config: ScannerConfig) -> str | 
         f"No option comes close to your {target:.2f} balanced target delta (the closest is {closest:.2f}), "
         f"so the balanced pick is just the best of what's left. To get nearer the target, {hint}."
     )
+
+
+def _fmt_day(iso: str) -> str:
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    return f"{d:%b} {d.day}"
+
+
+def _add_event_flags(df: pd.DataFrame, events: dict) -> pd.DataFrame:
+    """Mark options whose expiry is on/after the next earnings or ex-dividend date."""
+    df = df.copy()
+    earnings, ex_div = events.get("earnings_date"), events.get("ex_dividend_date")
+    expiry = df["expiry"].astype(str)
+    df["spans_earnings"] = (expiry >= earnings) if earnings else False
+    df["spans_ex_dividend"] = (expiry >= ex_div) if ex_div else False
+    return df
+
+
+def _event_warnings(ticker: str, picks, events: dict) -> list[str]:
+    picks = [p for p in picks if p is not None]
+    out = []
+    if any(bool(p.get("spans_earnings")) for p in picks):
+        out.append(
+            f"{ticker} reports earnings on {_fmt_day(events['earnings_date'])}, before your pick's expiry. "
+            "The stock can jump on earnings, which raises the chance your shares are called away. "
+            "Turn on \"Skip expiries that span earnings\" to avoid it."
+        )
+    if any(bool(p.get("spans_ex_dividend")) for p in picks):
+        out.append(
+            f"{ticker} goes ex-dividend on {_fmt_day(events['ex_dividend_date'])}, before your pick's expiry. "
+            "If the stock climbs above your strike, the buyer may exercise early (the day before) "
+            "to collect the dividend."
+        )
+    return out
 
 
 def scan_covered_calls(
@@ -113,6 +148,18 @@ def scan_covered_calls(
         use_last_price=not quotes_live,
     )
 
+    events = get_events(position.ticker)
+    if not filtered.empty:
+        filtered = _add_event_flags(filtered, events)
+        if config.avoid_earnings and events.get("earnings_date"):
+            kept = filtered[~filtered["spans_earnings"]]
+            if kept.empty:
+                warnings.append(
+                    f"Every option in your expiry window is on or after {position.ticker}'s earnings "
+                    f"({_fmt_day(events['earnings_date'])}). Shorten the expiry window or allow earnings."
+                )
+            filtered = kept
+
     if filtered.empty:
         return ScanResult(
             position=position,
@@ -120,8 +167,9 @@ def scan_covered_calls(
             candidates=pd.DataFrame(),
             income_pick=None,
             balanced_pick=None,
-            warnings=["No candidates passed filters."],
+            warnings=warnings or ["No candidates passed filters."],
             quotes_live=quotes_live,
+            events=events,
         )
 
     bad_quote_count = (filtered["quote_quality"] != "LIVE").sum()
@@ -150,6 +198,7 @@ def scan_covered_calls(
         w = _below_cost_warning(label, pick, position.avg_cost)
         if w:
             warnings.append(w)
+    warnings.extend(_event_warnings(position.ticker, (income_pick, balanced_pick), events))
 
     return ScanResult(
         position=position,
@@ -159,4 +208,5 @@ def scan_covered_calls(
         balanced_pick=balanced_pick,
         warnings=warnings,
         quotes_live=quotes_live,
+        events=events,
     )

@@ -44,6 +44,8 @@ def _row_to_candidate(row) -> Candidate:
         income_score=_num(row.get("income_score")),
         balanced_score=_num(row.get("balanced_score")),
         below_cost_basis=bool(row.get("below_cost_basis", False)),
+        spans_earnings=bool(row.get("spans_earnings", False)),
+        spans_ex_dividend=bool(row.get("spans_ex_dividend", False)),
     )
 
 
@@ -71,6 +73,7 @@ def run_scan(scan_config: ScanConfig):
         min_open_interest=scan_config.min_open_interest,
         target_delta=scan_config.target_delta,
         exclude_below_cost=scan_config.exclude_below_cost,
+        avoid_earnings=scan_config.avoid_earnings,
     )
 
     scan = scan_covered_calls(position, config=config)
@@ -131,6 +134,8 @@ def run_scan(scan_config: ScanConfig):
         net_premium=gross_premium - buyback_budget,
         warnings=scan.warnings,
         quotes_live=scan.quotes_live,
+        earnings_date=scan.events.get("earnings_date"),
+        ex_dividend_date=scan.events.get("ex_dividend_date"),
         next_market_open=None if scan.quotes_live else next_market_open().isoformat(),
     )
 
@@ -150,8 +155,9 @@ def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_leng
             strike=t.strike,
             contracts=t.contracts,
             entry_price=t.entry_price,
-            premium_total=t.premium_total,
+            premium_total=t.premium,
             allocation_type=t.allocation_type,
+            fees=t.fees,
         )
         for t in trades
     ]

@@ -3,64 +3,18 @@
 // (This page replaces the old separate Positions and Manage pages.)
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAllPositions, getManagement, closePosition, apiError } from '../api/client'
+import { getAllPositions, getManagement, getAssignmentReview, apiError } from '../api/client'
 import { useTicker } from '../context/TickerContext'
-import { AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle } from 'lucide-react'
+import { AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
-import Modal from '../components/Modal'
 import ServerDown from '../components/ServerDown'
+import CloseModal from '../components/CloseModal'
+import RollModal from '../components/RollModal'
+import AssignmentReview from '../components/AssignmentReview'
 import { TERMS } from '../lib/terms'
 import { fmtDate, daysUntil, money, plural } from '../lib/format'
-
-// "12.5" style money input: digits and one dot
-const cleanMoney = raw => {
-  let t = raw.replace(/[^0-9.]/g, '')
-  const dot = t.indexOf('.')
-  if (dot !== -1) t = t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, '').slice(0, 2)
-  return t.replace(/^0+(?=\d)/, '')
-}
-
-function ConfirmModal({ position, evaluation, onConfirm, onCancel, loading, error }) {
-  // Pre-fill with the estimate from "Check prices" when there is one
-  const estimate = evaluation?.current_option_price > 0 ? evaluation.cost_to_close : null
-  const [costText, setCostText] = useState(estimate != null ? estimate.toFixed(2) : '')
-  const cost = costText === '' || costText === '.' ? null : Number(costText)
-  return (
-    <Modal onBackdrop={() => { if (!loading) onCancel() }}>
-      <div className="card" role="dialog" aria-modal="true" aria-label="Mark this call as closed" style={{ width: '100%', maxWidth: 440, padding: 28, border: '1px solid rgba(240,71,95,0.3)', animation: 'fadeUp 0.2s ease forwards' }}>
-        <AlertTriangle size={24} strokeWidth={1.75} color="var(--red)" style={{ marginBottom: 12 }} />
-        <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 8 }}>Mark this call as closed?</div>
-        <div style={{ color: 'var(--text-dim)', fontSize: 14, marginBottom: 24, lineHeight: 1.6 }}>
-          Do this after you've bought the option back with your broker. (Expired calls are closed for you automatically.)
-          <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', marginTop: 12 }}>
-            <div style={{ color: 'var(--text)', fontWeight: 700 }}>{position.ticker} · {money(position.strike)} call</div>
-            <div className="hint" style={{ marginTop: 4 }}>Expires {fmtDate(position.expiry)} · {plural(position.contracts, 'contract')} · {position.allocation_type}</div>
-          </div>
-          <label className="label" htmlFor="close-cost" style={{ marginTop: 16 }}>What did you pay to buy it back? (total)</label>
-          <div style={{ position: 'relative', maxWidth: 200 }}>
-            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
-            <input id="close-cost" className="input" type="text" inputMode="decimal" autoComplete="off" placeholder="0.00"
-              value={costText} onChange={e => setCostText(cleanMoney(e.target.value))} style={{ paddingLeft: 28 }} />
-          </div>
-          <div className="hint" style={{ marginTop: 6 }}>
-            {estimate != null ? `Filled in from the latest price check (${money(estimate)}). ` : ''}
-            Optional, but it keeps your monthly income goal accurate. Collected {money(position.premium_total)}
-            {cost != null ? <>, so you keep <strong style={{ color: 'var(--green)' }}>{money(position.premium_total - cost)}</strong></> : ''}.
-          </div>
-          {error && <div style={{ marginTop: 10, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-          <div style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>This can't be undone from the app.</div>
-        </div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-          <button className="btn-secondary" onClick={onCancel} disabled={loading}>Cancel</button>
-          <button className="btn-danger" onClick={() => onConfirm(cost)} disabled={loading} style={{ padding: '10px 20px' }}>
-            {loading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Yes, mark closed'}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
+import { optionNet, resultLabel, totalFees } from '../lib/pnl'
 
 function StatusPanel({ evaluation, checked }) {
   if (!checked) {
@@ -90,7 +44,7 @@ function StatusPanel({ evaluation, checked }) {
           ? <span className="badge badge-green" style={{ fontSize: 13 }}><CheckCircle2 size={14} strokeWidth={2} /> Buy back now</span>
           : <span className="badge badge-amber" style={{ fontSize: 13 }}><Clock3 size={14} strokeWidth={2} /> Keep holding</span>}
         <span className="fact-label" style={{ margin: 0 }}>
-          Premium kept <InfoTip text={TERMS.profit} size={12} align="right" />
+          Premium kept <InfoTip text={TERMS.profit} size={12} />
           <strong className="mono" style={{ color: buy ? 'var(--green)' : 'var(--text)', marginLeft: 4 }}>{evaluation.profit_capture_pct.toFixed(0)}%</strong>
         </span>
       </div>
@@ -108,7 +62,7 @@ function StatusPanel({ evaluation, checked }) {
   )
 }
 
-function PositionCard({ p, evaluation, checked, onClose }) {
+function PositionCard({ p, evaluation, checked, onClose, onRoll }) {
   const days = daysUntil(p.expiry)
   const buy = evaluation?.should_buy_back
   return (
@@ -127,13 +81,18 @@ function PositionCard({ p, evaluation, checked, onClose }) {
           <div style={{ fontSize: 14, color: 'var(--text-dim)' }}>
             {plural(p.contracts, 'contract')} · sold at {money(p.entry_price)}/share · collected{' '}
             <strong style={{ color: 'var(--green)' }}>{money(p.premium_total)}</strong>
+            {p.open_fees > 0 && <span className="muted"> ({money(p.open_fees)} fees)</span>}
+            {p.rolled_from && <span className="badge badge-blue" style={{ marginLeft: 8 }}>Rolled</span>}
           </div>
         </div>
         <div>
           <StatusPanel evaluation={evaluation} checked={checked} />
-          <div style={{ marginTop: 12, textAlign: 'right' }}>
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 18 }}>
+            <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => onRoll(p)}>
+              <Repeat size={13} strokeWidth={2} /> Roll
+            </button>
             <button className="link-btn" style={{ color: buy ? 'var(--green)' : 'var(--text-muted)', fontSize: 13 }} onClick={() => onClose(p)}>
-              {buy ? 'I bought it back: mark closed' : 'Mark as closed'}
+              {buy ? 'I bought it back: close' : 'Close'}
             </button>
           </div>
         </div>
@@ -143,16 +102,16 @@ function PositionCard({ p, evaluation, checked, onClose }) {
 }
 
 export default function Positions() {
-  const { selected } = useTicker()
+  const { selected, refresh: refreshTickers } = useTicker()
   const [reloadKey, setReloadKey] = useState(0)
   const [fetched, setFetched]     = useState({ key: null, positions: [] })
   const [tab, setTab]             = useState('OPEN')
-  const [closing, setClosing]     = useState(false)
-  const [confirm, setConfirm]     = useState(null)
+  const [closingPos, setClosingPos] = useState(null)   // position in the Close dialog
+  const [rollingPos, setRollingPos] = useState(null)   // position in the Roll dialog
+  const [review, setReview]       = useState([])       // expired calls that may have been assigned
   const [evals, setEvals]         = useState(null)   // id -> evaluation, after "Check prices"
   const [checking, setChecking]   = useState(false)
   const [error, setError]         = useState(null)
-  const [closeError, setCloseError] = useState(null)
   const [historyScope, setHistoryScope] = useState('stock')   // 'stock' | 'all'
 
   // Price checks and errors belong to one stock; clear them when you switch
@@ -168,6 +127,10 @@ export default function Positions() {
     getAllPositions()
       .then(r => { if (!cancelled) setFetched({ key: fetchKey, positions: r.data }) })
       .catch(() => { if (!cancelled) setFetched({ key: fetchKey, positions: [], failed: true }) })
+    // Needs stock prices from Yahoo, so it loads separately and never blocks the page
+    getAssignmentReview()
+      .then(r => { if (!cancelled) setReview(r.data) })
+      .catch(() => {})
     return () => { cancelled = true }
   }, [fetchKey])
 
@@ -187,24 +150,26 @@ export default function Positions() {
     }
   }
 
-  const handleConfirm = async (cost) => {
-    if (!confirm) return
-    setClosing(true); setCloseError(null)
-    try { await closePosition(confirm.id, cost); setConfirm(null); reload() }
-    catch (e) { setCloseError(apiError(e, 'Could not close this call. Is the API running?')) }
-    finally { setClosing(false) }
+  // After a close, roll or assignment: reload trades; an assignment also changes your share count
+  const afterChange = (how) => {
+    setClosingPos(null); setRollingPos(null); setEvals(null)
+    reload()
+    if (how === 'assigned') refreshTickers().catch(() => {})
   }
 
   const open      = positions.filter(p => p.status === 'OPEN' && p.ticker === selected)
   const finished  = positions.filter(p => p.status !== 'OPEN')
+  const rolledIds = new Set(positions.filter(p => p.rolled_from).map(p => p.rolled_from))
   const closed    = (historyScope === 'all' ? finished : finished.filter(p => p.ticker === selected))
     .slice().sort((a, b) => (b.closed_at || '').localeCompare(a.closed_at || '') || b.id - a.id)
   const readyCount = evals ? open.filter(p => evals[p.id]?.should_buy_back).length : 0
 
   return (
     <div className="fade-up">
-      {confirm && <ConfirmModal position={confirm} evaluation={evals?.[confirm.id]} onConfirm={handleConfirm}
-        onCancel={() => { setConfirm(null); setCloseError(null) }} loading={closing} error={closeError} />}
+      {closingPos && <CloseModal position={closingPos} evaluation={evals?.[closingPos.id]}
+        onDone={afterChange} onCancel={() => setClosingPos(null)} />}
+      {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]}
+        onDone={() => afterChange('rolled')} onCancel={() => setRollingPos(null)} />}
 
       <PageHeader
         title="Positions"
@@ -224,6 +189,8 @@ export default function Positions() {
       )}
 
       {fetched.failed && !loading ? <ServerDown onRetry={reload} /> : <>
+      <AssignmentReview items={review} onChanged={() => afterChange('assigned')} />
+
       <div className="tabs" style={{ marginBottom: 20 }}>
         <button className={`tab ${tab === 'OPEN' ? 'active' : ''}`} onClick={() => setTab('OPEN')}>Open ({open.length})</button>
         <button className={`tab ${tab === 'CLOSED' ? 'active' : ''}`} onClick={() => setTab('CLOSED')}>History ({closed.length})</button>
@@ -253,7 +220,7 @@ export default function Positions() {
                 .slice()
                 .sort((a, b) => (evals?.[b.id]?.should_buy_back ? 1 : 0) - (evals?.[a.id]?.should_buy_back ? 1 : 0))
                 .map(p => (
-                  <PositionCard key={p.id} p={p} evaluation={evals?.[p.id]} checked={!!evals} onClose={setConfirm} />
+                  <PositionCard key={p.id} p={p} evaluation={evals?.[p.id]} checked={!!evals} onClose={setClosingPos} onRoll={setRollingPos} />
                 ))}
             </div>
           </>
@@ -278,12 +245,16 @@ export default function Positions() {
                 <tr>
                   {historyScope === 'all' && <th>Stock</th>}
                   <th>Type</th><th className="num">Strike</th><th>Expiry</th><th className="num">Contracts</th>
-                  <th>Result</th><th className="num">Collected</th><th className="num">Paid to close</th><th className="num">Kept</th><th>Closed</th>
+                  <th>Result</th><th className="num">Collected</th><th className="num">Paid to close</th><th className="num">Fees</th>
+                  <th className="num">Net <InfoTip text={TERMS.net} size={12} /></th><th>Closed</th>
                 </tr>
               </thead>
               <tbody>
                 {closed.map(p => {
                   const cost = p.close_cost
+                  const net = optionNet(p)
+                  const fees = totalFees(p)
+                  const label = resultLabel(p, rolledIds)
                   return (
                     <tr key={p.id}>
                       {historyScope === 'all' && <td className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>{p.ticker}</td>}
@@ -291,10 +262,11 @@ export default function Positions() {
                       <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(p.strike)}</td>
                       <td>{fmtDate(p.expiry)}</td>
                       <td className="mono num">{p.contracts}</td>
-                      <td>{p.status === 'EXPIRED' ? 'Expired' : 'Bought back'}</td>
+                      <td>{label === 'Assigned' ? <span className="badge badge-amber">Assigned</span> : label}</td>
                       <td className="mono num" style={{ color: 'var(--green)' }}>{money(p.premium_total)}</td>
                       <td className="mono num">{cost == null ? <span className="muted" title="Not entered when it was closed">—</span> : money(cost)}</td>
-                      <td className="mono num" style={{ color: cost == null ? 'var(--text-muted)' : 'var(--text)' }}>{cost == null ? '—' : money(p.premium_total - cost)}</td>
+                      <td className="mono num">{fees ? money(fees) : <span className="muted">—</span>}</td>
+                      <td className="mono num" style={{ color: net == null ? 'var(--text-muted)' : net >= 0 ? 'var(--text)' : 'var(--red)' }}>{net == null ? '—' : money(net)}</td>
                       <td className="muted">{fmtDate(p.closed_at)}</td>
                     </tr>
                   )

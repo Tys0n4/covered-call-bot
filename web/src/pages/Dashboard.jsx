@@ -1,9 +1,9 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getPortfolio, getAllPositions } from '../api/client'
+import { Link, useNavigate } from 'react-router-dom'
+import { getPortfolio, getAllPositions, getAssignmentReview } from '../api/client'
 import { useTicker } from '../context/TickerContext'
-import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus } from 'lucide-react'
+import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
@@ -123,6 +123,7 @@ export default function Dashboard() {
   const [loading,      setLoading]      = useState(true)
   const [loadFailed,   setLoadFailed]   = useState(false)
   const [reloadKey,    setReloadKey]    = useState(0)
+  const [reviewCount,  setReviewCount]  = useState(0)   // expired calls that may have been assigned
 
   useEffect(() => {
     let cancelled = false
@@ -137,6 +138,9 @@ export default function Dashboard() {
       })
       .catch(() => { if (!cancelled) setLoadFailed(true) })
       .finally(() => { if (!cancelled) setLoading(false) })
+    getAssignmentReview()
+      .then(r => { if (!cancelled) setReviewCount(r.data.length) })
+      .catch(() => {})
     return () => { cancelled = true }
   }, [reloadKey, applyPortfolio])
 
@@ -190,6 +194,16 @@ export default function Dashboard() {
         <ServerDown onRetry={retry} />
       ) : (
         <>
+          {reviewCount > 0 && (
+            <div className="callout callout-amber" style={{ marginBottom: 20, alignItems: 'center' }}>
+              <AlertTriangle size={18} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>
+                {reviewCount === 1 ? 'A call' : `${reviewCount} calls`} expired with the stock above the strike, so your shares may have been called away.
+              </span>
+              <Link to="/positions" className="link-btn" style={{ color: 'inherit' }}>Review <ArrowRight size={15} /></Link>
+            </div>
+          )}
+
           {/* Three numbers that matter */}
           <div className="grid-stats" style={{ marginBottom: 32 }}>
             <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -219,7 +233,10 @@ export default function Dashboard() {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="hint">All-time total: {money(chartData[chartData.length - 1].total)} from {plural(chartData.length, 'call')}</div>
+                  <div className="hint">
+                    {money(chartData[chartData.length - 1].total)} collected from {plural(chartData.length, 'call')} all time ·{' '}
+                    <Link to="/performance" style={{ color: 'var(--accent-light)' }}>net results</Link>
+                  </div>
                 </>
               ) : (
                 <div className="hint" style={{ marginTop: 'auto', paddingTop: 12 }}>A trend line appears once you've sold 2 or more calls.</div>

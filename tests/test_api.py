@@ -43,7 +43,9 @@ def test_password_protects_every_data_route(client, monkeypatch):
     assert client.get("/health").status_code == 200
     assert client.get("/auth/status").json() == {"auth_required": True}
     for method, url in [("get", "/portfolio"), ("get", "/positions"), ("get", "/manage"),
-                        ("get", "/settings"), ("post", "/scan"), ("delete", "/portfolio/AAPL")]:
+                        ("get", "/settings"), ("get", "/performance"), ("get", "/positions/assignment-review"),
+                        ("post", "/positions/1/roll"), ("post", "/positions/1/assign"),
+                        ("post", "/scan"), ("delete", "/portfolio/AAPL")]:
         assert getattr(client, method)(url).status_code == 401, url
 
     assert client.post("/auth/login", json={"password": "nope"}).status_code == 401
@@ -170,3 +172,40 @@ def test_scan_explains_unreachable_target_delta(client, nvda):
     assert any("No option comes close to your 0.22" in w for w in far["warnings"])
     near = client.post("/scan", json={"ticker": "NVDA", "min_strike_pct": 0.02}).json()
     assert not any("No option comes close" in w for w in near["warnings"])
+
+
+# --- Earnings / ex-dividend -----------------------------------------------------
+
+def _days(n):
+    return date.today() + timedelta(days=n)
+
+
+def test_scan_flags_expiries_spanning_earnings_and_ex_dividend(client, nvda):
+    from conftest import EVENTS
+    # Fake expiries are 7, 25, 32 and 60 days out; the 20-38 day window keeps 25 and 32
+    EVENTS["NVDA"] = {"Earnings Date": [_days(28)], "Ex-Dividend Date": _days(20)}
+    scan = client.post("/scan", json={"ticker": "NVDA"}).json()
+    assert scan["earnings_date"] == _days(28).isoformat()
+    assert scan["ex_dividend_date"] == _days(20).isoformat()
+    by_expiry = {c["expiry"]: c for c in scan["candidates"]}
+    assert by_expiry[_days(25).isoformat()]["spans_earnings"] is False
+    assert by_expiry[_days(32).isoformat()]["spans_earnings"] is True
+    assert all(c["spans_ex_dividend"] for c in scan["candidates"])
+    assert any("goes ex-dividend" in w for w in scan["warnings"])
+
+
+def test_scan_can_skip_expiries_spanning_earnings(client, nvda):
+    from conftest import EVENTS
+    EVENTS["NVDA"] = {"Earnings Date": [_days(28)]}
+    scan = client.post("/scan", json={"ticker": "NVDA", "avoid_earnings": True}).json()
+    assert scan["candidates"]
+    assert all(c["expiry"] == _days(25).isoformat() for c in scan["candidates"])
+    assert not any("reports earnings" in w for w in scan["warnings"])
+
+
+def test_scan_explains_when_every_expiry_spans_earnings(client, nvda):
+    from conftest import EVENTS
+    EVENTS["NVDA"] = {"Earnings Date": [_days(21)]}
+    scan = client.post("/scan", json={"ticker": "NVDA", "avoid_earnings": True}).json()
+    assert scan["candidates"] == []
+    assert any("Every option in your expiry window" in w for w in scan["warnings"])

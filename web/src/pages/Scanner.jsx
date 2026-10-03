@@ -7,9 +7,11 @@ import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, Ch
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
+import MoneyInput from '../components/MoneyInput'
 import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
+import { moneyValue, splitFees } from '../lib/pnl'
 
 const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
@@ -17,7 +19,14 @@ const DEFAULT_CONFIG = {
   min_volume: 10, min_open_interest: 50,
   target_delta: 0.22,
   exclude_below_cost: false,
+  avoid_earnings: false,
 }
+
+// On/off filters (checkboxes), saved alongside the number boxes
+const TOGGLES = [
+  { name: 'exclude_below_cost', label: 'Skip strikes below my average cost', tip: TERMS.belowCost },
+  { name: 'avoid_earnings',     label: 'Skip expiries that span earnings',  tip: TERMS.earnings },
+]
 
 const STORAGE_KEY = 'scanner_config'
 
@@ -45,18 +54,18 @@ function loadConfig() {
     if (saved[f.name] !== null && saved[f.name] !== '' && inRange(f, v)) config[f.name] = v
   }
   if (config.max_dte < config.min_dte) { config.min_dte = DEFAULT_CONFIG.min_dte; config.max_dte = DEFAULT_CONFIG.max_dte }
-  config.exclude_below_cost = saved.exclude_below_cost === true
+  for (const t of TOGGLES) config[t.name] = saved[t.name] === true
   return config
 }
 
 const toForm = config => ({
   ...Object.fromEntries(FIELDS.map(f => [f.name, String(config[f.name])])),
-  exclude_below_cost: !!config.exclude_below_cost,
+  ...Object.fromEntries(TOGGLES.map(t => [t.name, !!config[t.name]])),
 })
 
 // Turn the typed text into numbers, with a plain message for each problem
 function parseForm(form) {
-  const values = { exclude_below_cost: !!form.exclude_below_cost }, errors = {}
+  const values = Object.fromEntries(TOGGLES.map(t => [t.name, !!form[t.name]])), errors = {}
   for (const f of FIELDS) {
     const text = form[f.name]
     const v = Number(text)
@@ -111,6 +120,14 @@ function BelowCostBadge() {
   return <span className="badge badge-amber" title={TERMS.belowCost}>Below your cost</span>
 }
 
+// Earnings / ex-dividend before expiry
+function EventBadges({ option }) {
+  return <>
+    {option.spans_earnings && <span className="badge badge-amber" title={TERMS.earnings}>Earnings</span>}
+    {option.spans_ex_dividend && <span className="badge badge-blue" title={TERMS.exDividend}>Ex-div</span>}
+  </>
+}
+
 function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCost }) {
   if (!pick) return null
   const called = pick.delta != null ? `~${Math.round(pick.delta * 100)}%` : 'n/a'
@@ -125,6 +142,9 @@ function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCos
       <div style={{ fontSize: 20, fontWeight: 700, marginBottom: pick.below_cost_basis ? 8 : 16 }}>
         {money(pick.strike)} strike <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>· expires {fmtDate(pick.expiry)}</span>
       </div>
+      {(pick.spans_earnings || pick.spans_ex_dividend) && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}><EventBadges option={pick} /></div>
+      )}
       {pick.below_cost_basis && (
         <div className="hint" style={{ color: 'var(--amber)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <BelowCostBadge /> {money(avgCost - pick.strike)}/share loss on your shares if they're called away.
@@ -173,6 +193,8 @@ export default function Scanner() {
   const [error, setError]     = useState(null)
   const [saved, setSaved]     = useState(false)
   const [saving, setSaving]   = useState(false)
+  const [fills, setFills]     = useState([])   // per-share fill for each planned leg, as typed
+  const [feesText, setFees]   = useState('')   // total commissions for the trade, as typed
 
   const { values: config, errors: fieldErrors, valid: filtersValid } = parseForm(form)
 
@@ -196,6 +218,8 @@ export default function Scanner() {
     try {
       const res = await runScan({ ...config, ticker: selected })
       setResult(res.data)
+      setFills(res.data.planned_positions.map(p => p.entry_price.toFixed(2)))
+      setFees('')
     } catch (e) {
       setError(apiError(e, 'Scan failed. Is the API running?'))
     } finally {
@@ -203,12 +227,17 @@ export default function Scanner() {
     }
   }
 
+  const fillValues = fills.map(moneyValue)
+  const fillsValid = fillValues.length > 0 && fillValues.every(v => v != null && v > 0)
+
   const handleSave = async () => {
-    if (!result?.planned_positions) return
-    const payload = result.planned_positions.map(p => ({
+    if (!result?.planned_positions || !fillsValid) return
+    const legs = result.planned_positions
+    const fees = splitFees(moneyValue(feesText) || 0, legs.map(p => p.contracts))
+    const payload = legs.map((p, i) => ({
       ticker: result.ticker, expiry: p.expiry, strike: p.strike,
-      contracts: p.contracts, entry_price: p.entry_price,
-      premium_total: p.premium_total, allocation_type: p.allocation_type,
+      contracts: p.contracts, entry_price: fillValues[i],
+      allocation_type: p.allocation_type, fees: fees[i],
     }))
     setSaving(true)
     try { await savePositions(payload); setSaved(true) }
@@ -219,7 +248,8 @@ export default function Scanner() {
   const filterSummary = filtersValid
     ? `Calls expiring in ${config.min_dte}–${config.max_dte} days, with strikes at least ` +
       `${Math.round(config.min_strike_pct * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.` +
-      (config.exclude_below_cost ? ' Strikes below your average cost are skipped.' : '')
+      (config.exclude_below_cost ? ' Strikes below your average cost are skipped.' : '') +
+      (config.avoid_earnings ? ' Expiries that span earnings are skipped.' : '')
     : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
 
   const planned = result?.planned_positions || []
@@ -278,11 +308,15 @@ export default function Scanner() {
                   <Field key={f.name} field={f} text={form[f.name]} error={fieldErrors[f.name]} onChange={updateField} />
                 ))}
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, fontSize: 14, color: 'var(--text-dim)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.exclude_below_cost} onChange={e => updateField('exclude_below_cost', e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                Skip strikes below my average cost <InfoTip text={TERMS.belowCost} />
-              </label>
+              <div style={{ display: 'flex', gap: '10px 28px', flexWrap: 'wrap', marginTop: 18 }}>
+                {TOGGLES.map(t => (
+                  <label key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-dim)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={form[t.name]} onChange={e => updateField(t.name, e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+                    {t.label} <InfoTip text={t.tip} />
+                  </label>
+                ))}
+              </div>
             </Collapsible>
           </div>
 
@@ -306,6 +340,13 @@ export default function Scanner() {
                 <strong style={{ color: 'var(--text)' }}>{result.ticker}</strong> {lastPrices ? 'last traded at' : 'is trading at'}{' '}
                 <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.{' '}
                 {plural(result.candidates.length, 'option')} matched your filters.
+                {(result.earnings_date || result.ex_dividend_date) && (
+                  <span className="hint" style={{ display: 'block', marginTop: 4 }}>
+                    {result.earnings_date && <>Next earnings: <strong style={{ color: 'var(--text-dim)' }}>{fmtDate(result.earnings_date)}</strong></>}
+                    {result.earnings_date && result.ex_dividend_date && ' · '}
+                    {result.ex_dividend_date && <>Next ex-dividend: <strong style={{ color: 'var(--text-dim)' }}>{fmtDate(result.ex_dividend_date)}</strong></>}
+                  </span>
+                )}
               </div>
 
               {lastPrices && (
@@ -343,7 +384,7 @@ export default function Scanner() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div className="fact-label" style={{ justifyContent: 'flex-end' }}>{lastPrices ? 'Estimated at last prices' : 'You collect today'} <InfoTip text={TERMS.premium} size={12} align="right" /></div>
+                      <div className="fact-label" style={{ justifyContent: 'flex-end' }}>{lastPrices ? 'Estimated at last prices' : 'You collect today'} <InfoTip text={TERMS.premium} size={12} /></div>
                       <div className="stat-num" style={{ color: 'var(--green)', fontSize: 30 }}>{money(result.gross_premium)}</div>
                     </div>
                   </div>
@@ -358,11 +399,36 @@ export default function Scanner() {
                           </span>
                           <span className="hint">({money(p.entry_price)} per share)</span>
                           {p.below_cost_basis && <BelowCostBadge />}
+                          <EventBadges option={result.candidates.find(c => c.expiry === p.expiry && c.strike === p.strike) || {}} />
                         </div>
                         <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
                       </div>
                     ))}
                   </div>
+
+                  {!saved && !lastPrices && (
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 20 }}>
+                      <div className="fact-label" style={{ marginBottom: 10 }}>
+                        Your fills <InfoTip text={TERMS.fill} size={12} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                        {planned.map((p, i) => (
+                          <MoneyInput key={i} id={`fill-${i}`} label={`${p.allocation_type} · ${money(p.strike)} (per share)`}
+                            value={fills[i] ?? ''} onChange={v => setFills(f => f.map((x, j) => (j === i ? v : x)))}
+                            error={fillValues[i] == null || !(fillValues[i] > 0) ? 'Enter the price you sold at' : null} />
+                        ))}
+                        <MoneyInput id="fill-fees" label="Fees (total)" value={feesText} onChange={setFees} />
+                      </div>
+                      {fillsValid && (
+                        <div className="hint" style={{ marginTop: 8 }}>
+                          At these fills you collect{' '}
+                          <strong style={{ color: 'var(--green)' }}>
+                            {money(planned.reduce((s, p, i) => s + fillValues[i] * p.contracts * 100, 0) - (moneyValue(feesText) || 0))}
+                          </strong> after fees.
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                     <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)' }}>
@@ -378,7 +444,7 @@ export default function Scanner() {
                         <Link to="/positions" className="link-btn">View in Positions <ArrowRight size={15} /></Link>
                       </div>
                     ) : (
-                      <button className="btn-primary" onClick={handleSave} disabled={saving || lastPrices}
+                      <button className="btn-primary" onClick={handleSave} disabled={saving || lastPrices || !fillsValid}
                         title={lastPrices ? 'Available when the market is open and prices are live' : undefined}>
                         {saving ? <><span className="spinner" /> Saving…</> : 'Save this trade'}
                       </button>
@@ -434,7 +500,7 @@ export default function Scanner() {
                         <tbody>
                           {result.candidates.map((c, i) => (
                             <tr key={i}>
-                              <td>{fmtDate(c.expiry)}</td>
+                              <td><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>{fmtDate(c.expiry)} <EventBadges option={c} /></span></td>
                               <td className="mono num">{c.dte}</td>
                               <td className="mono num" style={{ color: c.below_cost_basis ? 'var(--amber)' : 'var(--text)', fontWeight: 600 }}
                                 title={c.below_cost_basis ? 'Below your average cost' : undefined}>{c.below_cost_basis ? '▾ ' : ''}{money(c.strike)}</td>

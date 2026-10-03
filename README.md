@@ -21,10 +21,15 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ## Features
 
-- **Live options scanning** — fetches real-time options chains via yfinance and Alpha Vantage
+- **Live options scanning** — options chains from Yahoo Finance (yfinance); stock price from Alpha Vantage with an automatic Yahoo fallback; NYSE holidays and early closes handled
 - **Candidate scoring** — ranks options by annualized yield, delta proximity, bid-ask spread quality, and volume
 - **Smart allocation** — maintains a 70/30 income/balanced contract split per ticker, accounting for already-open positions
 - **Position management** — tracks open covered call positions and evaluates buyback opportunities based on profit capture %
+- **Real fills and fees** — record the price your broker actually filled and your commissions when you sell, buy back or roll
+- **Rolling** — buy back a call and sell a new one on the same shares in one step
+- **Assignment tracking** — record shares called away (early or at expiry); calls that expired in the money are flagged for review
+- **Earnings and ex-dividend warnings** — options whose expiry spans the next earnings or ex-dividend date are flagged, with an optional filter to skip earnings
+- **Performance** — realized results by month, net after buybacks and fees, gains on shares called away, and yearly return on capital
 - **Multi-ticker support** — manage covered calls across multiple stock positions independently
 - **REST API** — FastAPI backend with auto-generated interactive docs at `/docs`
 - **React dashboard** — dark-themed UI with per-ticker breakdown cards, allocation bar, and candidate tables
@@ -185,6 +190,12 @@ The planner maintains a **70/30 income/balanced split** across the total availab
 
 The management module fetches the current ask price for each open position and calculates profit captured vs the original entry price. When profit capture reaches 80% (configurable), it flags the position for buyback.
 
+From the Positions page you can close a call (bought back, with cost and fees), roll it into a new one, or record that your shares were called away. When a call expires with the stock above the strike, the app asks you to confirm whether it was assigned instead of assuming.
+
+### Performance
+
+A call's result is realized when it finishes. Net = premium − fees − buyback cost. Assigned calls also record the gain or loss on the shares: (strike − your cost per share) × shares. Yearly return is net premium on the cost of the shares covered, weighted by how long each call was open. Bought-back calls with no cost entered are flagged and left out of the totals.
+
 ---
 
 ## Configuration
@@ -227,7 +238,12 @@ needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`)
 | POST   | `/positions`         | Add a trade by hand (checked against your shares) |
 | GET    | `/positions/all`     | All positions including closed                |
 | POST   | `/positions/close`   | Mark a position as closed                     |
+| POST   | `/positions/{id}/roll` | Buy back a call and sell a new one (one step) |
+| POST   | `/positions/{id}/assign` | Record shares called away (removes them from the holding) |
+| POST   | `/positions/{id}/not-assigned` | Confirm an in-the-money expiry was not assigned |
+| GET    | `/positions/assignment-review` | Expired calls that probably got assigned |
 | GET    | `/manage`            | Evaluate positions for buyback                |
+| GET    | `/performance`       | Realized results: summary, months, every finished call |
 | GET    | `/settings`          | Your saved strategy                           |
 | PUT    | `/settings`          | Save your strategy                            |
 
