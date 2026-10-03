@@ -44,7 +44,7 @@ function StatusPanel({ evaluation, checked }) {
           ? <span className="badge badge-green" style={{ fontSize: 13 }}><CheckCircle2 size={14} strokeWidth={2} /> Buy back now</span>
           : <span className="badge badge-amber" style={{ fontSize: 13 }}><Clock3 size={14} strokeWidth={2} /> Keep holding</span>}
         <span className="fact-label" style={{ margin: 0 }}>
-          Premium kept <InfoTip text={TERMS.profit} size={12} align="right" />
+          Premium kept <InfoTip text={TERMS.profit} size={12} />
           <strong className="mono" style={{ color: buy ? 'var(--green)' : 'var(--text)', marginLeft: 4 }}>{evaluation.profit_capture_pct.toFixed(0)}%</strong>
         </span>
       </div>
@@ -246,7 +246,7 @@ export default function Positions() {
                   {historyScope === 'all' && <th>Stock</th>}
                   <th>Type</th><th className="num">Strike</th><th>Expiry</th><th className="num">Contracts</th>
                   <th>Result</th><th className="num">Collected</th><th className="num">Paid to close</th><th className="num">Fees</th>
-                  <th className="num">Net <InfoTip text={TERMS.net} size={12} align="right" /></th><th>Closed</th>
+                  <th className="num">Net <InfoTip text={TERMS.net} size={12} /></th><th>Closed</th>
                 </tr>
               </thead>
               <tbody>

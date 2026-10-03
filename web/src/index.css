@@ -356,15 +356,14 @@ body { font-size: 15px; line-height: 1.5; }
 .infotip:hover, .infotip:focus { color: var(--accent-light); }
 .infotip:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; border-radius: 99px; }
 .infotip-bubble {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  z-index: 1000;              /* above dialogs (z-index 100) */
   width: max-content;
-  max-width: min(260px, 70vw);
+  max-width: min(260px, calc(100vw - 16px));
   background: var(--bg-card-2);
   border: 1px solid var(--border-hover);
   color: var(--text);
+  font-family: 'Syne', sans-serif;
   font-size: 12.5px;
   font-weight: 400;
   line-height: 1.45;
@@ -374,15 +373,15 @@ body { font-size: 15px; line-height: 1.5; }
   padding: 8px 11px;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  display: none;
   pointer-events: none;
-  z-index: 60;
   white-space: normal;
 }
-/* :focus (not only :focus-visible) so a tap opens it on touch screens */
-.infotip:hover .infotip-bubble,
-.infotip:focus .infotip-bubble { display: block; }
-.infotip.align-right .infotip-bubble { left: auto; right: -8px; transform: none; }
+.infotip.open { color: var(--accent-light); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 
 /* Text-style button (show more, adjust filters) */
 .link-btn {
