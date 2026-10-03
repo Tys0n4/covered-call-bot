@@ -8,7 +8,7 @@ import {
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import {
-  AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck,
+  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck,
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
@@ -50,24 +50,31 @@ function StatusPanel({ evaluation, checking, failed }) {
   }
   const kept = Math.max(0, Math.min(evaluation.profit_capture_pct, 100))
   const buy = evaluation.should_buy_back
+  const expire = evaluation.action === 'let_expire'
+  // How far the stock is under the strike, as a share of the strike
+  const below = evaluation.stock_price > 0 ? (1 - evaluation.stock_price / evaluation.strike) * 100 : null
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 }}>
         {buy
           ? <span className="badge badge-green" style={{ fontSize: 13 }}><CheckCircle2 size={14} strokeWidth={2} /> Buy back now</span>
-          : <span className="badge badge-amber" style={{ fontSize: 13 }}><Clock3 size={14} strokeWidth={2} /> Keep holding</span>}
+          : expire
+            ? <span className="badge badge-blue" style={{ fontSize: 13 }}><Hourglass size={14} strokeWidth={2} /> Let it expire</span>
+            : <span className="badge badge-amber" style={{ fontSize: 13 }}><Clock3 size={14} strokeWidth={2} /> Keep holding</span>}
         <span className="fact-label" style={{ margin: 0 }}>
           Premium kept <InfoTip text={TERMS.profit} size={12} />
-          <strong className="mono" style={{ color: buy ? 'var(--green)' : 'var(--text)', marginLeft: 4 }}>{evaluation.profit_capture_pct.toFixed(0)}%</strong>
+          <strong className="mono" style={{ color: buy || expire ? 'var(--green)' : 'var(--text)', marginLeft: 4 }}>{evaluation.profit_capture_pct.toFixed(0)}%</strong>
         </span>
       </div>
       <div className="progress-bar">
-        <div className="progress-fill" style={{ width: `${kept}%`, background: buy ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
+        <div className="progress-fill" style={{ width: `${kept}%`, background: buy || expire ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
         {buy
-          ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> and locks in the gain.</>
-          : <>It would cost {money(evaluation.cost_to_close)} to buy back today. Not worth it yet.</>}
+          ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> with fees and locks in the gain.</>
+          : expire
+            ? <>Expires in {plural(evaluation.days_left, 'day')} with the stock {below.toFixed(0)}% below the strike. Buying back would cost {money(evaluation.cost_to_close)} with fees for little benefit, so you can let it expire and keep that.</>
+            : <>It would cost {money(evaluation.cost_to_close)} with fees to buy back today. Not worth it yet.</>}
       </div>
     </div>
   )
@@ -179,6 +186,7 @@ export default function Positions() {
   const checking = hasOpen && prices.key !== priceKey
   const evals = prices.key === priceKey ? prices.evals : null
   const readyCount = evals ? open.filter(p => evals[p.id]?.should_buy_back).length : 0
+  const expireCount = evals ? open.filter(p => evals[p.id]?.action === 'let_expire').length : 0
 
   // After any change to a call: reload trades and the portfolio (contracts in use, shares)
   const afterChange = () => {
@@ -312,7 +320,9 @@ export default function Positions() {
               <div className={`callout ${readyCount > 0 ? 'callout-green' : 'callout-amber'}`} style={{ marginBottom: 16 }}>
                 {readyCount > 0
                   ? <><CheckCircle2 size={18} strokeWidth={1.75} /> {readyCount} of {plural(open.length, 'call')} {readyCount === 1 ? 'is' : 'are'} ready to buy back.</>
-                  : <><Clock3 size={18} strokeWidth={1.75} /> Nothing to do right now. Keep holding all {plural(open.length, 'call')}.</>}
+                  : expireCount > 0
+                    ? <><Clock3 size={18} strokeWidth={1.75} /> Nothing to buy back. {expireCount === open.length ? (expireCount === 1 ? 'It' : 'They') : plural(expireCount, 'call')} can be left to expire.</>
+                    : <><Clock3 size={18} strokeWidth={1.75} /> Nothing to do right now. Keep holding all {plural(open.length, 'call')}.</>}
               </div>
             )}
             {evals && <PriceStamp meta={prices.meta} style={{ marginTop: -6, marginBottom: 14 }} />}

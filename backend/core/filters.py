@@ -15,6 +15,8 @@ def filter_covered_calls(
     """
     Filter option candidates and attach premium/quote columns.
 
+    premium_price is the likely fill when selling (see sell_fill_share), not the midpoint.
+
     Filters applied:
       - Strike within [min_strike_price, stock_price * max_strike_multiple]
       - premium_price >= min_premium
@@ -45,6 +47,14 @@ def filter_covered_calls(
         df.loc[has_last, "quote_quality"] = "STALE"
         df.loc[has_last, "warning"] = "Last traded price (market closed)"
     df["mid"] = ((df["bid"].fillna(0) + df["ask"].fillna(0)) / 2).round(3)
+
+    # Price live quotes at a realistic sell fill, not the midpoint: a sell order
+    # usually fills between the bid and the mid, and the wider the spread, the
+    # more that costs you. (Last-traded prices, when the market is closed, stay as is.)
+    live = df["premium_source"] == "MID"
+    df.loc[live, "premium_price"] = (
+        df.loc[live, "bid"] + config.sell_fill_share * (df.loc[live, "ask"] - df.loc[live, "bid"])
+    ).round(3)
 
     # Spread % for filtering — (ask - bid) / mid
     df["spread_pct"] = (

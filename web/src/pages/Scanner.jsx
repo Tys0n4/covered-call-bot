@@ -151,7 +151,7 @@ function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCos
         </div>
       )}
       <div className="facts" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        <Fact label="You collect (1 contract)" tip={TERMS.premium} value={money(pick.premium_per_contract ?? pick.premium_price * 100)} color="var(--green)" />
+        <Fact label="You collect (1 contract)" tip={TERMS.premium} value={money(pick.net_per_contract ?? pick.premium_per_contract)} color="var(--green)" />
         <Fact label="Yearly return"            tip={TERMS.yield}   value={pct(pick.annualized_yield_pct)} />
         <Fact label="Room to rise"             tip={TERMS.upside}  value={pct(pick.upside_to_strike_pct)} />
         <Fact label="Chance of being called"   tip={TERMS.delta}   value={called} />
@@ -219,7 +219,8 @@ export default function Scanner() {
       const res = await runScan({ ...config, ticker: selected })
       setResult(res.data)
       setFills(res.data.planned_positions.map(p => p.entry_price.toFixed(2)))
-      setFees('')
+      // Your usual commission for these contracts; edit it if your broker charged something else
+      setFees(res.data.estimated_fees > 0 ? res.data.estimated_fees.toFixed(2) : '')
     } catch (e) {
       setError(apiError(e, 'Scan failed. Is the API running?'))
     } finally {
@@ -434,7 +435,7 @@ export default function Scanner() {
                     <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)' }}>
                       <Fact label="Premium"                tip={TERMS.premium} value={money(result.gross_premium)} />
                       <Fact label="Set aside for buyback"  tip={TERMS.buyback} value={money(result.buyback_budget)} />
-                      <Fact label="You keep"               value={money(result.net_premium)} color="var(--green)" />
+                      <Fact label="You keep"               tip={TERMS.keep} value={money(result.net_premium)} color="var(--green)" />
                     </div>
                     {saved ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

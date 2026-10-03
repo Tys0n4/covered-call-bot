@@ -9,7 +9,7 @@ import { fmtDate, money, pct, plural } from '../lib/format'
 
 const COLUMNS = [
   { key: 'strike',               label: 'Strike',        tip: TERMS.strike,  first: 'asc' },
-  { key: 'premium_price',        label: 'Premium',       tip: TERMS.premium, first: 'desc' },
+  { key: 'premium_price',        label: 'Premium',       tip: TERMS.fillPrice, first: 'desc' },
   { key: 'annualized_yield_pct', label: 'Yearly return', tip: TERMS.yield,   first: 'desc' },
   { key: 'upside_to_strike_pct', label: 'Room to rise',  tip: TERMS.upside,  first: 'desc' },
   { key: 'delta',                label: 'Called chance', tip: TERMS.delta,   first: 'asc' },

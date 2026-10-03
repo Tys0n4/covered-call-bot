@@ -42,6 +42,10 @@ class OpenCoveredCall:
     current_option_price: float = 0.0
     profit_capture_pct: float = 0.0
     should_buy_back: bool = False
+    action: str = "hold"            # "buy_back" | "let_expire" | "hold"
+    days_left: int | None = None    # calendar days until expiry
+    stock_price: float | None = None
+    cost_to_close: float = 0.0      # ask × shares + commission, in dollars
 
 
 @dataclass
@@ -54,3 +58,4 @@ class ScanResult:
     warnings: list[str] = field(default_factory=list)
     quotes_live: bool = True        # False = last traded prices (market closed / no live quotes)
     events: dict = field(default_factory=dict)   # upcoming earnings_date / ex_dividend_date
+    fee_per_contract: float = 0.0   # commission per contract used for the estimates

@@ -55,9 +55,10 @@ class Candidate(BaseModel):
     expiry: str
     dte: int
     strike: float
-    premium_price: float
+    premium_price: float                 # likely fill per share when selling (not the midpoint)
     premium_per_contract: float
-    annualized_yield_pct: float
+    net_per_contract: float              # per contract after your usual commission
+    annualized_yield_pct: float          # on the net premium
     upside_to_strike_pct: float
     delta: Optional[float]
     spread_pct: Optional[float]
@@ -94,7 +95,9 @@ class ScanResponse(BaseModel):
     planned_positions: list[AllocationItem]
     gross_premium: float
     buyback_budget: float
-    net_premium: float
+    net_premium: float                       # premium − buyback reserve − estimated fees
+    estimated_fees: float = 0.0              # commission for the planned contracts
+    fee_per_contract: float = 0.0            # your usual commission per contract
     warnings: list[str]
     quotes_live: bool = True                 # False = priced at last trades (market closed)
     earnings_date: Optional[str] = None      # next earnings date, if known
@@ -219,7 +222,10 @@ class EvaluatedPosition(BaseModel):
     current_option_price: float
     profit_capture_pct: float
     should_buy_back: bool
-    cost_to_close: float
+    action: Literal["buy_back", "let_expire", "hold"] = "hold"
+    days_left: Optional[int] = None
+    stock_price: Optional[float] = None
+    cost_to_close: float                     # to buy it back now, including your usual commission
     allocation_type: str
     opened_at: str
 

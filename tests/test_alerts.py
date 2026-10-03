@@ -113,3 +113,13 @@ def test_failed_send_is_retried_next_time(client, nvda, discord):
     assert client.post("/alerts/check").status_code == 502
     discord.status = 204
     assert client.post("/alerts/check").json()["sent"] == 1     # not marked as sent after the failure
+
+
+def test_no_alert_for_a_call_that_should_just_expire(client, nvda, discord):
+    _turn_on(client)
+    expiry = (date.today() + timedelta(days=3)).isoformat()   # 3 days left, strike 25% above the stock
+    r = client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=1, entry_price=20.0,
+                                            premium_total=2000, allocation_type="Income"))
+    assert r.status_code == 201, r.text
+    assert client.post("/alerts/check").json()["sent"] == 0
+    assert discord.sent == []

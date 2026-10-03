@@ -185,7 +185,9 @@ The scanner fetches the full options chain for a ticker within a configurable DT
 
 - Minimum strike % above current price (default and lowest allowed: 15% OTM)
 - Minimum premium, volume, and open interest
-- Maximum bid-ask spread as a % of mid price
+- Maximum bid-ask spread (35% of the mid price)
+
+Each option is priced at what you can realistically get when selling: a quarter of the way from the bid to the ask, not the midpoint, so wide spreads cost you in the ranking. Your usual commission per contract is subtracted (learned from the fees you've recorded, $0.65 until then), and yields are on what's left. Options that pay less than the commission are dropped.
 
 Surviving candidates are scored on two dimensions:
 
@@ -198,7 +200,13 @@ The planner maintains a **70/30 income/balanced split** across the total availab
 
 ### Management
 
-The management module fetches the current ask price for each open position and calculates profit captured vs the original entry price. When profit capture reaches 80% (configurable), it flags the position for buyback.
+The management module fetches the current ask price for each open position and calculates profit captured vs the original entry price. Each call gets one of three recommendations:
+
+- **Buy back now**: you've kept at least your target share of the premium (80% by default, set on the Strategy page).
+- **Let it expire**: past the target, but it expires within a week with the stock at least 5% below the strike. Buying back would mostly pay the spread and commission for very little risk removed.
+- **Keep holding**: not at the target yet.
+
+Buyback costs include your usual commission. Discord alerts are only sent for "Buy back now".
 
 From the Positions page you can close a call (bought back, with cost and fees), roll it into a new one, or record that your shares were called away. When a call expires with the stock above the strike, the app asks you to confirm whether it was assigned instead of assuming.
 

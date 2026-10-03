@@ -165,7 +165,7 @@ def check_and_alert(*, force: bool = False) -> dict:
 
     ready = [
         {**pos, "profit_capture_pct": r.profit_capture_pct, "current_price": r.current_option_price,
-         "cost_to_close": round(r.current_option_price * r.contracts * 100, 2)}
+         "cost_to_close": r.cost_to_close}
         for pos, r in zip(open_positions, results, strict=True)
         if r.should_buy_back and r.current_option_price > 0 and not pos.get("buyback_alerted_at")
     ]
