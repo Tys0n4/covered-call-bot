@@ -32,15 +32,37 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 - **Performance** — realized results by month, net after buybacks and fees, gains on shares called away, and yearly return on capital
 - **Multi-ticker support** — manage covered calls across multiple stock positions independently
 - **REST API** — FastAPI backend with auto-generated interactive docs at `/docs`
-- **React dashboard** — dark-themed UI with per-ticker breakdown cards, allocation bar, and candidate tables
+- **React app** — dark-themed, works on desktop and phones
 
 ---
 
 ## Screenshots
 
+*Demo portfolio with simulated market data.*
+
+**Dashboard** — premium from open calls, contracts working, and what's ready to sell for each stock.
+
 ![Dashboard](docs/screenshots/dashboard.png)
+
+**Scanner** — a recommended trade split into income and balanced calls, your actual fills, the two top picks, and warnings such as earnings before expiry.
+
 ![Scanner](docs/screenshots/scanner.png)
-![Positions](docs/screenshots/manage.png)
+
+**Positions** — "Check prices" shows which calls are ready to buy back; each call can be closed, rolled, edited or deleted.
+
+![Positions](docs/screenshots/positions.png)
+
+**Roll a call** — buy back and sell a new call in one step, with the net credit or debit worked out.
+
+![Roll a call](docs/screenshots/roll.png)
+
+**Performance** — what you kept after buybacks and fees, yearly return on capital, gains on shares called away, month by month.
+
+![Performance](docs/screenshots/performance.png)
+
+**On a phone**
+
+<img src="docs/screenshots/mobile.png" alt="Positions on a phone" width="320">
 
 ---
 
