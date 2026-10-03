@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { TickerProvider } from './context/TickerContext'
+import { ToastProvider } from './context/ToastContext'
 import Layout    from './components/Layout'
 
 // Each page loads on demand, so the first screen doesn't wait for the others
@@ -20,6 +21,7 @@ const pageLoading = (
 export default function App() {
   return (
     <BrowserRouter>
+      <ToastProvider>
       <AuthProvider>
       <TickerProvider>
         <Layout>
@@ -39,6 +41,7 @@ export default function App() {
         </Layout>
       </TickerProvider>
       </AuthProvider>
+      </ToastProvider>
     </BrowserRouter>
   )
 }

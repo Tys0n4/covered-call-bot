@@ -1,9 +1,10 @@
 // src/pages/Strategy.jsx — your covered call strategy, saved to the database
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, RotateCcw, Download } from 'lucide-react'
+import { AlertTriangle, RotateCcw, Download } from 'lucide-react'
 import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformance, apiError } from '../api/client'
 import PageHeader from '../components/PageHeader'
+import { useToast } from '../context/ToastContext'
 import InfoTip from '../components/InfoTip'
 import { DEFAULT_STRATEGY, splitContracts } from '../lib/strategy'
 import { TERMS } from '../lib/terms'
@@ -43,13 +44,13 @@ function Slider({ value, onChange, min, max, step, label }) {
 const goalToText = g => (g > 0 ? String(Math.round(g)) : '')
 
 export default function Strategy() {
+  const toast = useToast()
   const [saved, setSaved]       = useState(null)    // what the server has
   const [draft, setDraft]       = useState(null)    // what's on screen
   const [goalText, setGoalText] = useState('')      // goal box exactly as typed ('' = no goal)
   const [loadError, setLoadError] = useState(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
-  const [justSaved, setJustSaved] = useState(false)
   const [positions, setPositions] = useState([])
   const [holdings, setHoldings] = useState([])
   const [exporting, setExporting] = useState(false)
@@ -92,7 +93,7 @@ export default function Strategy() {
     } finally { setExporting(false) }
   }
 
-  const set = (k, v) => { setDraft(d => ({ ...d, [k]: v })); setJustSaved(false) }
+  const set = (k, v) => setDraft(d => ({ ...d, [k]: v }))
   const dirty = saved && draft && JSON.stringify(saved) !== JSON.stringify(draft)
 
   const handleSave = async () => {
@@ -100,7 +101,8 @@ export default function Strategy() {
     try {
       const r = await saveStrategy(draft)
       const s = { ...DEFAULT_STRATEGY, ...r.data }
-      setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)); setJustSaved(true)
+      setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal))
+      toast('Strategy saved. It applies to your next scan and price check.')
     } catch (e) {
       setError(apiError(e))
     } finally {
@@ -130,7 +132,7 @@ export default function Strategy() {
         subtitle="How the app splits your trades and when it tells you to buy back. Changes apply to every stock."
         actions={
           <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }}
-            onClick={() => { setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal })); setJustSaved(false) }}>
+            onClick={() => setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal }))}>
             <RotateCcw size={13} strokeWidth={1.75} /> Reset rules to defaults
           </button>
         }
@@ -250,11 +252,6 @@ export default function Strategy() {
           </button>
         </div>
       </div>
-      )}
-      {justSaved && !dirty && (
-        <div className="hint" style={{ marginTop: 16, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <CheckCircle2 size={15} /> Strategy saved
-        </div>
       )}
     </div>
   )

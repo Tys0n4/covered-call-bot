@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getPortfolio, getAllPositions, getAssignmentReview } from '../api/client'
 import { useTicker } from '../context/TickerContext'
+import { useToast } from '../context/ToastContext'
 import { ScanLine, LayoutGrid, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import PageHeader from '../components/PageHeader'
@@ -116,6 +117,7 @@ function TickerCard({ ticker: t, positions, onScan, onPositions, onEdit }) {
 export default function Dashboard() {
   const navigate = useNavigate()
   const { selectTicker, applyPortfolio } = useTicker()
+  const toast = useToast()
   const [editing,      setEditing]      = useState(null)   // null | 'new' | a holding row
   const [portfolio,    setPortfolio]    = useState([])
   const [positions,    setPositions]    = useState([])
@@ -169,6 +171,7 @@ export default function Dashboard() {
     setPortfolio(rows)
     applyPortfolio(rows)
     if (ticker && editing === 'new') selectTicker(ticker)
+    toast(editing === 'new' ? `${ticker} added` : ticker ? `${ticker} updated` : `${editing.ticker} removed`)
     setEditing(null)
   }
 
