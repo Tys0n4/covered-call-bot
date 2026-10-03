@@ -60,6 +60,7 @@ def test_summary_and_months():
     oct_, sep = r["months"]
     assert oct_["month"] == "2026-10" and oct_["calls"] == 3 and oct_["missing_costs"] == 1
     assert oct_["option_net"] == 0 and oct_["share_gains"] == 2000
+    assert oct_["premium"] == 900                  # 300 + 500 (cost unknown) + 100
     assert sep == {**sep, "month": "2026-09", "calls": 1, "option_net": 200}
 
     assert [t["id"] for t in r["trades"]] == [4, 2, 3, 1]

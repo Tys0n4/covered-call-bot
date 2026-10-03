@@ -100,6 +100,7 @@ export default function Performance() {
           </div>
 
           <div className="section-title" style={{ marginBottom: 12 }}>Month by month</div>
+          {s.missing_costs > 0 && <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>* Kept leaves out calls with no buyback cost entered.</div>}
           <div className="card" style={{ marginBottom: 24, padding: 8 }}>
             <div className="table-scroll">
               <table className="data-table">
@@ -114,11 +115,16 @@ export default function Performance() {
                   {data.months.map(m => (
                     <tr key={m.month}>
                       <td style={{ color: 'var(--text)', fontWeight: 600 }}>{fmtMonth(m.month)}</td>
-                      <td className="mono num">{m.calls}{m.missing_costs > 0 && <span className="muted" title="Buyback cost not entered"> ({m.missing_costs}?)</span>}</td>
+                      <td className="mono num">{m.calls}</td>
                       <td className="mono num" style={{ color: 'var(--green)' }}>{money(m.premium)}</td>
                       <td className="mono num">{money(m.buybacks)}</td>
                       <td className="mono num">{money(m.fees)}</td>
-                      <td className="mono num" style={{ fontWeight: 600 }}>{signed(m.option_net)}</td>
+                      <td className="mono num" style={{ fontWeight: 600 }}>
+                        {signed(m.option_net)}
+                        {m.missing_costs > 0 && (
+                          <span className="muted" style={{ fontWeight: 400 }} title={`Leaves out ${plural(m.missing_costs, 'call')} with no buyback cost entered`}> *</span>
+                        )}
+                      </td>
                       <td className="mono num">{m.share_gains ? signed(m.share_gains) : <span className="muted">—</span>}</td>
                     </tr>
                   ))}

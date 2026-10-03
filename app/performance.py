@@ -90,12 +90,12 @@ def compute_performance(positions: list[dict], avg_costs: dict[str, float], toda
     for t in trades:
         m = months[t["closed_at"][:7]]
         m["calls"] += 1
+        m["premium"] += t["premium"]
         m["fees"] += t["fees"]
         m["share_gains"] += t["share_gain"] or 0.0
-        if t["option_net"] is None:
+        if t["option_net"] is None:      # kept is unknown without the buyback cost
             m["missing_costs"] += 1
             continue
-        m["premium"] += t["premium"]
         m["buybacks"] += t["buyback"] or 0.0
         m["option_net"] += t["option_net"]
     month_rows = [
