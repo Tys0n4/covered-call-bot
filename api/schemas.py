@@ -181,6 +181,20 @@ class RollRequest(BaseModel):
         return _iso_date(v)
 
 
+class EditPositionRequest(BaseModel):
+    """Fix what was recorded for a trade. Send only the fields to change."""
+    entry_price: Optional[float] = Field(default=None, ge=0, le=1_000_000)   # fill per share
+    open_fees: Optional[float] = Field(default=None, ge=0, le=100_000)
+    close_cost: Optional[float] = Field(default=None, ge=0, le=10_000_000)   # $ paid to buy back
+    close_fees: Optional[float] = Field(default=None, ge=0, le=100_000)
+
+    @model_validator(mode="after")
+    def _something(self):
+        if not self.model_dump(exclude_none=True):
+            raise ValueError("send at least one field to change")
+        return self
+
+
 class AssignRequest(BaseModel):
     assigned_on: Optional[str] = None   # YYYY-MM-DD; default: expiry (if expired) or today
 

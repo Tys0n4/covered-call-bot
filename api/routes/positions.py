@@ -9,11 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 from assignment_service import calls_to_review
 from models import PlannedCall
 from positions_store import (
-    CoverageError, PositionError, assign_position, close_position, dismiss_assignment,
-    list_all_positions, load_open_positions, roll_position, save_positions,
+    CoverageError, PositionError, assign_position, close_position, dismiss_assignment, edit_position,
+    list_all_positions, load_open_positions, roll_position, save_positions, undo_position,
 )
 from api.schemas import (
-    AssignRequest, AssignmentReviewItem, ClosePositionRequest, PositionIn, PositionOut, RollRequest,
+    AssignRequest, AssignmentReviewItem, ClosePositionRequest, EditPositionRequest, PositionIn,
+    PositionOut, RollRequest,
 )
 
 router = APIRouter(prefix="/positions", tags=["positions"])
@@ -127,3 +128,30 @@ def mark_not_assigned(position_id: int):
     if not dismiss_assignment(position_id):
         raise HTTPException(status_code=404, detail=f"No expired position with id {position_id}.")
     return {"reviewed": position_id}
+
+
+@router.patch("/{position_id}", response_model=PositionOut)
+def edit_trade(position_id: int, request: EditPositionRequest):
+    """Fix a trade's fill price, fees or (for bought-back calls) buyback cost."""
+    try:
+        pos = edit_position(position_id, request.model_dump(exclude_none=True))
+    except PositionError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    if pos is None:
+        raise HTTPException(status_code=404, detail=f"No position with id {position_id}.")
+    return pos
+
+
+@router.post("/{position_id}/undo")
+def undo_trade(position_id: int):
+    """
+    Undo a buyback, roll or assignment: the call is open again (a roll's new
+    call is removed; an assignment's shares go back into your holding).
+    """
+    try:
+        result = undo_position(position_id)
+    except PositionError as e:   # includes CoverageError
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No position with id {position_id}.")
+    return result

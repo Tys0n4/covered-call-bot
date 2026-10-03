@@ -81,7 +81,9 @@ export default function Performance() {
           {s.missing_costs > 0 && (
             <div className="callout callout-amber" style={{ marginBottom: 20 }}>
               <AlertTriangle size={18} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-              <span>{plural(s.missing_costs, 'bought-back call')} {s.missing_costs === 1 ? 'has' : 'have'} no buyback cost entered, so {s.missing_costs === 1 ? "it's" : "they're"} left out of these totals.</span>
+              <span>{plural(s.missing_costs, 'bought-back call')} {s.missing_costs === 1 ? 'has' : 'have'} no buyback cost entered, so {s.missing_costs === 1 ? "it's" : "they're"} left out of these totals.{' '}
+                <Link to="/positions?tab=history&scope=all" style={{ color: 'inherit', fontWeight: 700 }}>Add the cost{s.missing_costs === 1 ? '' : 's'}</Link>
+              </span>
             </div>
           )}
 

@@ -7,7 +7,7 @@ Stores your covered call positions (open and closed) in the database
 from __future__ import annotations
 from collections import defaultdict
 
-from sqlalchemy import and_, func, insert, or_, select, update
+from sqlalchemy import and_, delete, func, insert, or_, select, update
 from sqlalchemy.engine import Connection
 
 from clock import local_today
@@ -296,6 +296,107 @@ def expired_unreviewed(since: str) -> list[dict]:
         ))
         .order_by(positions.c.expiry, positions.c.id)
     )
+
+
+EDITABLE = ("entry_price", "open_fees", "close_cost", "close_fees")
+
+
+def edit_position(position_id: int, changes: dict) -> dict | None:
+    """
+    Fix what was recorded for a trade: the fill price (premium is recomputed),
+    fees, and for bought-back calls the buyback cost. Returns the updated
+    position, or None if there's no position with that id.
+    """
+    changes = {k: v for k, v in changes.items() if k in EDITABLE}
+    with get_engine().begin() as conn:
+        pos = conn.execute(select(positions).where(positions.c.id == position_id).with_for_update()).mappings().first()
+        if pos is None:
+            return None
+        if ({"close_cost", "close_fees"} & changes.keys()) and pos["status"] != "CLOSED":
+            raise PositionError("Only bought-back calls have a buyback cost and closing fees.")
+        values = {k: _money(v) for k, v in changes.items()}
+        if "entry_price" in changes:
+            values["entry_price"] = round(float(changes["entry_price"]), 4)
+            values["premium_total"] = round(float(changes["entry_price"]) * int(pos["contracts"]) * 100, 2)
+        if values:
+            conn.execute(update(positions).where(positions.c.id == position_id).values(**values))
+        return dict(conn.execute(select(positions).where(positions.c.id == position_id)).mappings().first())
+
+
+def undo_position(position_id: int) -> dict | None:
+    """
+    Undo how a call was finished:
+      - bought back (CLOSED): it's open again; if it was rolled, the new call
+        from the roll is removed (it must still be open)
+      - ASSIGNED: the shares go back into your holding and the call returns
+        to OPEN (or EXPIRED, if its expiry has passed)
+    Expired calls are closed automatically, so there's nothing to undo.
+    Returns what changed, or None if there's no position with that id.
+    """
+    with get_engine().begin() as conn:
+        pos = conn.execute(select(positions).where(positions.c.id == position_id).with_for_update()).mappings().first()
+        if pos is None:
+            return None
+        ticker, contracts = pos["ticker"], int(pos["contracts"])
+
+        if pos["status"] == "OPEN":
+            raise PositionError("This call is still open, so there's nothing to undo.")
+        if pos["status"] == "EXPIRED":
+            raise PositionError(
+                "Expired calls are closed automatically. If your shares were called away, "
+                "record that instead."
+            )
+
+        holding = conn.execute(
+            select(holdings.c.shares, holdings.c.avg_cost).where(holdings.c.ticker == ticker).with_for_update()
+        ).first()
+
+        if pos["status"] == "ASSIGNED":
+            returned = contracts * 100
+            if holding is None:
+                conn.execute(insert(holdings).values(ticker=ticker, shares=returned, avg_cost=float(pos["cost_basis"] or 0)))
+            else:
+                conn.execute(update(holdings).where(holdings.c.ticker == ticker).values(shares=int(holding.shares) + returned))
+            if has_expired(pos["expiry"]):
+                values = dict(status="EXPIRED", closed_at=pos["expiry"], close_cost=0.0, assignment_reviewed=1)
+            else:
+                values = dict(status="OPEN", closed_at=None, close_cost=None, close_fees=None, assignment_reviewed=None)
+            conn.execute(update(positions).where(positions.c.id == position_id).values(**values))
+            return {"undone": position_id, "status": values["status"], "removed": None, "shares_returned": returned}
+
+        # CLOSED (bought back, possibly rolled)
+        child = conn.execute(select(positions).where(positions.c.rolled_from == position_id)).mappings().first()
+        if child is not None and child["status"] != "OPEN":
+            raise PositionError(
+                f"This call was rolled into the ${float(child['strike']):,.2f} call, which has since finished. "
+                "Undo that one first."
+            )
+        if holding is None:
+            raise CoverageError(f"{ticker} is no longer in your portfolio. Add it back before reopening this call.")
+        other_open = conn.execute(
+            select(func.coalesce(func.sum(positions.c.contracts), 0)).where(and_(
+                positions.c.ticker == ticker, positions.c.status == "OPEN",
+                positions.c.id != (child["id"] if child is not None else -1),
+            ))
+        ).scalar()
+        total = int(holding.shares) // 100
+        if int(other_open) + contracts > total:
+            raise CoverageError(
+                f"Reopening this call would need {contracts} more contract(s), but your {int(holding.shares):,} "
+                f"{ticker} shares cover {total} and {int(other_open)} already have calls sold."
+            )
+        if child is not None:
+            conn.execute(delete(positions).where(positions.c.id == child["id"]))
+        conn.execute(
+            update(positions).where(positions.c.id == position_id)
+            .values(status="OPEN", closed_at=None, close_cost=None, close_fees=None)
+        )
+    status = "OPEN"
+    if has_expired(pos["expiry"]):
+        expire_finished_positions()       # it had already expired: close it out properly
+        status = "EXPIRED"
+    return {"undone": position_id, "status": status, "removed": child["id"] if child is not None else None,
+            "shares_returned": 0}
 
 
 def list_all_positions() -> list[dict]:

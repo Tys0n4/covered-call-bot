@@ -46,6 +46,8 @@ export const rollPosition    = (id, data)    => api.post(`/positions/${id}/roll`
 export const assignPosition  = (id)          => api.post(`/positions/${id}/assign`, {})
 export const markNotAssigned = (id)          => api.post(`/positions/${id}/not-assigned`)
 export const getAssignmentReview = ()        => api.get('/positions/assignment-review')
+export const editPosition    = (id, data)    => api.patch(`/positions/${id}`, data)
+export const undoPosition    = (id)          => api.post(`/positions/${id}/undo`)
 export const runScan         = (config)      => api.post('/scan', config)
 export const savePositions   = (data)        => api.post('/scan/save', data)
 export const getManagement   = (ticker)      => api.get('/manage',        { params: ticker ? { ticker } : {} })

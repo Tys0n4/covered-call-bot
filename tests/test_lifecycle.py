@@ -147,3 +147,105 @@ def test_review_lists_calls_that_expired_in_the_money(client, nvda):
     assert client.post(f"/positions/{itm}/not-assigned").status_code == 200
     assert client.get("/positions/assignment-review").json() == []
     assert _shares(client) == 500
+
+
+# --- Editing ------------------------------------------------------------------------
+
+def test_edit_fill_recomputes_premium(client, nvda):
+    pid = _sell(client, entry_price=2.10, contracts=2, fees=0)
+    r = client.patch(f"/positions/{pid}", json={"entry_price": 2.35, "open_fees": 1.30})
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert (p["entry_price"], p["premium_total"], p["open_fees"]) == (2.35, 470.0, 1.30)
+
+
+def test_add_missing_buyback_cost(client, nvda):
+    pid = _sell(client)
+    client.post("/positions/close", json={"position_id": pid})              # no cost entered
+    assert _position(client, pid)["close_cost"] is None
+    p = client.patch(f"/positions/{pid}", json={"close_cost": 84, "close_fees": 1.3}).json()
+    assert (p["close_cost"], p["close_fees"]) == (84.0, 1.3)
+
+
+def test_buyback_cost_only_on_bought_back_calls(client, nvda):
+    pid = _sell(client)
+    assert client.patch(f"/positions/{pid}", json={"close_cost": 10}).status_code == 422
+    assert client.patch(f"/positions/{pid}", json={}).status_code == 422
+    assert client.patch("/positions/9999", json={"open_fees": 1}).status_code == 404
+
+
+# --- Undo -------------------------------------------------------------------------------
+
+def test_undo_buyback_reopens_the_call(client, nvda):
+    pid = _sell(client)
+    client.post("/positions/close", json={"position_id": pid, "close_cost": 50, "close_fees": 1})
+    r = client.post(f"/positions/{pid}/undo")
+    assert r.status_code == 200, r.text
+    p = _position(client, pid)
+    assert (p["status"], p["closed_at"], p["close_cost"], p["close_fees"]) == ("OPEN", None, None, None)
+
+
+def test_undo_buyback_checks_coverage(client, nvda):
+    pid = _sell(client, contracts=3)
+    client.post("/positions/close", json={"position_id": pid, "close_cost": 50})
+    _sell(client, contracts=5)                       # shares were used again
+    r = client.post(f"/positions/{pid}/undo")
+    assert r.status_code == 409
+    assert _position(client, pid)["status"] == "CLOSED"
+
+
+def test_undo_roll_removes_the_new_call(client, nvda):
+    old = _sell(client, contracts=5)
+    new = client.post(f"/positions/{old}/roll", json={
+        "close_cost": 100, "expiry": _expiry(60), "strike": 130, "contracts": 5, "entry_price": 1,
+    }).json()["opened"]
+    r = client.post(f"/positions/{old}/undo").json()
+    assert r["removed"] == new
+    assert _position(client, old)["status"] == "OPEN"
+    assert all(p["id"] != new for p in client.get("/positions/all").json())
+
+
+def test_cannot_undo_roll_once_new_call_finished(client, nvda):
+    old = _sell(client)
+    new = client.post(f"/positions/{old}/roll", json={
+        "close_cost": 100, "expiry": _expiry(60), "strike": 130, "contracts": 2, "entry_price": 1,
+    }).json()["opened"]
+    client.post("/positions/close", json={"position_id": new, "close_cost": 10})
+    r = client.post(f"/positions/{old}/undo")
+    assert r.status_code == 409 and "Undo that one first" in r.json()["detail"]
+
+
+def test_undo_early_assignment_returns_shares(client, nvda):
+    pid = _sell(client, contracts=2)
+    client.post(f"/positions/{pid}/assign")
+    assert _shares(client) == 300
+    r = client.post(f"/positions/{pid}/undo").json()
+    assert (r["status"], r["shares_returned"]) == ("OPEN", 200)
+    assert _shares(client) == 500
+    assert _position(client, pid)["status"] == "OPEN"
+
+
+def test_undo_assignment_after_expiry_goes_back_to_expired(client, nvda):
+    pid = _sell(client, contracts=1)
+    _expire(pid)
+    client.post(f"/positions/{pid}/assign")
+    r = client.post(f"/positions/{pid}/undo").json()
+    assert r["status"] == "EXPIRED"
+    assert _shares(client) == 500
+    assert client.get("/positions/assignment-review").json() == []   # not asked again
+
+
+def test_undo_assignment_when_holding_was_removed(client, nvda):
+    pid = _sell(client, contracts=5)
+    client.post(f"/positions/{pid}/assign")          # all 500 shares gone
+    assert client.delete("/portfolio/NVDA").status_code == 200
+    client.post(f"/positions/{pid}/undo")
+    h = next(h for h in client.get("/portfolio").json() if h["ticker"] == "NVDA")
+    assert (h["shares"], h["avg_cost"]) == (500, 130.0)
+
+
+def test_nothing_to_undo_on_open_or_expired(client, nvda):
+    pid = _sell(client)
+    assert client.post(f"/positions/{pid}/undo").status_code == 409
+    _expire(pid)
+    assert client.post(f"/positions/{pid}/undo").status_code == 409
