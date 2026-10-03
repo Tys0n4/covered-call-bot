@@ -45,7 +45,7 @@ def test_password_protects_every_data_route(client, monkeypatch):
     for method, url in [("get", "/portfolio"), ("get", "/positions"), ("get", "/manage"),
                         ("get", "/settings"), ("get", "/performance"), ("get", "/positions/assignment-review"),
                         ("post", "/positions/1/roll"), ("post", "/positions/1/assign"),
-                        ("post", "/positions/1/undo"), ("patch", "/positions/1"),
+                        ("post", "/positions/1/undo"), ("patch", "/positions/1"), ("delete", "/positions/1"),
                         ("post", "/scan"), ("delete", "/portfolio/AAPL")]:
         assert getattr(client, method)(url).status_code == 401, url
 

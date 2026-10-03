@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 from assignment_service import calls_to_review
 from models import PlannedCall
 from positions_store import (
-    CoverageError, PositionError, assign_position, close_position, dismiss_assignment, edit_position,
+    CoverageError, PositionError, assign_position, close_position, delete_position, dismiss_assignment, edit_position,
     list_all_positions, load_open_positions, roll_position, save_positions, undo_position,
 )
 from api.schemas import (
@@ -155,3 +155,15 @@ def undo_trade(position_id: int):
     if result is None:
         raise HTTPException(status_code=404, detail=f"No position with id {position_id}.")
     return result
+
+
+@router.delete("/{position_id}")
+def delete_trade(position_id: int):
+    """Delete an open call entered by mistake. Finished calls can't be deleted (undo them instead)."""
+    try:
+        deleted = delete_position(position_id)
+    except PositionError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No open call with id {position_id}. Finished calls can't be deleted.")
+    return {"deleted": position_id}

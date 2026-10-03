@@ -399,6 +399,24 @@ def undo_position(position_id: int) -> dict | None:
             "shares_returned": 0}
 
 
+def delete_position(position_id: int) -> bool:
+    """
+    Delete an OPEN call that was entered by mistake (wrong strike, expiry or
+    contract count). Finished calls are part of your history and can't be
+    deleted; undo how they finished instead. Returns False if there's no open
+    call with that id.
+    """
+    with get_engine().begin() as conn:
+        pos = conn.execute(select(positions).where(positions.c.id == position_id).with_for_update()).mappings().first()
+        if pos is None or pos["status"] != "OPEN":
+            return False
+        # A call that replaced another (a roll) is undone from the original, so the old call reopens too
+        if pos["rolled_from"] is not None:
+            raise PositionError("This call came from a roll. Undo the roll from History instead, so the original call reopens.")
+        conn.execute(delete(positions).where(positions.c.id == position_id))
+    return True
+
+
 def list_all_positions() -> list[dict]:
     """Return all positions including closed and expired ones."""
     expire_finished_positions()

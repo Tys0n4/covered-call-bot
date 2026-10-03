@@ -3,9 +3,9 @@
 // (This page replaces the old separate Positions and Manage pages.)
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getAllPositions, getManagement, getAssignmentReview, apiError } from '../api/client'
+import { getAllPositions, getManagement, getAssignmentReview, deletePosition, apiError } from '../api/client'
 import { useTicker } from '../context/TickerContext'
-import { AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat } from 'lucide-react'
+import { AlertTriangle, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
@@ -13,6 +13,7 @@ import CloseModal from '../components/CloseModal'
 import RollModal from '../components/RollModal'
 import AssignmentReview from '../components/AssignmentReview'
 import EditTradeModal from '../components/EditTradeModal'
+import AddCallModal from '../components/AddCallModal'
 import HistoryActions from '../components/HistoryActions'
 import { TERMS } from '../lib/terms'
 import { fmtDate, daysUntil, money, plural } from '../lib/format'
@@ -64,7 +65,14 @@ function StatusPanel({ evaluation, checked }) {
   )
 }
 
-function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit }) {
+function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit, onDeleted, onError }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const remove = async () => {
+    setDeleting(true)
+    try { await deletePosition(p.id); onDeleted() }
+    catch (e) { onError(apiError(e, 'Could not delete this call. Is the API running?')); setDeleting(false); setConfirmDelete(false) }
+  }
   const days = daysUntil(p.expiry)
   const buy = evaluation?.should_buy_back
   return (
@@ -89,7 +97,22 @@ function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit }) {
         </div>
         <div>
           <StatusPanel evaluation={evaluation} checked={checked} />
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 18 }}>
+          {confirmDelete ? (
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 14, fontSize: 13, flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--text)' }}>Delete this call? Only for one entered by mistake.</span>
+              <button className="btn-danger" style={{ padding: '6px 12px' }} onClick={remove} disabled={deleting}>
+                {deleting ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Yes, delete'}
+              </button>
+              <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
+            </div>
+          ) : (
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
+            {!p.rolled_from && (
+              <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setConfirmDelete(true)}
+                title="Remove a call entered by mistake">
+                Delete
+              </button>
+            )}
             <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => onEdit(p)}>
               Edit
             </button>
@@ -100,6 +123,7 @@ function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit }) {
               {buy ? 'I bought it back: close' : 'Close'}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -107,7 +131,7 @@ function PositionCard({ p, evaluation, checked, onClose, onRoll, onEdit }) {
 }
 
 export default function Positions() {
-  const { selected, refresh: refreshTickers } = useTicker()
+  const { selected, tickers, selectTicker, refresh: refreshTickers } = useTicker()
   const [reloadKey, setReloadKey] = useState(0)
   const [fetched, setFetched]     = useState({ key: null, positions: [] })
   const [params] = useSearchParams()
@@ -120,6 +144,7 @@ export default function Positions() {
   const [error, setError]         = useState(null)
   const [historyScope, setHistoryScope] = useState(params.get('scope') === 'all' ? 'all' : 'stock')   // 'stock' | 'all'
   const [editingPos, setEditingPos] = useState(null)   // position in the Edit dialog
+  const [adding, setAdding]       = useState(false)    // Add a call dialog
 
   // Price checks and errors belong to one stock; clear them when you switch
   const [shownFor, setShownFor] = useState(selected)
@@ -157,11 +182,11 @@ export default function Positions() {
     }
   }
 
-  // After a close, roll or assignment: reload trades; an assignment also changes your share count
-  const afterChange = (how) => {
+  // After any change to a call: reload trades and the portfolio (contracts in use, shares)
+  const afterChange = () => {
     setClosingPos(null); setRollingPos(null); setEditingPos(null); setEvals(null); setError(null)
     reload()
-    if (how === 'assigned') refreshTickers().catch(() => {})   // share count changed
+    refreshTickers().catch(() => {})   // contracts in use (and shares, after an assignment) changed
   }
 
   const open      = positions.filter(p => p.status === 'OPEN' && p.ticker === selected)
@@ -175,6 +200,8 @@ export default function Positions() {
     <div className="fade-up">
       {closingPos && <CloseModal position={closingPos} evaluation={evals?.[closingPos.id]}
         onDone={afterChange} onCancel={() => setClosingPos(null)} />}
+      {adding && <AddCallModal tickers={tickers} defaultTicker={selected} onCancel={() => setAdding(false)}
+        onDone={(t) => { setAdding(false); if (t !== selected) selectTicker(t); setTab('OPEN'); afterChange('added') }} />}
       {editingPos && <EditTradeModal position={editingPos} onDone={() => afterChange('edited')} onCancel={() => setEditingPos(null)} />}
       {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]}
         onDone={() => afterChange('rolled')} onCancel={() => setRollingPos(null)} />}
@@ -183,11 +210,14 @@ export default function Positions() {
         title="Positions"
         showTicker
         subtitle={`Your covered calls${selected ? ` on ${selected}` : ''} and what to do with each one.`}
-        actions={open.length > 0 && !fetched.failed && (
-          <button className="btn-primary" onClick={handleCheck} disabled={checking || !selected}>
-            {checking ? <><span className="spinner" /> Checking prices…</> : <><RefreshCw size={15} strokeWidth={2} /> Check prices</>}
-          </button>
-        )}
+        actions={!fetched.failed && tickers.length > 0 && <>
+          <button className="btn-secondary" onClick={() => setAdding(true)}><Plus size={15} strokeWidth={2} /> Add a call</button>
+          {open.length > 0 && (
+            <button className="btn-primary" onClick={handleCheck} disabled={checking || !selected}>
+              {checking ? <><span className="spinner" /> Checking prices…</> : <><RefreshCw size={15} strokeWidth={2} /> Check prices</>}
+            </button>
+          )}
+        </>}
       />
 
       {error && (
@@ -228,7 +258,8 @@ export default function Positions() {
                 .slice()
                 .sort((a, b) => (evals?.[b.id]?.should_buy_back ? 1 : 0) - (evals?.[a.id]?.should_buy_back ? 1 : 0))
                 .map(p => (
-                  <PositionCard key={p.id} p={p} evaluation={evals?.[p.id]} checked={!!evals} onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} />
+                  <PositionCard key={p.id} p={p} evaluation={evals?.[p.id]} checked={!!evals} onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos}
+                    onDeleted={() => afterChange('deleted')} onError={setError} />
                 ))}
             </div>
           </>
