@@ -1,19 +1,19 @@
-# scanner_service.py
+# scanner.py
 from __future__ import annotations
 
 from datetime import datetime
 
 import pandas as pd
 
-from config import ScannerConfig, DEFAULT_CONFIG
-from models import PortfolioPosition, ScanResult
-from market_data import get_current_price, get_events
-from options_data import get_call_options_in_dte_range
-from filters import filter_covered_calls
-from calculations import add_option_metrics
-from greeks import add_estimated_delta
-from scoring import score_options, pick_best_options
-from market_hours import is_market_open
+from core.config import ScannerConfig, DEFAULT_CONFIG
+from core.models import PortfolioPosition, ScanResult
+from core.market_data import get_current_price, get_events
+from core.options_data import get_call_options_in_dte_range
+from core.filters import filter_covered_calls
+from core.calculations import add_option_metrics
+from core.greeks import add_estimated_delta
+from core.scoring import score_options, pick_best_options
+from core.market_hours import is_market_open
 
 
 def resolve_min_strike(current_price: float, config: ScannerConfig, avg_cost: float = 0.0) -> float:

@@ -1,14 +1,10 @@
 # api/routes/performance.py
-import sys
-from pathlib import Path
 from fastapi import APIRouter
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
-
-from clock import local_today
-from performance import compute_performance
-from portfolio import load_portfolio
-from positions_store import list_all_positions
+from core.clock import local_today
+from core.performance import compute_performance
+from core.portfolio import load_portfolio
+from core.positions import list_all_positions
 
 router = APIRouter(prefix="/performance", tags=["performance"])
 

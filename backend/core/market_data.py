@@ -15,9 +15,9 @@ import requests
 import yfinance as yf
 from dotenv import load_dotenv
 
-from cache import CLOSE_TTL, EVENTS_TTL, PRICE_TTL, cached
+from core.cache import CLOSE_TTL, EVENTS_TTL, PRICE_TTL, cached
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")   # backend/.env (local development)
 
 log = logging.getLogger(__name__)
 

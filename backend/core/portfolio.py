@@ -7,8 +7,8 @@ import re
 
 from sqlalchemy import delete, select, update, insert
 
-from db import get_engine, holdings
-from models import PortfolioPosition
+from core.db import get_engine, holdings
+from core.models import PortfolioPosition
 
 # 1–10 characters: letters, digits, dot or dash (e.g. AAPL, BRK.B, RDS-A)
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")

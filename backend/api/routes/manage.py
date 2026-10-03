@@ -1,14 +1,10 @@
 # api/routes/manage.py
-import sys
-from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
-
-from strategy import effective_config
-from positions_store import load_open_positions
-from management import evaluate_positions
+from core.strategy import effective_config
+from core.positions import load_open_positions
+from core.buyback import evaluate_positions
 from api.schemas import ManagementResponse, EvaluatedPosition
 
 router = APIRouter(prefix="/manage", tags=["management"])

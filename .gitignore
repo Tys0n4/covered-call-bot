@@ -20,8 +20,8 @@ env/
 # app/data/portfolio.csv
 
 # Local database file (live data lives in Postgres via DATABASE_URL)
-app/data/*.db
-app/data/*.db-journal
+backend/data/*.db
+backend/data/*.db-journal
 
 # Node
 node_modules/

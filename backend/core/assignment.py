@@ -1,4 +1,4 @@
-# assignment_service.py
+# assignment.py
 """
 Finds expired calls that probably got assigned: the stock closed above the
 strike on expiry day, so the buyer most likely exercised and your shares were
@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from market_data import get_close_on
-from market_hours import market_today
-from positions_store import expired_unreviewed
+from core.market_data import get_close_on
+from core.market_hours import market_today
+from core.positions import expired_unreviewed
 
 REVIEW_DAYS = 45   # only look at calls that expired within this many days
 

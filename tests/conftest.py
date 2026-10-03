@@ -11,9 +11,9 @@ import pandas as pd
 import pytest
 import yfinance
 
-import cache
-import db
-import scanner_service
+from core import cache
+from core import db
+from core import scanner
 
 # Fake stock prices; any other ticker "doesn't exist"
 PRICES = {"NVDA": 100.0, "AAPL": 200.0}
@@ -77,8 +77,8 @@ def fake_market(monkeypatch):
     EVENTS.clear()
     CLOSES.clear()
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)
-    monkeypatch.setattr(scanner_service, "get_current_price", lambda t: PRICES.get(t))
-    monkeypatch.setattr(scanner_service, "is_market_open", lambda: True)
+    monkeypatch.setattr(scanner, "get_current_price", lambda t: PRICES.get(t))
+    monkeypatch.setattr(scanner, "is_market_open", lambda: True)
 
 
 @pytest.fixture(autouse=True)

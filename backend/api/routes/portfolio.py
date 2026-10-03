@@ -1,15 +1,11 @@
 # api/routes/portfolio.py
-import sys
-from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
-
-from portfolio import load_portfolio, upsert_holding, delete_holding, normalize_ticker
-from positions_store import load_open_positions
-from strategy import load_strategy, split_contracts
+from core.portfolio import load_portfolio, upsert_holding, delete_holding, normalize_ticker
+from core.positions import load_open_positions
+from core.strategy import load_strategy, split_contracts
 from api.schemas import HoldingIn, HoldingUpdate
-from ticker_check import has_listed_options
+from core.ticker_check import has_listed_options
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 

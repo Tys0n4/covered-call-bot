@@ -1,14 +1,10 @@
 # api/routes/positions.py
-import sys
-from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
-
-from assignment_service import calls_to_review
-from models import PlannedCall
-from positions_store import (
+from core.assignment import calls_to_review
+from core.models import PlannedCall
+from core.positions import (
     CoverageError, PositionError, assign_position, close_position, delete_position, dismiss_assignment, edit_position,
     list_all_positions, load_open_positions, roll_position, save_positions, undo_position,
 )

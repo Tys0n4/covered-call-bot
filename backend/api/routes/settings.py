@@ -1,12 +1,8 @@
 # api/routes/settings.py
 # Your strategy (Strategy page). Stored in the database; used by scan, manage and portfolio.
-import sys
-from pathlib import Path
 from fastapi import APIRouter
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
-
-from strategy import load_strategy, save_strategy
+from core.strategy import load_strategy, save_strategy
 from api.schemas import StrategySettings
 
 router = APIRouter(prefix="/settings", tags=["settings"])

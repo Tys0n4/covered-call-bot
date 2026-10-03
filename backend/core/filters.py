@@ -1,8 +1,8 @@
 # filters.py
 import pandas as pd
 
-from config import ScannerConfig, DEFAULT_CONFIG
-from quote_policy import apply_quote_policy_to_df
+from core.config import ScannerConfig, DEFAULT_CONFIG
+from core.quotes import apply_quote_policy_to_df
 
 
 def filter_covered_calls(

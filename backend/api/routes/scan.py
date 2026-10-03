@@ -1,20 +1,16 @@
 # api/routes/scan.py
 import math
-import sys
-from pathlib import Path
 from fastapi import APIRouter, Body, HTTPException
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "app"))
 
 from dataclasses import replace
 
-from strategy import effective_config, load_strategy
-from market_hours import next_market_open
-from portfolio import load_portfolio
-from scanner_service import resolve_min_strike, scan_covered_calls
-from planning_service import build_plan, compute_buyback_budget, get_allocation_targets
-from positions_store import CoverageError, load_open_positions, save_positions
-from models import PlannedCall
+from core.strategy import effective_config, load_strategy
+from core.market_hours import next_market_open
+from core.portfolio import load_portfolio
+from core.scanner import resolve_min_strike, scan_covered_calls
+from core.planner import build_plan, compute_buyback_budget, get_allocation_targets
+from core.positions import CoverageError, load_open_positions, save_positions
+from core.models import PlannedCall
 from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem, TradeIn
 
 router = APIRouter(prefix="/scan", tags=["scanner"])

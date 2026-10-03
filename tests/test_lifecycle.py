@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from sqlalchemy import update
 
-import db
+from core import db
 from conftest import CLOSES
 
 

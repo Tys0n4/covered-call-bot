@@ -1,6 +1,6 @@
 # options_data.py
 # Stock price -> Alpha Vantage (accurate, free)
-# Options chain -> yfinance (full chain, free; quote staleness handled by quote_policy.py)
+# Options chain -> yfinance (full chain, free; quote staleness handled by quotes.py)
 
 import logging
 
@@ -8,8 +8,8 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 
-from cache import CHAIN_TTL, EXPIRIES_TTL, cached
-from market_hours import market_today
+from core.cache import CHAIN_TTL, EXPIRIES_TTL, cached
+from core.market_hours import market_today
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def get_call_options_in_dte_range(
 ) -> pd.DataFrame:
     """
     Fetch call options within the DTE window using yfinance.
-    Quote quality (LIVE/STALE/BAD) is handled downstream by quote_policy.py.
+    Quote quality (LIVE/STALE/BAD) is handled downstream by quotes.py.
     """
     expirations = get_expiries(ticker_symbol)
 

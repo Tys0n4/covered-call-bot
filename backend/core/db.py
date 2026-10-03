@@ -5,8 +5,8 @@ Database connection for holdings and covered call positions.
 - Live (Railway): set the DATABASE_URL environment variable to your Postgres
   connection string (e.g. from Neon's free plan).
 - Local: leave DATABASE_URL unset and a SQLite file is used instead
-  (app/data/covcall.db). The first time it's created it is filled from
-  data/portfolio.csv and data/open_positions.json so nothing is lost.
+  (backend/data/covcall.db). The first time it's created it is filled with
+  the demo data in backend/data/demo_holdings.csv and demo_positions.json.
 """
 from __future__ import annotations
 
@@ -21,13 +21,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import Engine
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"   # backend/data
 SQLITE_PATH = DATA_DIR / "covcall.db"
 
 # Files the local database is seeded from the first time it's created
-SEED_PORTFOLIO = DATA_DIR / "portfolio.csv"
-SEED_POSITIONS = DATA_DIR / "open_positions.json"
+SEED_PORTFOLIO = DATA_DIR / "demo_holdings.csv"
+SEED_POSITIONS = DATA_DIR / "demo_positions.json"
 
 metadata = MetaData()
 

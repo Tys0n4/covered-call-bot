@@ -1,7 +1,7 @@
 # tests/test_market_data.py — price sources and calendar events
 from datetime import date, timedelta
 
-import market_data
+from core import market_data
 from conftest import EVENTS
 
 

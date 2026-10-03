@@ -1,12 +1,12 @@
-# management.py
+# buyback.py
 from __future__ import annotations
 
 import logging
 
-from options_data import get_calls
-from quote_policy import select_quote, QuoteMode
-from models import OpenCoveredCall
-from config import ScannerConfig, DEFAULT_CONFIG
+from core.options_data import get_calls
+from core.quotes import select_quote, QuoteMode
+from core.models import OpenCoveredCall
+from core.config import ScannerConfig, DEFAULT_CONFIG
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def get_current_option_price(
     """
     Fetch current market price for an open call position via yfinance.
     Uses ask price by default for buyback cost estimates (conservative).
-    Delegates quote selection to quote_policy for consistency.
+    Delegates quote selection to quotes.py for consistency.
     Chains are cached briefly (options_data.get_calls), so positions on the
     same expiry share one download.
     """

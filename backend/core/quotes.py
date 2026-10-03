@@ -1,10 +1,10 @@
-# quote_policy.py
+# quotes.py
 """
 Single source of truth for how option premiums are selected from raw market data.
 
 Used by:
   - filters.py   (entry premium at scan time)
-  - management.py (current mark for buyback decisions)
+  - buyback.py   (current mark for buyback decisions)
 
 QuoteResult fields
 ------------------

@@ -1,6 +1,6 @@
 # scoring.py
 import pandas as pd
-from config import ScannerConfig, DEFAULT_CONFIG
+from core.config import ScannerConfig, DEFAULT_CONFIG
 
 _DELTA_PENALTY = 0.0
 

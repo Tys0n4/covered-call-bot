@@ -16,8 +16,8 @@ from dataclasses import replace
 
 from sqlalchemy import insert, select, update
 
-from config import DEFAULT_CONFIG, ScannerConfig
-from db import get_engine, strategy
+from core.config import DEFAULT_CONFIG, ScannerConfig
+from core.db import get_engine, strategy
 
 FIELDS = ("income_weight", "profit_capture_target_pct", "buyback_budget_pct", "monthly_goal")
 
