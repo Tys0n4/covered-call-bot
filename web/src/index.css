@@ -328,6 +328,7 @@ body { font-size: 15px; line-height: 1.5; }
   transition: border-color 0.15s, background 0.15s;
 }
 .ticker-switch:hover { border-color: var(--accent-light); background: rgba(106, 228, 255, 0.18); }
+.ticker-switch:has(select:focus-visible) { outline: 2px solid var(--accent-light); outline-offset: 2px; }
 .ticker-switch select {
   appearance: none;
   background: transparent;
@@ -354,6 +355,8 @@ body { font-size: 15px; line-height: 1.5; }
   font: inherit;
 }
 .infotip:hover, .infotip:focus { color: var(--accent-light); }
+/* The icon stays small, but the tappable area is at least 24×24 */
+.infotip::before { content: ''; position: absolute; inset: -6px; }
 .infotip:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; border-radius: 99px; }
 .infotip-bubble {
   position: fixed;
@@ -680,3 +683,11 @@ body { font-size: 15px; line-height: 1.5; }
   display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, 0.65);
 }
+
+/* --- Keyboard focus: one accent ring everywhere ---------------------------- */
+:where(button, a, select, summary, [role=menuitem], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+.price-stamp { display: flex; align-items: center; gap: 6px; }
+.price-stamp svg { flex-shrink: 0; }

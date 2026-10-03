@@ -1,5 +1,5 @@
 // src/pages/Login.jsx — password screen, shown when the API has APP_PASSWORD set
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle, Lock } from 'lucide-react'
 import { apiError, login, setToken } from '../api/client'
 
@@ -7,6 +7,7 @@ export default function LoginPage({ onLoggedIn }) {
   const [password, setPassword] = useState('')
   const [busy, setBusy]         = useState(false)
   const [error, setError]       = useState(null)
+  useEffect(() => { document.title = 'Sign in · CovCall' }, [])
 
   const submit = async (e) => {
     e.preventDefault()

@@ -167,6 +167,13 @@ def test_manage_keeps_ids_for_positions_on_the_same_option(client, nvda):
     assert all(e["current_option_price"] > 0 for e in evaluated)
 
 
+def test_manage_says_when_prices_were_checked(client, nvda):
+    body = client.get("/manage").json()
+    assert body["checked_at"].endswith("+00:00")
+    assert isinstance(body["market_open"], bool)
+    assert (body["next_market_open"] is None) == body["market_open"]
+
+
 def test_scan_has_no_target_delta_setting(client, nvda):
     # The balanced pick's target is fixed (12%); older clients that still send one are ignored
     scan = client.post("/scan", json={"ticker": "NVDA", "target_delta": 0.22})

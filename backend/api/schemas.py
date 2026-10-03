@@ -228,6 +228,9 @@ class ManagementResponse(BaseModel):
     positions_evaluated: int
     buyback_recommended: int
     positions: list[EvaluatedPosition]
+    checked_at: str                          # ISO time (UTC) the prices were fetched
+    market_open: bool                        # False: prices are from the last close
+    next_market_open: Optional[str] = None   # ISO time of the next open, when closed
 
 
 class HoldingIn(BaseModel):

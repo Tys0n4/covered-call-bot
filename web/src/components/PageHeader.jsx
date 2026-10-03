@@ -1,4 +1,5 @@
 // src/components/PageHeader.jsx — page title with the ticker switcher beside it
+import { useEffect } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useTicker } from '../context/TickerContext'
 
@@ -17,6 +18,8 @@ export function TickerSwitcher() {
 }
 
 export default function PageHeader({ title, subtitle, showTicker = false, actions }) {
+  // Name the browser tab after the page, so tabs, history and bookmarks differ
+  useEffect(() => { document.title = `${title} · CovCall` }, [title])
   return (
     <div className="page-header">
       <div>
