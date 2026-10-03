@@ -1,4 +1,4 @@
-// src/components/Modal.jsx — full-screen dark backdrop for pop-ups.
+// src/components/dialogs/Modal.jsx — full-screen dark backdrop for pop-ups.
 // Rendered straight into <body> so page animations can't trap or clip it.
 import { createPortal } from 'react-dom'
 

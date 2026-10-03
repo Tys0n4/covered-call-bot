@@ -1,10 +1,10 @@
-// src/components/HoldingModal.jsx — add a stock you own, or edit/remove one
+// src/components/dialogs/HoldingModal.jsx — add a stock you own, or edit/remove one
 import { useEffect, useState } from 'react'
 import { X, AlertTriangle, Trash2 } from 'lucide-react'
-import { addHolding, updateHolding, deleteHolding, apiError } from '../api/client'
-import InfoTip from './InfoTip'
+import { addHolding, updateHolding, deleteHolding, apiError } from '../../api/client'
+import InfoTip from '../InfoTip'
 import Modal from './Modal'
-import { plural } from '../lib/format'
+import { plural } from '../../lib/format'
 
 export default function HoldingModal({ holding, onClose, onSaved }) {
   const editing = !!holding

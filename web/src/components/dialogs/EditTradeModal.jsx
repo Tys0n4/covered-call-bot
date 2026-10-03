@@ -1,10 +1,10 @@
-// src/components/EditTradeModal.jsx — fix what was recorded for a trade (fill, fees, buyback cost)
+// src/components/dialogs/EditTradeModal.jsx — fix what was recorded for a trade (fill, fees, buyback cost)
 import { useState } from 'react'
-import { apiError, editPosition } from '../api/client'
+import { apiError, editPosition } from '../../api/client'
 import Modal from './Modal'
-import MoneyInput from './MoneyInput'
-import { fmtDate, money, plural } from '../lib/format'
-import { moneyValue } from '../lib/pnl'
+import MoneyInput from '../MoneyInput'
+import { fmtDate, money, plural } from '../../lib/format'
+import { moneyValue } from '../../lib/pnl'
 
 const toText = v => (v == null ? '' : String(Number(v).toFixed(2)))
 

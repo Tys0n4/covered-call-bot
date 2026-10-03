@@ -8,7 +8,7 @@ import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'rec
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
-import HoldingModal from '../components/HoldingModal'
+import HoldingModal from '../components/dialogs/HoldingModal'
 import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, plural } from '../lib/format'

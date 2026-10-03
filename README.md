@@ -38,9 +38,9 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ## Screenshots
 
-![Dashboard](screenshots/dashboard.png)
-![Scanner](screenshots/scanner.png)
-![Manage](screenshots/manage.png)
+![Dashboard](docs/screenshots/dashboard.png)
+![Scanner](docs/screenshots/scanner.png)
+![Positions](docs/screenshots/manage.png)
 
 ---
 
@@ -61,33 +61,34 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ```
 covered-call-bot/
-├── app/                      # Core Python logic
-│   ├── scanner_service.py    # Full scan pipeline (filters, scoring, warnings)
-│   ├── planning_service.py   # Contract allocation for your income/balanced split
-│   ├── positions_store.py    # Saving, closing, rolling, assigning, editing, undoing calls
-│   ├── assignment_service.py # Finds expired calls that were probably assigned
-│   ├── performance.py        # Realized results and return on capital
-│   ├── management.py         # Buyback evaluation ("Check prices")
-│   ├── market_data.py        # Stock price (Alpha Vantage, Yahoo fallback), events, closes
-│   ├── options_data.py       # Option chains from Yahoo (cached)
-│   ├── market_hours.py       # NYSE hours, holidays and early closes
-│   ├── cache.py              # Short in-memory cache for market data
-│   ├── strategy.py           # Your saved strategy + split math
-│   ├── db.py                 # Database tables (Postgres, or SQLite locally)
-│   ├── config.py             # Scanner defaults
-│   └── data/                 # Demo data, used to seed a new local database
-├── api/                      # FastAPI backend
-│   ├── main.py               # App entry, CORS, login protection
-│   ├── auth.py               # APP_PASSWORD login and tokens
-│   ├── schemas.py            # Request/response models and validation
-│   └── routes/               # portfolio, scan, positions, manage, performance, settings
+├── backend/
+│   ├── api/                  # FastAPI app: main.py (entry), auth.py, schemas.py
+│   │   └── routes/           # portfolio, scan, positions, manage, performance, settings
+│   ├── core/                 # Covered call logic (see core/__init__.py for a module map)
+│   │   ├── scanner.py        # Scan pipeline: price, chain, filters, scoring, warnings
+│   │   ├── planner.py        # Turns a scan into the trade to place, for your split
+│   │   ├── positions.py      # Save, close, roll, assign, edit, undo, delete calls
+│   │   ├── buyback.py        # "Check prices": time to buy back?
+│   │   ├── assignment.py     # Expired calls that were probably assigned
+│   │   ├── performance.py    # Realized results and return on capital
+│   │   ├── market_data.py    # Stock price, earnings/ex-dividend dates
+│   │   ├── options_data.py   # Option chains from Yahoo
+│   │   ├── market_hours.py   # NYSE hours, holidays, early closes
+│   │   ├── db.py             # Database tables (Postgres, or SQLite locally)
+│   │   └── ...               # filters, quotes, calculations, greeks, scoring, strategy, ...
+│   └── data/                 # Demo data that seeds a new local database
 ├── tests/                    # pytest suite (fake market, temporary database)
-├── web/                      # React frontend (Vite)
+├── web/                      # React frontend (Vite), deployed to Vercel
 │   └── src/
 │       ├── pages/            # Dashboard, Scanner, Positions, Performance, Strategy, Login
-│       ├── components/       # Layout, dialogs (close, roll, edit, add), tooltips, ...
+│       ├── components/       # Shared UI (Layout, PageHeader, InfoTip, ...)
+│       │   └── dialogs/      # Pop-up dialogs (add, close, roll, edit, holding)
 │       ├── context/          # Login state and the selected stock
-│       └── lib/              # Formatting and P&L helpers
+│       ├── api/client.js     # Calls to the backend
+│       └── lib/              # Formatting, P&L and strategy helpers
+├── docs/screenshots/
+├── requirements.txt          # Backend dependencies (pinned)
+├── railway.toml              # Railway start command
 └── .github/workflows/ci.yml  # Tests, lint and build on every pull request
 ```
 
@@ -97,7 +98,7 @@ covered-call-bot/
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - Node.js 22+
 - Alpha Vantage API key (free at [alphavantage.co](https://www.alphavantage.co))
 
@@ -116,7 +117,7 @@ pip install -r requirements.txt
 
 ### 3. Set up environment variables
 
-Create `app/.env`:
+Create `backend/.env` (used for local development):
 
 ```
 ALPHA_VANTAGE_KEY=your_key_here
@@ -132,30 +133,17 @@ Server settings (set these on Railway, or export them locally):
 | `DATABASE_URL`    | Postgres connection string. Leave unset to use a local SQLite file. |
 | `APP_TIMEZONE`    | Time zone for trade dates (default `America/Edmonton`). |
 
-### 4. Set up your portfolio
-
-Create `app/data/portfolio.csv`:
-
-```csv
-ticker,shares,avg_cost
-AAPL,100,175.00
-```
-
-Create an empty `app/data/open_positions.json`:
-
-```json
-[]
-```
-
-### 5. Start the API
+### 4. Start the API
 
 ```bash
-uvicorn api.main:app --reload --port 8000
+uvicorn api.main:app --app-dir backend --reload --port 8000
 ```
 
 API docs available at [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 6. Install and start the frontend
+Without `DATABASE_URL`, a local SQLite database is created at `backend/data/covcall.db` and filled with demo stocks and trades the first time. Add your own stocks from the Dashboard.
+
+### 5. Install and start the frontend
 
 ```bash
 cd web
@@ -200,7 +188,7 @@ A call's result is realized when it finishes. Net = premium − fees − buyback
 
 ## Configuration
 
-All strategy constants live in `app/config.py`:
+Scanner defaults live in `backend/core/config.py`; your split, buyback target, reserve and monthly goal are edited on the Strategy page:
 
 ```python
 @dataclass(frozen=True)
@@ -254,7 +242,7 @@ needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`)
 ```bash
 pip install -r requirements-dev.txt
 pytest
-ruff check app api tests
+ruff check backend tests
 cd web && npm run lint && npm run build
 ```
 

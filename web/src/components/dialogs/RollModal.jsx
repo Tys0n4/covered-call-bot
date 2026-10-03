@@ -1,10 +1,10 @@
-// src/components/RollModal.jsx — buy back an open call and sell a new one in one step
+// src/components/dialogs/RollModal.jsx — buy back an open call and sell a new one in one step
 import { useState } from 'react'
-import { apiError, rollPosition } from '../api/client'
+import { apiError, rollPosition } from '../../api/client'
 import Modal from './Modal'
-import MoneyInput from './MoneyInput'
-import { fmtDate, money, plural } from '../lib/format'
-import { moneyValue } from '../lib/pnl'
+import MoneyInput from '../MoneyInput'
+import { fmtDate, money, plural } from '../../lib/format'
+import { moneyValue } from '../../lib/pnl'
 
 const todayIso = () => {
   const d = new Date()

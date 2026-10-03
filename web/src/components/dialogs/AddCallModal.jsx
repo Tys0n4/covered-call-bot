@@ -1,10 +1,10 @@
-// src/components/AddCallModal.jsx — record a call by hand (sold outside the Scanner, or re-entering a corrected one)
+// src/components/dialogs/AddCallModal.jsx — record a call by hand (sold outside the Scanner, or re-entering a corrected one)
 import { useState } from 'react'
-import { addPosition, apiError } from '../api/client'
+import { addPosition, apiError } from '../../api/client'
 import Modal from './Modal'
-import MoneyInput from './MoneyInput'
-import { money, plural } from '../lib/format'
-import { moneyValue } from '../lib/pnl'
+import MoneyInput from '../MoneyInput'
+import { money, plural } from '../../lib/format'
+import { moneyValue } from '../../lib/pnl'
 
 const isoToday = () => {
   const d = new Date()

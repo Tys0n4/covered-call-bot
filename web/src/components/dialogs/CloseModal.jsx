@@ -1,11 +1,11 @@
-// src/components/CloseModal.jsx — close an open call: bought back, or shares called away
+// src/components/dialogs/CloseModal.jsx — close an open call: bought back, or shares called away
 import { useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { apiError, assignPosition, closePosition } from '../api/client'
+import { apiError, assignPosition, closePosition } from '../../api/client'
 import Modal from './Modal'
-import MoneyInput from './MoneyInput'
-import { fmtDate, money, plural } from '../lib/format'
-import { moneyValue } from '../lib/pnl'
+import MoneyInput from '../MoneyInput'
+import { fmtDate, money, plural } from '../../lib/format'
+import { moneyValue } from '../../lib/pnl'
 
 export default function CloseModal({ position: p, evaluation, onDone, onCancel }) {
   // Pre-fill with the estimate from "Check prices" when there is one
