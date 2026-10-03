@@ -41,9 +41,9 @@ export default function CloseModal({ position: p, evaluation, onDone, onCancel }
   )
 
   return (
-    <Modal onBackdrop={() => { if (!busy) onCancel() }}>
-      <div className="card" role="dialog" aria-modal="true" aria-label="Close this call"
-        style={{ width: '100%', maxWidth: 460, padding: 28, animation: 'fadeUp 0.2s ease forwards' }}>
+    <Modal onDismiss={() => { if (!busy) onCancel() }}>
+      <div className="card dialog-card" role="dialog" aria-modal="true" aria-label="Close this call"
+        style={{ maxWidth: 460 }}>
         <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 12 }}>Close this call</div>
         <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
           <div style={{ fontWeight: 700 }}>{p.ticker} · {money(p.strike)} call</div>
@@ -57,7 +57,7 @@ export default function CloseModal({ position: p, evaluation, onDone, onCancel }
 
         {how === 'bought' ? (
           <>
-            <div className="grid-2" style={{ gap: 12 }}>
+            <div className="form-grid" style={{ gap: 12 }}>
               <MoneyInput id="close-cost" label="Paid to buy it back (total)" value={costText} onChange={setCost} />
               <MoneyInput id="close-fees" label="Fees (total)" value={feesText} onChange={setFees} />
             </div>
@@ -77,7 +77,7 @@ export default function CloseModal({ position: p, evaluation, onDone, onCancel }
 
         {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
         <div className="hint" style={{ marginTop: 12 }}>Made a mistake? You can undo this from History.</div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 18 }}>
+        <div className="dialog-actions" style={{ marginTop: 18 }}>
           <button className="btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={submit} disabled={busy}>
             {busy ? <><span className="spinner" /> Saving…</> : how === 'assigned' ? 'Record assignment' : 'Mark closed'}

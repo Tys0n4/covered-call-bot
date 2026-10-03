@@ -1,16 +1,10 @@
 // src/components/dialogs/ConfirmDialog.jsx — "Are you sure?" for actions like delete or undo
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Modal from './Modal'
 
 export default function ConfirmDialog({ title, children, confirmLabel, danger = false, onConfirm, onCancel }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-
-  useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape' && !busy) onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onCancel])
 
   const confirm = async () => {
     setBusy(true); setError(null)
@@ -19,13 +13,13 @@ export default function ConfirmDialog({ title, children, confirmLabel, danger = 
   }
 
   return (
-    <Modal onBackdrop={() => { if (!busy) onCancel() }}>
-      <div className="card" role="alertdialog" aria-modal="true" aria-label={title}
-        style={{ width: '100%', maxWidth: 420, padding: 26, animation: 'fadeUp 0.2s ease forwards' }}>
+    <Modal onDismiss={() => { if (!busy) onCancel() }}>
+      <div className="card dialog-card" role="alertdialog" aria-modal="true" aria-label={title}
+        style={{ maxWidth: 420 }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{title}</div>
         <div className="hint" style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.55 }}>{children}</div>
         {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 22 }}>
+        <div className="dialog-actions" style={{ marginTop: 22 }}>
           <button className="btn-secondary" onClick={onCancel} disabled={busy} autoFocus>Cancel</button>
           <button className={danger ? 'btn-danger' : 'btn-primary'} style={danger ? { padding: '10px 18px', fontSize: 14 } : undefined}
             onClick={confirm} disabled={busy}>

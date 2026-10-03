@@ -9,8 +9,10 @@ import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'rec
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ActionMenu from '../components/ActionMenu'
+import PriceStamp from '../components/PriceStamp'
 import HoldingModal from '../components/dialogs/HoldingModal'
 import ServerDown from '../components/ServerDown'
+import { DashboardSkeleton } from '../components/Skeleton'
 import { TERMS } from '../lib/terms'
 import { daysUntil, fmtDate, money, plural } from '../lib/format'
 
@@ -76,6 +78,7 @@ export default function Dashboard() {
   const [reloadKey,    setReloadKey]    = useState(0)
   const [reviewCount,  setReviewCount]  = useState(0)   // expired calls that may have been assigned
   const [readyIds,     setReadyIds]     = useState(null) // ids of calls ready to buy back (null = not checked yet)
+  const [priceMeta,    setPriceMeta]    = useState(null) // when those prices were checked
   const [goal,         setGoal]         = useState(null) // { target, kept, month } when a monthly goal is set
 
   useEffect(() => {
@@ -96,7 +99,7 @@ export default function Dashboard() {
       .catch(() => {})
     // Live option prices are slower, so they fill in after the page shows
     getManagement()
-      .then(r => { if (!cancelled) setReadyIds(new Set(r.data.positions.filter(e => e.should_buy_back).map(e => e.id))) })
+      .then(r => { if (!cancelled) { setReadyIds(new Set(r.data.positions.filter(e => e.should_buy_back).map(e => e.id))); setPriceMeta(r.data) } })
       .catch(() => {})
     Promise.all([getStrategy(), getPerformance()])
       .then(([st, perf]) => {
@@ -162,9 +165,7 @@ export default function Dashboard() {
       />
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-          <div className="spinner" style={{ width: 36, height: 36 }} />
-        </div>
+        <DashboardSkeleton />
       ) : loadFailed ? (
         <ServerDown onRetry={retry} />
       ) : (
@@ -218,6 +219,7 @@ export default function Dashboard() {
                   <span className="spinner" style={{ width: 12, height: 12 }} /> Checking which calls are ready to buy back…
                 </div>
               )}
+              {readyIds && positions.length > 0 && <PriceStamp meta={priceMeta} style={{ paddingTop: 10 }} />}
             </div>
           )}
 

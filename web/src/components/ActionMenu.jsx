@@ -65,7 +65,7 @@ export default function ActionMenu({ items, label = 'More actions' }) {
           style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}>
           {visible.map(item => (
             <button key={item.label} type="button" role="menuitem" className={`menu-item${item.danger ? ' danger' : ''}`}
-              onClick={() => { close(false); item.onClick() }}>
+              onClick={() => { close(); item.onClick() }}>
               {item.icon && <item.icon size={15} strokeWidth={1.9} />}
               <span>{item.label}</span>
             </button>

@@ -60,9 +60,9 @@ export default function RollModal({ position: p, evaluation, onDone, onCancel })
   }
 
   return (
-    <Modal onBackdrop={() => { if (!busy) onCancel() }}>
-      <div className="card" role="dialog" aria-modal="true" aria-label="Roll this call"
-        style={{ width: '100%', maxWidth: 520, padding: 28, animation: 'fadeUp 0.2s ease forwards' }}>
+    <Modal onDismiss={() => { if (!busy) onCancel() }}>
+      <div className="card dialog-card" role="dialog" aria-modal="true" aria-label="Roll this call"
+        style={{ maxWidth: 520 }}>
         <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 4 }}>Roll this call</div>
         <div className="hint" style={{ marginBottom: 18 }}>
           Buy back the {money(p.strike)} {p.ticker} call (expires {fmtDate(p.expiry)}, {plural(p.contracts, 'contract')}) and sell a new one on the same shares.
@@ -70,14 +70,14 @@ export default function RollModal({ position: p, evaluation, onDone, onCancel })
         </div>
 
         <div className="section-title" style={{ fontSize: 15 }}>1. Buy back the current call</div>
-        <div className="grid-2" style={{ gap: 12, marginTop: 8, marginBottom: 18 }}>
+        <div className="form-grid" style={{ gap: 12, marginTop: 8, marginBottom: 18 }}>
           <MoneyInput id="roll-cost" label="Paid to buy back (total)" value={costText} onChange={setCost} error={show('cost')}
             hint={estimate != null ? `Latest price check: ${money(estimate)}` : null} />
           <MoneyInput id="roll-close-fees" label="Fees (total)" value={closeFees} onChange={setCloseFees} />
         </div>
 
         <div className="section-title" style={{ fontSize: 15 }}>2. Sell the new call</div>
-        <div className="grid-2" style={{ gap: 12, marginTop: 8 }}>
+        <div className="form-grid" style={{ gap: 12, marginTop: 8 }}>
           <div>
             <label className="label" htmlFor="roll-expiry">New expiry</label>
             <input id="roll-expiry" className="input" type="date" min={todayIso()} value={expiry} onChange={e => setExpiry(e.target.value)}
@@ -102,7 +102,7 @@ export default function RollModal({ position: p, evaluation, onDone, onCancel })
         </div>
 
         {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 20 }}>
+        <div className="dialog-actions" style={{ marginTop: 20 }}>
           <button className="btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={submit} disabled={busy}>
             {busy ? <><span className="spinner" /> Saving…</> : 'Save roll'}
