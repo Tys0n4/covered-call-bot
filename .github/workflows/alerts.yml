@@ -1,0 +1,45 @@
+# Buy-back alerts: wakes the API on a schedule and asks it to check open calls.
+# The API posts to Discord when a call reaches your buy-back target (set up on
+# the Strategy page). Free on GitHub; runs only from the default branch.
+#
+# Needs: repository secret APP_PASSWORD (same as on Railway), if the API has one.
+# Optional: repository variable API_URL, if the backend isn't at the default URL.
+name: Buy-back alerts
+
+on:
+  schedule:
+    # Every 15 minutes, Monday–Friday, 13:00–21:45 UTC. That covers US market
+    # hours in both daylight and standard time; the API skips the check (and
+    # sends nothing) whenever the market is closed, including holidays.
+    - cron: "*/15 13-21 * * 1-5"
+  workflow_dispatch:          # "Run workflow" button on the Actions tab
+
+concurrency:
+  group: buyback-alerts
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check open calls
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      API_URL: ${{ vars.API_URL || 'https://covered-call-bot-production.up.railway.app' }}
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+    steps:
+      - name: Check and alert
+        run: |
+          set -euo pipefail
+          # The backend sleeps when idle; the first request wakes it, so retry for up to ~a minute
+          auth=()
+          if [ -n "$APP_PASSWORD" ]; then
+            token=$(curl -fsS --retry 6 --retry-all-errors --retry-delay 10 --max-time 60 \
+              -H 'Content-Type: application/json' \
+              -d "$(jq -n --arg p "$APP_PASSWORD" '{password: $p}')" \
+              "$API_URL/auth/login" | jq -r .token)
+            auth=(-H "Authorization: Bearer $token")
+          fi
+          curl -fsS --retry 6 --retry-all-errors --retry-delay 10 --max-time 120 \
+            -X POST "${auth[@]}" "$API_URL/alerts/check" | tee result.json
+          echo
+          jq -r '"Status: \(.status) · calls checked: \(.checked // "–") · alerts sent: \(.sent)"' result.json >> "$GITHUB_STEP_SUMMARY"

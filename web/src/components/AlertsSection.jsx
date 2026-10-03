@@ -56,7 +56,7 @@ export default function AlertsSection() {
         <BellRing size={17} strokeWidth={2} color="var(--accent-light)" /> Buy-back alerts
       </div>
       <div className="hint" style={{ marginBottom: 18 }}>
-        Get a Discord message when an open call reaches your buy-back target, so you don't have to keep checking. Prices are checked during market hours.
+        Get a Discord message when an open call reaches your buy-back target, so you don't have to keep checking. Prices are checked every 15 minutes while the market is open.
       </div>
 
       {loadError ? <div className="hint" style={{ color: 'var(--red)' }}>{loadError}</div> : !state ? (
