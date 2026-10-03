@@ -503,7 +503,8 @@ body { font-size: 15px; line-height: 1.5; }
 .grid-3       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-4       { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .pick-row     { display: flex; gap: 16px; }
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* position: relative keeps absolutely positioned bits (e.g. screen-reader labels) inside the scroll box */
+.table-scroll { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-scroll .data-table { min-width: 560px; }
 
 @media (max-width: 1100px) {

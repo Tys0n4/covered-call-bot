@@ -128,6 +128,12 @@ export default function Strategy() {
       <PageHeader
         title="Strategy"
         subtitle="How the app splits your trades and when it tells you to buy back. Changes apply to every stock."
+        actions={
+          <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }}
+            onClick={() => { setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal })); setJustSaved(false) }}>
+            <RotateCcw size={13} strokeWidth={1.75} /> Reset rules to defaults
+          </button>
+        }
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -232,21 +238,24 @@ export default function Strategy() {
         </Section>
       </div>
 
-      {/* Save bar */}
+      {/* Save bar: only while there are changes to save (or an error to show) */}
+      {(dirty || error || saving) && (
       <div className="save-bar">
-        <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => { setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal })); setJustSaved(false) }}>
-          <RotateCcw size={13} strokeWidth={1.75} /> Reset rules to defaults
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span className="hint">You have unsaved changes</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {error && <span style={{ color: 'var(--red)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={14} /> {error}</span>}
-          {!error && justSaved && !dirty && <span style={{ color: 'var(--green)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={15} /> Saved</span>}
-          {!error && dirty && <span className="hint">You have unsaved changes</span>}
           <button className="btn-secondary" onClick={() => { setDraft(saved); setGoalText(goalToText(saved.monthly_goal)); setError(null) }} disabled={!dirty || saving}>Discard</button>
           <button className="btn-primary" onClick={handleSave} disabled={!dirty || saving}>
             {saving ? <><span className="spinner" /> Saving…</> : 'Save strategy'}
           </button>
         </div>
       </div>
+      )}
+      {justSaved && !dirty && (
+        <div className="hint" style={{ marginTop: 16, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <CheckCircle2 size={15} /> Strategy saved
+        </div>
+      )}
     </div>
   )
 }
