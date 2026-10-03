@@ -71,8 +71,10 @@ export default function Strategy() {
   const closedThisMonth = positions.filter(p => p.status === 'CLOSED' && (p.closed_at || '').startsWith(monthKey))
   const monthCollected  = soldThisMonth.reduce((sum, p) => sum + p.premium_total, 0)
   const monthBuybacks   = closedThisMonth.reduce((sum, p) => sum + (p.close_cost || 0), 0)
+  const monthFees       = soldThisMonth.reduce((sum, p) => sum + (p.open_fees || 0), 0) +
+                          closedThisMonth.reduce((sum, p) => sum + (p.close_fees || 0), 0)
   const monthMissingCost = closedThisMonth.filter(p => p.close_cost == null).length
-  const monthPremium = monthCollected - monthBuybacks
+  const monthPremium = monthCollected - monthBuybacks - monthFees
   const monthCount = soldThisMonth.length
   const goalPct = draft?.monthly_goal > 0 ? Math.max(0, Math.round((monthPremium / draft.monthly_goal) * 100)) : 0
 
@@ -87,7 +89,7 @@ export default function Strategy() {
     setExporting(true)
     try {
       const r = await getAllPositions()
-      downloadCsv('trades.csv', ['id', 'ticker', 'allocation_type', 'status', 'expiry', 'strike', 'contracts', 'entry_price', 'premium_total', 'opened_at', 'closed_at', 'close_cost'], r.data)
+      downloadCsv('trades.csv', ['id', 'ticker', 'allocation_type', 'status', 'expiry', 'strike', 'contracts', 'entry_price', 'premium_total', 'open_fees', 'close_cost', 'close_fees', 'cost_basis', 'rolled_from', 'opened_at', 'closed_at'], r.data)
     } finally { setExporting(false) }
   }
 
@@ -206,6 +208,7 @@ export default function Strategy() {
                   {goalPct >= 100 ? 'Goal reached this month.' : `${money(Math.max(draft.monthly_goal - monthPremium, 0))} to go`}
                   {' · '}{money(monthCollected)} collected from {plural(monthCount, 'call')}
                   {monthBuybacks > 0 && <> − {money(monthBuybacks)} paid to buy back</>}
+                  {monthFees > 0 && <> − {money(monthFees)} fees</>}
                   {monthMissingCost > 0 && <span style={{ color: 'var(--amber)' }}> · {plural(monthMissingCost, 'buyback')} closed without a cost entered</span>}
                 </div>
               </>

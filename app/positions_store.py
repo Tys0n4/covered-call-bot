@@ -7,7 +7,7 @@ Stores your covered call positions (open and closed) in the database
 from __future__ import annotations
 from collections import defaultdict
 
-from sqlalchemy import and_, func, insert, select, update
+from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.engine import Connection
 
 from clock import local_today
@@ -17,7 +17,11 @@ from models import PlannedCall
 from strategy import allocation_targets
 
 
-class CoverageError(ValueError):
+class PositionError(ValueError):
+    """A change to a position that can't be made (the message says why)."""
+
+
+class CoverageError(PositionError):
     """Saving these calls would sell more contracts than your shares cover."""
 
 
@@ -58,25 +62,30 @@ def _contracts_word(n: int) -> str:
     return f"{n} contract{'' if n == 1 else 's'}"
 
 
-def _check_coverage(conn: Connection, planned: list[PlannedCall], income_weight: float | None) -> None:
+def _check_coverage(conn: Connection, planned: list[PlannedCall], income_weight: float | None) -> dict[str, float]:
     """
     Raise CoverageError unless every ticker's open + new contracts fit in its
     shares (100 per contract). With income_weight, each side (Income /
     Balanced) must also fit what the split still needs, which also stops the
     same scan from being saved twice.
+
+    Returns each ticker's average cost per share (recorded on the new calls).
     """
+    avg_costs: dict[str, float] = {}
     new_by_ticker: dict[str, dict[str, int]] = defaultdict(lambda: {"Income": 0, "Balanced": 0})
     for p in planned:
         new_by_ticker[p.ticker][p.allocation_type] = new_by_ticker[p.ticker].get(p.allocation_type, 0) + int(p.contracts)
 
     for ticker, new in new_by_ticker.items():
         # Lock the holding row (Postgres) so two saves can't both pass the check
-        shares = conn.execute(
-            select(holdings.c.shares).where(holdings.c.ticker == ticker).with_for_update()
-        ).scalar()
-        if shares is None:
+        holding = conn.execute(
+            select(holdings.c.shares, holdings.c.avg_cost).where(holdings.c.ticker == ticker).with_for_update()
+        ).first()
+        if holding is None:
             raise CoverageError(f"{ticker} is not in your portfolio. Add it on the Dashboard first.")
-        total = int(shares) // 100
+        shares = int(holding.shares)
+        avg_costs[ticker] = float(holding.avg_cost)
+        total = shares // 100
 
         open_by_type = {
             t: int(n) for t, n in conn.execute(
@@ -102,27 +111,21 @@ def _check_coverage(conn: Connection, planned: list[PlannedCall], income_weight:
                     f"{new['Balanced']} balanced, but only {t['needed_income']} and {t['needed_balanced']} are "
                     "still needed. It may already be saved; check Positions or scan again."
                 )
+    return avg_costs
 
 
-def save_positions(
+def _insert_positions(
+    conn: Connection,
     planned: list[PlannedCall],
-    *,
-    opened_at: str | None = None,
-    income_weight: float | None = None,
-) -> None:
-    """
-    Add new positions as OPEN, stamped with opened_at (default: today).
-
-    Refuses (CoverageError) anything your shares don't cover; pass
-    income_weight to also hold each side to your split. The check and the
-    insert happen in one transaction.
-    """
-    if not planned:
-        return
-    expire_finished_positions()   # calls that have expired no longer use up shares
-    opened = opened_at or local_today()
-    records = [
-        {
+    opened: str,
+    income_weight: float | None,
+    rolled_from: int | None = None,
+) -> list[int]:
+    """Coverage check + insert inside the caller's transaction. Returns the new ids."""
+    avg_costs = _check_coverage(conn, planned, income_weight)
+    ids = []
+    for p in planned:
+        record = {
             "ticker":           p.ticker,
             "expiry":           p.expiry,
             "strike":           p.strike,
@@ -135,28 +138,164 @@ def save_positions(
             "status":           "OPEN",
             "opened_at":        opened,
             "closed_at":        None,
+            "open_fees":        round(float(p.fees or 0), 2),
+            "cost_basis":       avg_costs.get(p.ticker) or None,
+            "rolled_from":      rolled_from,
         }
-        for p in planned
-    ]
+        ids.append(conn.execute(insert(positions).values(**record)).inserted_primary_key[0])
+    return ids
+
+
+def save_positions(
+    planned: list[PlannedCall],
+    *,
+    opened_at: str | None = None,
+    income_weight: float | None = None,
+) -> list[int]:
+    """
+    Add new positions as OPEN, stamped with opened_at (default: today).
+    Returns the new position ids.
+
+    Refuses (CoverageError) anything your shares don't cover; pass
+    income_weight to also hold each side to your split. The check and the
+    insert happen in one transaction.
+    """
+    if not planned:
+        return []
+    expire_finished_positions()   # calls that have expired no longer use up shares
     with get_engine().begin() as conn:
-        _check_coverage(conn, planned, income_weight)
-        conn.execute(insert(positions), records)
+        return _insert_positions(conn, planned, opened_at or local_today(), income_weight)
 
 
-def close_position(position_id: int, close_cost: float | None = None) -> bool:
+def _money(v: float | None) -> float | None:
+    return None if v is None else round(float(v), 2)
+
+
+def close_position(position_id: int, close_cost: float | None = None, close_fees: float | None = None) -> bool:
     """
     Mark an OPEN position as CLOSED (bought back) by id.
-    close_cost = total dollars paid to buy it back, if you entered it.
-    Returns False if there's no open position with that id.
+    close_cost = total dollars paid to buy it back, close_fees = commissions,
+    if you entered them. Returns False if there's no open position with that id.
     """
     with get_engine().begin() as conn:
         result = conn.execute(
             update(positions)
             .where(and_(positions.c.id == position_id, positions.c.status == "OPEN"))
             .values(status="CLOSED", closed_at=local_today(),
-                    close_cost=None if close_cost is None else round(float(close_cost), 2))
+                    close_cost=_money(close_cost), close_fees=_money(close_fees))
         )
     return result.rowcount > 0
+
+
+def roll_position(
+    position_id: int,
+    new_call: PlannedCall,
+    close_cost: float,
+    close_fees: float = 0.0,
+) -> int | None:
+    """
+    Roll a call: buy the open one back and sell new_call in its place, in one
+    transaction. new_call keeps the old call's ticker and Income/Balanced type.
+    Returns the new position's id, or None if there's no open position with
+    that id. Raises PositionError / CoverageError if the new call can't be sold.
+    """
+    if has_expired(new_call.expiry):
+        raise PositionError("The new expiry has already passed. Pick a later date.")
+    expire_finished_positions()
+    with get_engine().begin() as conn:
+        old = conn.execute(
+            select(positions).where(and_(positions.c.id == position_id, positions.c.status == "OPEN")).with_for_update()
+        ).mappings().first()
+        if old is None:
+            return None
+        new_call.ticker = old["ticker"]
+        new_call.allocation_type = old["allocation_type"]
+        today = local_today()
+        conn.execute(
+            update(positions).where(positions.c.id == position_id)
+            .values(status="CLOSED", closed_at=today, close_cost=_money(close_cost), close_fees=_money(close_fees))
+        )
+        return _insert_positions(conn, [new_call], today, None, rolled_from=position_id)[0]
+
+
+def assign_position(position_id: int, assigned_on: str | None = None) -> dict | None:
+    """
+    Record that a call was exercised: your shares were sold at the strike.
+
+    Works on OPEN calls (early assignment) and EXPIRED ones (finished in the
+    money). The premium is kept in full and the holding loses
+    contracts x 100 shares. Returns the updated position, or None if there's
+    no open/expired position with that id.
+    """
+    expire_finished_positions()
+    with get_engine().begin() as conn:
+        pos = conn.execute(
+            select(positions)
+            .where(and_(positions.c.id == position_id, positions.c.status.in_(("OPEN", "EXPIRED"))))
+            .with_for_update()
+        ).mappings().first()
+        if pos is None:
+            return None
+        ticker, contracts = pos["ticker"], int(pos["contracts"])
+        holding = conn.execute(
+            select(holdings.c.shares, holdings.c.avg_cost).where(holdings.c.ticker == ticker).with_for_update()
+        ).first()
+        if holding is None:
+            raise PositionError(f"{ticker} is no longer in your portfolio, so there are no shares to remove. Add it back first.")
+        shares, needed = int(holding.shares), contracts * 100
+        if shares < needed:
+            raise PositionError(
+                f"Your portfolio shows {shares:,} {ticker} shares, but this call covers {needed:,}. "
+                "Correct your share count on the Dashboard first."
+            )
+        # Other open calls must still be covered by the shares that are left
+        other_open = conn.execute(
+            select(func.coalesce(func.sum(positions.c.contracts), 0))
+            .where(and_(positions.c.ticker == ticker, positions.c.status == "OPEN", positions.c.id != position_id))
+        ).scalar()
+        if (shares - needed) // 100 < int(other_open):
+            raise PositionError(
+                f"After giving up {needed:,} shares you'd have {shares - needed:,} {ticker} shares left, "
+                f"not enough for your other {int(other_open)} open call contract(s). Close or roll those first."
+            )
+
+        conn.execute(update(holdings).where(holdings.c.ticker == ticker).values(shares=shares - needed))
+        closed_on = assigned_on or (pos["expiry"] if pos["status"] == "EXPIRED" else local_today())
+        conn.execute(
+            update(positions).where(positions.c.id == position_id).values(
+                status="ASSIGNED",
+                closed_at=closed_on,
+                close_cost=0.0,
+                cost_basis=pos["cost_basis"] if pos["cost_basis"] is not None else float(holding.avg_cost),
+                assignment_reviewed=1,
+            )
+        )
+        return dict(conn.execute(select(positions).where(positions.c.id == position_id)).mappings().first())
+
+
+def dismiss_assignment(position_id: int) -> bool:
+    """You checked: this expired call was not assigned. Stop asking about it."""
+    with get_engine().begin() as conn:
+        result = conn.execute(
+            update(positions)
+            .where(and_(positions.c.id == position_id, positions.c.status == "EXPIRED"))
+            .values(assignment_reviewed=1)
+        )
+    return result.rowcount > 0
+
+
+def expired_unreviewed(since: str) -> list[dict]:
+    """EXPIRED calls with expiry on/after `since` that you haven't reviewed for assignment."""
+    expire_finished_positions()
+    return _rows(
+        select(positions)
+        .where(and_(
+            positions.c.status == "EXPIRED",
+            positions.c.expiry >= since,
+            or_(positions.c.assignment_reviewed.is_(None), positions.c.assignment_reviewed == 0),
+        ))
+        .order_by(positions.c.expiry, positions.c.id)
+    )
 
 
 def list_all_positions() -> list[dict]:

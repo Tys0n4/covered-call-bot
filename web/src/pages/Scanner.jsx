@@ -7,9 +7,11 @@ import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, Ch
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
+import MoneyInput from '../components/MoneyInput'
 import ServerDown from '../components/ServerDown'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
+import { moneyValue, splitFees } from '../lib/pnl'
 
 const DEFAULT_CONFIG = {
   min_dte: 20, max_dte: 38,
@@ -191,6 +193,8 @@ export default function Scanner() {
   const [error, setError]     = useState(null)
   const [saved, setSaved]     = useState(false)
   const [saving, setSaving]   = useState(false)
+  const [fills, setFills]     = useState([])   // per-share fill for each planned leg, as typed
+  const [feesText, setFees]   = useState('')   // total commissions for the trade, as typed
 
   const { values: config, errors: fieldErrors, valid: filtersValid } = parseForm(form)
 
@@ -214,6 +218,8 @@ export default function Scanner() {
     try {
       const res = await runScan({ ...config, ticker: selected })
       setResult(res.data)
+      setFills(res.data.planned_positions.map(p => p.entry_price.toFixed(2)))
+      setFees('')
     } catch (e) {
       setError(apiError(e, 'Scan failed. Is the API running?'))
     } finally {
@@ -221,12 +227,17 @@ export default function Scanner() {
     }
   }
 
+  const fillValues = fills.map(moneyValue)
+  const fillsValid = fillValues.length > 0 && fillValues.every(v => v != null && v > 0)
+
   const handleSave = async () => {
-    if (!result?.planned_positions) return
-    const payload = result.planned_positions.map(p => ({
+    if (!result?.planned_positions || !fillsValid) return
+    const legs = result.planned_positions
+    const fees = splitFees(moneyValue(feesText) || 0, legs.map(p => p.contracts))
+    const payload = legs.map((p, i) => ({
       ticker: result.ticker, expiry: p.expiry, strike: p.strike,
-      contracts: p.contracts, entry_price: p.entry_price,
-      premium_total: p.premium_total, allocation_type: p.allocation_type,
+      contracts: p.contracts, entry_price: fillValues[i],
+      allocation_type: p.allocation_type, fees: fees[i],
     }))
     setSaving(true)
     try { await savePositions(payload); setSaved(true) }
@@ -395,6 +406,30 @@ export default function Scanner() {
                     ))}
                   </div>
 
+                  {!saved && !lastPrices && (
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 20 }}>
+                      <div className="fact-label" style={{ marginBottom: 10 }}>
+                        Your fills <InfoTip text={TERMS.fill} size={12} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                        {planned.map((p, i) => (
+                          <MoneyInput key={i} id={`fill-${i}`} label={`${p.allocation_type} · ${money(p.strike)} (per share)`}
+                            value={fills[i] ?? ''} onChange={v => setFills(f => f.map((x, j) => (j === i ? v : x)))}
+                            error={fillValues[i] == null || !(fillValues[i] > 0) ? 'Enter the price you sold at' : null} />
+                        ))}
+                        <MoneyInput id="fill-fees" label="Fees (total)" value={feesText} onChange={setFees} />
+                      </div>
+                      {fillsValid && (
+                        <div className="hint" style={{ marginTop: 8 }}>
+                          At these fills you collect{' '}
+                          <strong style={{ color: 'var(--green)' }}>
+                            {money(planned.reduce((s, p, i) => s + fillValues[i] * p.contracts * 100, 0) - (moneyValue(feesText) || 0))}
+                          </strong> after fees.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                     <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)' }}>
                       <Fact label="Premium"                tip={TERMS.premium} value={money(result.gross_premium)} />
@@ -409,7 +444,7 @@ export default function Scanner() {
                         <Link to="/positions" className="link-btn">View in Positions <ArrowRight size={15} /></Link>
                       </div>
                     ) : (
-                      <button className="btn-primary" onClick={handleSave} disabled={saving || lastPrices}
+                      <button className="btn-primary" onClick={handleSave} disabled={saving || lastPrices || !fillsValid}
                         title={lastPrices ? 'Available when the market is open and prices are live' : undefined}>
                         {saving ? <><span className="spinner" /> Saving…</> : 'Save this trade'}
                       </button>

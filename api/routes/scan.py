@@ -155,8 +155,9 @@ def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_leng
             strike=t.strike,
             contracts=t.contracts,
             entry_price=t.entry_price,
-            premium_total=t.premium_total,
+            premium_total=t.premium,
             allocation_type=t.allocation_type,
+            fees=t.fees,
         )
         for t in trades
     ]

@@ -541,3 +541,13 @@ body { font-size: 15px; line-height: 1.5; }
 @media (max-width: 520px) {
   .grid-filters { grid-template-columns: 1fr; }
 }
+
+/* Radio choices shown as cards (Close this call) */
+.choice {
+  display: flex; align-items: flex-start; gap: 10px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+  font-size: 14px; color: var(--text-dim); transition: border-color 0.15s, background 0.15s;
+}
+.choice input { margin-top: 3px; accent-color: var(--accent); }
+.choice:hover { border-color: var(--border-hover); }
+.choice.active { border-color: rgba(106, 228, 255, 0.4); background: var(--accent-dim); color: var(--text); }

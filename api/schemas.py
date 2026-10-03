@@ -107,9 +107,15 @@ class TradeIn(BaseModel):
     expiry: str
     strike: float = Field(gt=0, le=1_000_000)
     contracts: int = Field(ge=1, le=100_000)
-    entry_price: float = Field(ge=0, le=1_000_000)        # premium per share
-    premium_total: float = Field(ge=0, le=1_000_000_000)  # premium for all contracts, in dollars
+    entry_price: float = Field(ge=0, le=1_000_000)        # premium per share you were filled at
     allocation_type: Literal["Income", "Balanced"]
+    fees: float = Field(default=0, ge=0, le=100_000)      # commissions/fees for this trade, in dollars
+    # Ignored if sent: always entry_price x contracts x 100 (kept so older clients still work)
+    premium_total: Optional[float] = None
+
+    @property
+    def premium(self) -> float:
+        return round(self.entry_price * self.contracts * 100, 2)
 
     @field_validator("ticker")
     @classmethod
@@ -143,15 +149,49 @@ class PositionOut(BaseModel):
     entry_price: float
     premium_total: float
     allocation_type: str
-    status: str                              # OPEN, CLOSED (bought back) or EXPIRED
+    status: str                              # OPEN, CLOSED (bought back), EXPIRED or ASSIGNED
     opened_at: str
     closed_at: Optional[str] = None
-    close_cost: Optional[float] = None       # $ paid to buy it back (0 when expired)
+    close_cost: Optional[float] = None       # $ paid to buy it back (0 when expired or assigned)
+    open_fees: Optional[float] = None        # $ commissions when sold
+    close_fees: Optional[float] = None       # $ commissions when bought back
+    cost_basis: Optional[float] = None       # avg cost per share of the stock when sold
+    rolled_from: Optional[int] = None        # id of the call this one replaced
 
 
 class ClosePositionRequest(BaseModel):
     position_id: int
     close_cost: Optional[float] = Field(default=None, ge=0, le=10_000_000)   # $ paid to buy back
+    close_fees: Optional[float] = Field(default=None, ge=0, le=100_000)      # $ commissions
+
+
+class RollRequest(BaseModel):
+    """Buy back an open call and sell a new one on the same shares."""
+    close_cost: float = Field(ge=0, le=10_000_000)          # $ paid to buy the old call back
+    close_fees: float = Field(default=0, ge=0, le=100_000)
+    expiry: str
+    strike: float = Field(gt=0, le=1_000_000)
+    contracts: int = Field(ge=1, le=100_000)
+    entry_price: float = Field(ge=0, le=1_000_000)          # new call's fill, per share
+    open_fees: float = Field(default=0, ge=0, le=100_000)
+
+    @field_validator("expiry")
+    @classmethod
+    def _norm_expiry(cls, v):
+        return _iso_date(v)
+
+
+class AssignRequest(BaseModel):
+    assigned_on: Optional[str] = None   # YYYY-MM-DD; default: expiry (if expired) or today
+
+    @field_validator("assigned_on")
+    @classmethod
+    def _date(cls, v):
+        return None if v in (None, "") else _iso_date(v)
+
+
+class AssignmentReviewItem(PositionOut):
+    close_price: float                       # the stock's close on expiry day
 
 
 class EvaluatedPosition(BaseModel):

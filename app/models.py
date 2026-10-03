@@ -29,6 +29,7 @@ class PlannedCall:
     warning: str = "Verify on broker"
     status: str = "OPEN"
     allocation_type: str = ""   # "Income" | "Balanced"
+    fees: float = 0.0           # commissions/fees paid when selling ($ total)
 
 
 @dataclass
