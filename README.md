@@ -219,6 +219,8 @@ The management module fetches the current ask price for each open position and c
 
 Buyback costs include your usual commission. Discord alerts are only sent for "Buy back now".
 
+Outside market hours there's no ask, so a call is priced at its last trade, unless that trade is from before the latest session (a quiet strike that hasn't traded for days). Then Positions shows "Price unavailable" with the last trade date instead of a recommendation, until the market opens.
+
 From the Positions page you can close a call (bought back, with cost and fees), roll it into a new one, or record that your shares were called away. When a call expires with the stock above the strike, the app asks you to confirm whether it was assigned instead of assuming.
 
 ### Buy-back alerts (Discord)

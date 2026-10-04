@@ -48,6 +48,7 @@ def evaluate_open_positions(ticker: Optional[str] = None):
             buyback_price=r.buyback_price,
             buyback_kept_pct=r.buyback_kept_pct,
             event=r.event,
+            old_trade_date=r.old_trade_date,
             allocation_type=pos.get("allocation_type", ""),
             opened_at=pos.get("opened_at", ""),
         )

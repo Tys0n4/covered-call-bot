@@ -5,6 +5,8 @@ import logging
 from datetime import date
 from decimal import ROUND_HALF_DOWN, Decimal
 
+import pandas as pd
+
 from core.options_data import get_calls
 from core.quotes import select_quote, QuoteMode
 from core.models import OpenCoveredCall
@@ -12,11 +14,52 @@ from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.fees import typical_fee_per_contract
 from core.market_data import get_current_price, get_events
 from core.events import fed_meetings_between
-from core.market_hours import market_today
+from core.market_hours import NEW_YORK, last_session, market_today
 
 log = logging.getLogger(__name__)
 
 CENT = Decimal("0.01")
+
+
+def _trade_day(value) -> date | None:
+    """Yahoo's lastTradeDate as a New York date."""
+    try:
+        ts = pd.to_datetime(value, utc=True)
+    except (ValueError, TypeError):
+        return None
+    return None if pd.isna(ts) else ts.tz_convert(NEW_YORK).date()
+
+
+def get_current_option_quote(
+    ticker: str,
+    expiry: str,
+    strike: float,
+    *,
+    mode: QuoteMode = "ask",
+    strike_tolerance: float = DEFAULT_CONFIG.strike_match_tolerance,
+) -> dict:
+    """
+    {"price", "old_trade_date"}. Without a live ask (outside market hours) the
+    last trade is used, unless it's from before the latest session: a quiet
+    strike's trade from days ago was at a different stock price, so then
+    price is 0 (no recommendation) and old_trade_date says when it last traded.
+    """
+    calls = get_calls(ticker, expiry)
+    if calls is None or calls.empty or "strike" not in calls.columns:
+        return {"price": 0.0, "old_trade_date": None}
+    calls = calls.copy()
+    calls["strike"] = calls["strike"].astype(float)
+    calls["_diff"] = (calls["strike"] - float(strike)).abs()
+    row = calls.sort_values("_diff").iloc[0]
+    if float(row["_diff"]) > float(strike_tolerance):
+        return {"price": 0.0, "old_trade_date": None}
+
+    result = select_quote(bid=row.get("bid"), ask=row.get("ask"), last_price=row.get("lastPrice"), mode=mode)
+    if result.source == "LAST":
+        traded = _trade_day(row.get("lastTradeDate"))
+        if traded and traded < last_session():
+            return {"price": 0.0, "old_trade_date": traded.isoformat()}
+    return {"price": result.price, "old_trade_date": None}
 
 
 def get_current_option_price(
@@ -28,34 +71,12 @@ def get_current_option_price(
     strike_tolerance: float = DEFAULT_CONFIG.strike_match_tolerance,
 ) -> float:
     """
-    Fetch current market price for an open call position via yfinance.
-    Uses ask price by default for buyback cost estimates (conservative).
-    Delegates quote selection to quotes.py for consistency.
+    Current price of an open call (the ask by default: a buyback pays it), or 0.0
+    when there's none or only a trade from before the latest session.
     Chains are cached briefly (options_data.get_calls), so positions on the
     same expiry share one download.
     """
-    calls = get_calls(ticker, expiry)
-    if calls is None:
-        return 0.0
-    calls = calls.copy()
-
-    if calls.empty or "strike" not in calls.columns:
-        return 0.0
-
-    calls["strike"] = calls["strike"].astype(float)
-    calls["_diff"] = (calls["strike"] - float(strike)).abs()
-    row = calls.sort_values("_diff").iloc[0]
-
-    if float(row["_diff"]) > float(strike_tolerance):
-        return 0.0
-
-    result = select_quote(
-        bid=row.get("bid"),
-        ask=row.get("ask"),
-        last_price=row.get("lastPrice"),
-        mode=mode,
-    )
-    return result.price
+    return get_current_option_quote(ticker, expiry, strike, mode=mode, strike_tolerance=strike_tolerance)["price"]
 
 
 def buyback_price(entry_price: float, target_pct: float) -> float:
@@ -167,7 +188,7 @@ def evaluate_positions(
 
     for pos in positions:
         log.debug("Checking %s %s $%.2f", pos["ticker"], pos["expiry"], float(pos["strike"]))
-        current_px = get_current_option_price(
+        quote = get_current_option_quote(
             ticker=pos["ticker"],
             expiry=pos["expiry"],
             strike=float(pos["strike"]),
@@ -176,8 +197,10 @@ def evaluate_positions(
         )
         if pos["ticker"] not in stock_prices:
             stock_prices[pos["ticker"]] = get_current_price(pos["ticker"])
-        results.append(evaluate_position(pos, current_px, config=config,
-                                         stock_price=stock_prices[pos["ticker"]], fee_per_contract=fee,
-                                         event=next_event(pos["ticker"], pos["expiry"])))
+        result = evaluate_position(pos, quote["price"], config=config,
+                                   stock_price=stock_prices[pos["ticker"]], fee_per_contract=fee,
+                                   event=next_event(pos["ticker"], pos["expiry"]))
+        result.old_trade_date = quote["old_trade_date"]
+        results.append(result)
 
     return results
