@@ -143,6 +143,7 @@ def run_scan(scan_config: ScanConfig):
         estimated_fees=est_fees,
         fee_per_contract=scan.fee_per_contract,
         data_source=scan.data_source,
+        price_source=scan.price_source,
         premium_check=scan.premium_check,
         delta_min=config.delta_min,
         delta_max=config.delta_max,

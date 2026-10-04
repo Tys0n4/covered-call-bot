@@ -117,3 +117,25 @@ def test_failed_company_info_is_not_kept_for_a_day():
     cache.clear()                                       # the short retry wait passes
     INFO["NVDA"] = {"industry": "Semiconductors"}
     assert market_data.get_info("NVDA")["industry"] == "Semiconductors"
+
+
+def test_alpha_vantage_is_skipped_for_the_rest_of_the_day_after_its_daily_limit(monkeypatch):
+    calls = []
+    limit = {"Information": "Our standard API rate limit is 25 requests per day."}
+    monkeypatch.setattr(market_data, "ALPHA_VANTAGE_KEY", "k")
+    monkeypatch.setattr(market_data.requests, "get", lambda *a, **k: calls.append(1) or _Resp(limit))
+    assert market_data.get_current_price("NVDA") == 100.0          # Yahoo
+    assert market_data.get_current_price("AAPL") == 200.0
+    assert len(calls) == 1                                          # not asked again today
+
+    monkeypatch.setattr(market_data, "market_today", lambda: "2099-01-01")   # next day: tried again
+    market_data.get_current_price("NOPE")
+    assert len(calls) == 2
+
+
+def test_cboe_price_comes_first(monkeypatch):
+    from conftest import CBOE
+    monkeypatch.setattr(market_data, "ALPHA_VANTAGE_KEY", "k")
+    monkeypatch.setattr(market_data.requests, "get", lambda *a, **k: _Resp({"Global Quote": {"05. price": "99"}}))
+    CBOE["NVDA"] = {"data": {"current_price": 101.25, "options": []}}
+    assert market_data.get_price_quote("NVDA") == (101.25, "cboe")

@@ -2,8 +2,9 @@
 """
 Option chains from Cboe's delayed quotes (about 15 minutes behind, free, no
 key): every expiry for a stock in one download, with the exchange's own
-implied volatility and delta. This is the main source; Yahoo is the fallback
-when Cboe fails or has nothing for a stock (options_data.py).
+implied volatility and delta, plus the stock's price at the same moment. This
+is the main source; Yahoo is the fallback when Cboe fails or has nothing for a
+stock (options_data.py, market_data.get_current_price).
 
 The endpoint is the one Cboe's website uses, not a documented API, so the
 parsing is defensive: anything unexpected means "no Cboe data" and the app
@@ -96,6 +97,36 @@ def parse_calls(payload: dict | None, ticker: str) -> pd.DataFrame | None:
     return pd.DataFrame(rows)
 
 
+def parse_price(payload: dict | None) -> float | None:
+    """The stock's price in a Cboe payload (last trade, else today's or yesterday's close), or None."""
+    try:
+        data = payload["data"]
+    except (TypeError, KeyError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    for key in ("current_price", "close", "prev_day_close"):
+        price = _num(data.get(key))
+        if price and price > 0:
+            return price
+    return None
+
+
+def _snapshot(ticker: str) -> dict | None:
+    """One Cboe download: {"calls", "price"}, cached for a minute. After a failure Cboe is
+    left alone for a minute too, so each lookup doesn't wait on another timeout."""
+    def fetch():
+        payload = _download(ticker.upper())
+        calls, price = parse_calls(payload, ticker), parse_price(payload)
+        return {"calls": calls, "price": price} if calls is not None or price is not None else None
+    return cached(("cboe", ticker.upper()), CHAIN_TTL, fetch, retry_after=CHAIN_TTL)
+
+
 def get_cboe_calls(ticker: str) -> pd.DataFrame | None:
-    """Every call for a stock from Cboe (cached for a minute), or None."""
-    return cached(("cboe", ticker.upper()), CHAIN_TTL, lambda: parse_calls(_download(ticker.upper()), ticker))
+    """Every call for a stock from Cboe, or None."""
+    return (_snapshot(ticker) or {}).get("calls")
+
+
+def get_cboe_price(ticker: str) -> float | None:
+    """The stock's price from the same Cboe snapshot as its options (about 15 min delayed), or None."""
+    return (_snapshot(ticker) or {}).get("price")

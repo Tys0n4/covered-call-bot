@@ -124,6 +124,7 @@ class ScanResponse(BaseModel):
     fee_per_contract: float = 0.0            # your usual commission per contract
     premium_check: Optional[PremiumCheck] = None
     data_source: Optional[str] = None        # option prices from "cboe" (15-min delayed) or "yahoo" (fallback)
+    price_source: Optional[str] = None       # stock price from "cboe" (same snapshot), "alpha_vantage" or "yahoo"
     delta_min: float = 0.20                  # the strategy used for this scan
     delta_max: float = 0.30
     min_dte: int = 14

@@ -5,7 +5,7 @@ Scanning a stock
     scanner.py       the scan pipeline: price, option chain, filters, picks, warnings
     options_data.py  option chains and expiries: Cboe, else Yahoo
     cboe.py          Cboe delayed option quotes (bid/ask, implied volatility, delta)
-    market_data.py   stock price (Alpha Vantage, Yahoo fallback), earnings/ex-dividend dates, past closes
+    market_data.py   stock price (Cboe, then Alpha Vantage, then Yahoo), earnings/ex-dividend dates, past closes
     events.py        Fed meeting dates, a stock's industry, earnings that move the industry
     filters.py       which options qualify (strike, premium, volume, open interest, spread)
     quotes.py        which price to use for an option (mid, last, ask)

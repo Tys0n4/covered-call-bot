@@ -4,8 +4,8 @@ from datetime import date, datetime, timedelta
 import pytest
 from conftest import CBOE, IMPLIED_VOL
 
-from core import cache, scanner
-from core.cboe import parse_calls
+from core import cache, cboe, market_data, scanner
+from core.cboe import get_cboe_calls, get_cboe_price, parse_calls, parse_price
 
 
 def _occ(root, expiry, strike, cp="C"):
@@ -83,3 +83,33 @@ def test_price_check_uses_cboe_and_says_so(client, nvda):
                                         premium_total=2500, allocation_type="Income"))
     r = client.get("/manage").json()
     assert r["data_source"] == "cboe" and r["positions"][0]["price_source"] == "cboe"
+
+
+# --- The stock price comes from the same Cboe snapshot as the options -------------------------
+
+def test_stock_price_is_read_from_the_cboe_payload():
+    assert parse_price({"data": {"current_price": 31.2, "close": 30.0}}) == 31.2
+    assert parse_price({"data": {"current_price": None, "close": 30.0}}) == 30.0     # e.g. before the open
+    assert parse_price({"data": {"prev_day_close": 29.5}}) == 29.5
+    assert parse_price({"data": {"options": []}}) is None
+    assert parse_price(None) is None and parse_price({"data": "?"}) is None
+
+
+def test_scan_uses_the_stock_price_from_the_same_snapshot(client, nvda):
+    CBOE["NVDA"] = cboe_payload(price=104.0, days=(18, 25), delta_for=_delta)   # Yahoo says $100
+    scan = client.post("/scan", json={"ticker": "NVDA"}).json()
+    assert scan["current_price"] == 104.0
+    assert scan["price_source"] == "cboe" and scan["data_source"] == "cboe"
+
+
+def test_stock_price_falls_back_when_cboe_has_nothing(client, nvda):
+    scan = client.post("/scan", json={"ticker": "NVDA"}).json()
+    assert scan["current_price"] == 100.0 and scan["price_source"] == "yahoo"
+
+
+def test_a_failed_cboe_download_is_not_retried_on_every_lookup(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cboe, "_download", lambda symbol: calls.append(symbol))     # Cboe down: None
+    assert market_data.get_price_quote("NVDA") == (100.0, "yahoo")
+    assert get_cboe_calls("NVDA") is None and get_cboe_price("NVDA") is None
+    assert calls == ["NVDA"]                                                        # one try, then a short wait

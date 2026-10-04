@@ -21,7 +21,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ## Features
 
-- **Live options scanning** — options chains from Cboe's delayed quotes (about 15 minutes behind), with Yahoo Finance as the fallback; stock price from Alpha Vantage with an automatic Yahoo fallback; NYSE holidays and early closes handled
+- **Live options scanning** — options chains from Cboe's delayed quotes (about 15 minutes behind), with Yahoo Finance as the fallback; stock price from the same Cboe snapshot so it always matches the option prices, with Alpha Vantage and then Yahoo as fallbacks; NYSE holidays and early closes handled
 - **Baseline strategy** — calls with a 20–30% chance of being called (delta 0.20–0.30), 14–30 days out, picked to reach your monthly goal with as little risk as possible; every part is editable on the Strategy page
 - **Goal-paced picks** — compares options by the monthly income you expect to keep after buy-backs and fees, within your delta range
 - **Smart allocation** — maintains a 70/30 income/balanced contract split per ticker, accounting for already-open positions
@@ -73,7 +73,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 | Layer       | Technology                          |
 |-------------|-------------------------------------|
 | Backend     | Python, FastAPI, Uvicorn            |
-| Data        | yfinance, Alpha Vantage API, pandas |
+| Data        | Cboe delayed quotes, yfinance, Alpha Vantage API, pandas |
 | Frontend    | React, Vite, Tailwind CSS           |
 | State       | React Context API, localStorage     |
 | Persistence | Postgres (SQLite locally), SQLAlchemy |
@@ -125,7 +125,7 @@ covered-call-bot/
 
 - Python 3.11+
 - Node.js 22+
-- Alpha Vantage API key (free at [alphavantage.co](https://www.alphavantage.co))
+- Alpha Vantage API key (optional, free at [alphavantage.co](https://www.alphavantage.co)): a backup stock price source when Cboe doesn't answer
 
 ### 1. Clone the repo
 

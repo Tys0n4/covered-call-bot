@@ -1,5 +1,5 @@
 # options_data.py
-# Stock price -> Alpha Vantage (accurate, free)
+# Stock price -> market_data.get_current_price (Cboe's snapshot first)
 # Options chain -> Cboe delayed quotes (core/cboe.py), else yfinance when Cboe
 # fails or has nothing for the stock. Each row says which in its "source" column.
 
