@@ -3,6 +3,7 @@ import pandas as pd
 
 from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.quotes import apply_quote_policy_to_df
+from core.market_hours import NEW_YORK, last_session
 
 
 def filter_covered_calls(
@@ -26,7 +27,9 @@ def filter_covered_calls(
 
     use_last_price=True (market closed / no live quotes): each option is priced
     at its last traded price, marked STALE, and the spread check is skipped
-    because there is no live bid/ask to measure.
+    because there is no live bid/ask to measure. A last trade from before the
+    latest session (a quiet strike that hasn't traded for days) is marked OLD:
+    the stock has moved since, so that price says little about today's.
     """
     if calls_df.empty:
         return calls_df
@@ -46,6 +49,12 @@ def filter_covered_calls(
         df.loc[has_last, "premium_source"] = "LAST"
         df.loc[has_last, "quote_quality"] = "STALE"
         df.loc[has_last, "warning"] = "Last traded price (market closed)"
+        if "lastTradeDate" in df.columns:
+            traded = pd.to_datetime(df["lastTradeDate"], errors="coerce", utc=True).dt.tz_convert(NEW_YORK).dt.date
+            old = has_last & traded.notna() & (traded < last_session())
+            df["last_trade_date"] = traded.map(lambda d: d.isoformat() if pd.notna(d) else None)
+            df.loc[old, "quote_quality"] = "OLD"
+            df.loc[old, "warning"] = "Last traded before the latest session"
     df["mid"] = ((df["bid"].fillna(0) + df["ask"].fillna(0)) / 2).round(3)
 
     # Price live quotes at a realistic sell fill, not the midpoint: a sell order

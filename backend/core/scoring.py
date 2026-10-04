@@ -85,6 +85,14 @@ def in_delta_range(df: pd.DataFrame, config: ScannerConfig) -> pd.DataFrame:
     return df[(delta >= config.delta_min) & (delta <= config.delta_max)]
 
 
+def recent_prices_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Options priced by a trade from before the latest session (OLD) can't be trusted; skip them when others can."""
+    if "quote_quality" not in df.columns:
+        return df
+    fresh = df[df["quote_quality"] != "OLD"]
+    return fresh if not fresh.empty else df
+
+
 def pick_for_strategy(df: pd.DataFrame, config: ScannerConfig, goal_pace: float = 0.0):
     """
     Pick (income, balanced, plan_per_contract) from options already in your delta range.

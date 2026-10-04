@@ -32,8 +32,11 @@ export function EventBadges({ option, compact = false }) {
   </>
 }
 
-function QuoteBadge({ quality }) {
+function QuoteBadge({ quality, lastTrade }) {
   if (quality === 'LIVE') return <span className="muted">Live</span>
+  if (quality === 'OLD') {
+    return <span className="badge badge-red" title={`${TERMS.oldPrice}${lastTrade ? ` Last traded ${fmtDate(lastTrade)}.` : ''}`}>Old price</span>
+  }
   return <span className={`badge badge-${quality === 'STALE' ? 'amber' : 'red'}`}>{quality === 'STALE' ? 'Stale' : quality}</span>
 }
 
@@ -125,7 +128,7 @@ export default function OptionsTable({ candidates }) {
             ...g.items.map(c => (
               <tr key={`${c.expiry}-${c.strike}`}>
                 <Cells c={c} />
-                {showQuote && <td><QuoteBadge quality={c.quote_quality} /></td>}
+                {showQuote && <td><QuoteBadge quality={c.quote_quality} lastTrade={c.last_trade_date} /></td>}
               </tr>
             )),
           ]) : rows.map(c => (
@@ -133,7 +136,7 @@ export default function OptionsTable({ candidates }) {
               <td className="nowrap"><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{fmtDate(c.expiry)} <EventBadges option={c} compact /></span></td>
               <td className="mono num">{c.dte}</td>
               <Cells c={c} />
-              {showQuote && <td><QuoteBadge quality={c.quote_quality} /></td>}
+              {showQuote && <td><QuoteBadge quality={c.quote_quality} lastTrade={c.last_trade_date} /></td>}
             </tr>
           ))}
         </tbody>

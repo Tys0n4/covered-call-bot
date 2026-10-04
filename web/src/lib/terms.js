@@ -14,6 +14,7 @@ export const TERMS = {
   delta:      'Delta, shown as a rough chance the stock ends above the strike and your shares get called away.',
   spread:     'Gap between the buy and sell quote. Smaller means a fairer, easier fill.',
   quote:      'LIVE means the price is current. Outside market hours quotes go stale.',
+  oldPrice:   "This option hasn't traded since before the latest session, so its price is from when the stock was elsewhere. The picks skip it.",
   income:     'Income trades aim for the highest premium, with strikes closer to today’s price.',
   balanced:   'Balanced trades leave more room for the stock to rise, for a smaller premium. The pick aims for about a 12% chance of being called.',
   available:  'Contracts you can still sell. Each contract covers 100 shares.',

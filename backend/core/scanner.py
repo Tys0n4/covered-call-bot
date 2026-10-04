@@ -14,9 +14,9 @@ from core.calculations import add_option_metrics
 from core.greeks import add_estimated_delta
 from core.fees import typical_fee_per_contract
 from core.volatility import premium_check, realized_volatility
-from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, score_options
+from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, recent_prices_only, score_options
 from core.events import fed_meetings_between, last_fed_meeting, related_earnings
-from core.market_hours import is_market_open, market_today
+from core.market_hours import is_market_open, last_session, market_today
 
 
 def resolve_min_strike(current_price: float, config: ScannerConfig, avg_cost: float = 0.0) -> float:
@@ -249,7 +249,20 @@ def scan_covered_calls(
             ],
             fee_per_contract=fee, premium_check=check,
         )
-    income_pick, balanced_pick, plan_per_contract = pick_for_strategy(in_range, config, goal_pace)
+    old = int((in_range["quote_quality"] == "OLD").sum()) if "quote_quality" in in_range.columns else 0
+    if old:
+        session = _fmt_day(last_session().isoformat())
+        if old == len(in_range):
+            warnings.append(
+                f"None of the options in your range has traded since before {session}, so their prices are old "
+                "and may be far from where they open. Check live quotes before selling."
+            )
+        else:
+            warnings.append(
+                f"{old} option(s) in your range haven't traded since before {session}. Their prices are old, "
+                "so the picks skip them."
+            )
+    income_pick, balanced_pick, plan_per_contract = pick_for_strategy(recent_prices_only(in_range), config, goal_pace)
     if income_pick is None:
         warnings.append(
             f"Every option in your range expires after earnings or a Fed meeting, and none is near the safe "
