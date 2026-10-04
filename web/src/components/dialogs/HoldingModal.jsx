@@ -74,7 +74,7 @@ export default function HoldingModal({ holding, onClose, onSaved }) {
               <label className="label" htmlFor="h-ticker">Ticker symbol</label>
               <input id="h-ticker" className="input" value={ticker} autoFocus maxLength={10} placeholder="e.g. MSFT"
                 onChange={e => setTicker(e.target.value.toUpperCase())}
-                style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, letterSpacing: '0.04em' }} />
+                style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, letterSpacing: '0.04em' }} />
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>

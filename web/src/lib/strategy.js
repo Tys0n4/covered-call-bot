@@ -18,6 +18,7 @@ export const DEFAULT_STRATEGY = {
   delta_max: 0.30,
   min_dte: 14,                     // expiring in 14-30 days
   max_dte: 30,
+  commission_per_contract: 0,      // your broker's commission per option contract
 }
 
 // Options trade in whole cents, so a buy-back target becomes a price: the

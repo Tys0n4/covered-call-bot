@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { apiError, rollPosition } from '../../api/client'
 import Modal from './Modal'
 import MoneyInput from '../MoneyInput'
+import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { fmtDate, money, plural } from '../../lib/format'
 import { moneyValue } from '../../lib/pnl'
 
@@ -12,6 +13,7 @@ const todayIso = () => {
 }
 
 export default function RollModal({ position: p, evaluation, onDone, onCancel }) {
+  const showFees = chargesCommission(useStrategy())
   const estimate = evaluation?.current_option_price > 0 ? evaluation.cost_to_close : null
   const [costText, setCost]       = useState(estimate != null ? estimate.toFixed(2) : '')
   const [closeFees, setCloseFees] = useState('')
@@ -73,7 +75,7 @@ export default function RollModal({ position: p, evaluation, onDone, onCancel })
         <div className="form-grid" style={{ gap: 12, marginTop: 8, marginBottom: 18 }}>
           <MoneyInput id="roll-cost" label="Paid to buy back (total)" value={costText} onChange={setCost} error={show('cost')}
             hint={estimate != null ? `Latest price check: ${money(estimate)}` : null} />
-          <MoneyInput id="roll-close-fees" label="Fees (total)" value={closeFees} onChange={setCloseFees} />
+          {showFees && <MoneyInput id="roll-close-fees" label="Fees (total)" value={closeFees} onChange={setCloseFees} />}
         </div>
 
         <div className="section-title" style={{ fontSize: 15 }}>2. Sell the new call</div>
@@ -93,7 +95,7 @@ export default function RollModal({ position: p, evaluation, onDone, onCancel })
             {show('contracts') && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 5 }}>{show('contracts')}</div>}
           </div>
           <MoneyInput id="roll-fill" label="Sold for (per share)" value={fillText} onChange={setFill} error={show('fill')} />
-          <MoneyInput id="roll-open-fees" label="Fees (total)" value={openFees} onChange={setOpenFees} />
+          {showFees && <MoneyInput id="roll-open-fees" label="Fees (total)" value={openFees} onChange={setOpenFees} />}
         </div>
 
         <div style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 10, padding: '12px 14px', marginTop: 18, fontSize: 14, color: 'var(--text-dim)' }}>

@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext'
 import InfoTip from '../components/InfoTip'
 import AlertsSection from '../components/AlertsSection'
 import { DEFAULT_STRATEGY, buybackPrice, splitContracts } from '../lib/strategy'
+import { forgetStrategy } from '../lib/useStrategy'
 import { TERMS } from '../lib/terms'
 import { money, plural } from '../lib/format'
 
@@ -59,12 +60,15 @@ function NumberBox({ id, value, onChange, width = 72, suffix, invalid }) {
 
 // 1000 -> '1000', 0 -> '' (empty box shows the placeholder)
 const goalToText = g => (g > 0 ? String(Math.round(g)) : '')
+// 0.65 -> '0.65', 0 -> '0'
+const commToText = c => (c > 0 ? String(Number(c.toFixed(2))) : '0')
 
 export default function Strategy() {
   const toast = useToast()
   const [saved, setSaved]       = useState(null)    // what the server has
   const [draft, setDraft]       = useState(null)    // what's on screen
   const [goalText, setGoalText] = useState('')      // goal box exactly as typed ('' = no goal)
+  const [commText, setCommText] = useState('0')     // commission box exactly as typed
   const [loadError, setLoadError] = useState(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
@@ -75,7 +79,7 @@ export default function Strategy() {
 
   useEffect(() => {
     getStrategy()
-      .then(r => { const s = { ...DEFAULT_STRATEGY, ...r.data }; setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)) })
+      .then(r => { const s = { ...DEFAULT_STRATEGY, ...r.data }; setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)); setCommText(commToText(s.commission_per_contract)) })
       .catch(e => setLoadError(apiError(e, 'Could not load your strategy. Is the API running?')))
     getAllPositions().then(r => setPositions(r.data)).catch(() => {})
     getPortfolio().then(r => setHoldings(r.data)).catch(() => {})
@@ -118,7 +122,8 @@ export default function Strategy() {
     try {
       const r = await saveStrategy(draft)
       const s = { ...DEFAULT_STRATEGY, ...r.data }
-      setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal))
+      setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)); setCommText(commToText(s.commission_per_contract))
+      forgetStrategy(s)
       toast('Strategy saved. It applies to your next scan and price check.')
     } catch (e) {
       setError(apiError(e))
@@ -144,7 +149,8 @@ export default function Strategy() {
   const dMin = Math.round(draft.delta_min * 100), dMax = Math.round(draft.delta_max * 100)
   const deltaErr = !(dMin >= 5 && dMax <= 60 && dMin < dMax)
   const dteErr = !(draft.min_dte >= 1 && draft.max_dte <= 120 && draft.min_dte < draft.max_dte)
-  const invalid = deltaErr || dteErr
+  const commErr = !(draft.commission_per_contract >= 0 && draft.commission_per_contract <= 10)
+  const invalid = deltaErr || dteErr || commErr
 
   return (
     <div className="fade-up">
@@ -153,7 +159,7 @@ export default function Strategy() {
         subtitle="How the app splits your trades and when it tells you to buy back. Changes apply to every stock."
         actions={
           <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }}
-            onClick={() => setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal }))}>
+            onClick={() => setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal, commission_per_contract: d.commission_per_contract }))}>
             <RotateCcw size={13} strokeWidth={1.75} /> Reset rules to defaults
           </button>
         }
@@ -193,7 +199,7 @@ export default function Strategy() {
           <Section title="Income vs. balanced split" tip={`${TERMS.income} ${TERMS.balanced}`} hint="How your contracts are divided when the app recommends a trade.">
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 10 }}>
               <span><strong style={{ color: 'var(--accent-light)' }}>{incomePct}%</strong> income</span>
-              <span><strong style={{ color: 'var(--blue)' }}>{100 - incomePct}%</strong> balanced</span>
+              <span><strong style={{ color: 'var(--violet)' }}>{100 - incomePct}%</strong> balanced</span>
             </div>
             <Slider label="Income share" value={incomePct} min={0} max={100} step={10} onChange={v => set('income_weight', v / 100)} />
             {holdings.length > 0 ? (
@@ -203,7 +209,7 @@ export default function Strategy() {
                   return (
                     <div key={h.ticker} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14, background: 'rgba(0,0,0,0.18)', borderRadius: 8, padding: '8px 12px' }}>
                       <span><strong className="mono">{h.ticker}</strong> <span className="muted">({plural(h.total_contracts, 'contract')})</span></span>
-                      <span><strong style={{ color: 'var(--accent-light)' }}>{inc}</strong> income · <strong style={{ color: 'var(--blue)' }}>{bal}</strong> balanced</span>
+                      <span><strong style={{ color: 'var(--accent-light)' }}>{inc}</strong> income · <strong style={{ color: 'var(--violet)' }}>{bal}</strong> balanced</span>
                     </div>
                   )
                 })}
@@ -268,7 +274,7 @@ export default function Strategy() {
                   <span className="mono" style={{ color: goalPct >= 100 ? 'var(--green)' : 'var(--text-dim)' }}>{goalPct}%</span>
                 </div>
                 <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${Math.min(goalPct, 100)}%`, background: goalPct >= 100 ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : undefined }} />
+                  <div className="progress-fill" style={{ width: `${Math.min(goalPct, 100)}%`, background: goalPct >= 100 ? 'var(--green)' : undefined }} />
                 </div>
                 <div className="hint" style={{ marginTop: 8 }}>
                   {goalPct >= 100 ? 'Goal reached this month.' : `${money(Math.max(draft.monthly_goal - monthKept, 0))} to go`}
@@ -290,10 +296,31 @@ export default function Strategy() {
           </Section>
         </div>
 
-        {/* 5. Alerts */}
+        {/* 5. Commission */}
+        <Section title="Your broker's commission" hint="What your broker charges per option contract, each time you sell or buy one back. Many brokers charge nothing for options; leave it at $0 and the fee boxes stay hidden.">
+          <label className="label" htmlFor="commission">Commission per contract</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ position: 'relative', display: 'inline-block' }}>
+              <span aria-hidden="true" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
+              <input id="commission" className="input mono" type="text" inputMode="decimal" autoComplete="off" maxLength={5}
+                value={commText} aria-invalid={commErr}
+                onChange={e => {
+                  // dollars and cents only: "0.65", ".5", "1"
+                  const text = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^0+(?=\d)/, '')
+                  setCommText(text)
+                  set('commission_per_contract', text === '' || text === '.' ? 0 : Number(text))
+                }}
+                style={{ width: 120, paddingLeft: 28, ...(commErr ? { borderColor: 'var(--red)' } : {}) }} />
+            </span>
+            <span className="muted">per contract</span>
+          </div>
+          {commErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use $0 to $10.</div>}
+        </Section>
+
+        {/* 6. Alerts */}
         <AlertsSection />
 
-        {/* 6. Data */}
+        {/* 7. Data */}
         <Section title="Your data" hint="Download a copy of everything saved in the app, as spreadsheet-friendly CSV files.">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button className="btn-secondary" onClick={exportHoldings} disabled={exporting}><Download size={15} /> Holdings ({plural(holdings.length, 'stock')})</button>
@@ -308,7 +335,7 @@ export default function Strategy() {
         <span className="hint">You have unsaved changes</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {error && <span style={{ color: 'var(--red)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={14} /> {error}</span>}
-          <button className="btn-secondary" onClick={() => { setDraft(saved); setGoalText(goalToText(saved.monthly_goal)); setError(null) }} disabled={!dirty || saving}>Discard</button>
+          <button className="btn-secondary" onClick={() => { setDraft(saved); setGoalText(goalToText(saved.monthly_goal)); setCommText(commToText(saved.commission_per_contract)); setError(null) }} disabled={!dirty || saving}>Discard</button>
           {invalid && <span style={{ color: 'var(--red)', fontSize: 13 }}>Fix the highlighted boxes first</span>}
           <button className="btn-primary" onClick={handleSave} disabled={!dirty || saving || invalid}>
             {saving ? <><span className="spinner" /> Saving…</> : 'Save strategy'}

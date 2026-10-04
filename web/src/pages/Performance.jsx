@@ -55,10 +55,10 @@ function MonthlyChart({ months, goal }) {
             labelStyle={{ color: '#cdd0d6' }} itemStyle={{ color: '#ffffff' }}
             formatter={v => [money(v), 'Kept']}
           />
-          {goal > 0 && <ReferenceLine y={goal} ifOverflow="extendDomain" stroke="#f5a524" strokeDasharray="4 4"
-            label={{ value: `Goal ${short(goal)}`, position: 'insideTopRight', fill: '#f5a524', fontSize: 11 }} />}
+          {goal > 0 && <ReferenceLine y={goal} ifOverflow="extendDomain" stroke="#f2b44a" strokeDasharray="4 4"
+            label={{ value: `Goal ${short(goal)}`, position: 'insideTopRight', fill: '#f2b44a', fontSize: 11 }} />}
           <Bar dataKey="kept" radius={[6, 6, 0, 0]} maxBarSize={56}>
-            {data.map(d => <Cell key={d.label} fill={d.kept < 0 ? '#f0475f' : '#34edb3'} />)}
+            {data.map(d => <Cell key={d.label} fill={d.kept < 0 ? '#f26b7a' : '#3ee0a6'} />)}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -122,6 +122,8 @@ export default function Performance() {
   const monthName = new Date().toLocaleDateString('en-CA', { month: 'long' })
   // When every finished call closed this year, "this year" and "all time" are the same number
   const allThisYear = data.trades.every(t => (t.closed_at || '').startsWith(String(year)))
+  // No commission at your broker: no Fees column
+  const anyFees = data.months.some(m => m.fees > 0)
 
   return (
     <div className="fade-up">
@@ -178,7 +180,7 @@ export default function Performance() {
                 <thead>
                   <tr>
                     <th>Month</th><th className="num">Calls finished</th><th className="num">Collected</th>
-                    <th className="num">Bought back</th><th className="num">Fees</th><th className="num">Kept</th>
+                    <th className="num">Bought back</th>{anyFees && <th className="num">Fees</th>}<th className="num">Kept</th>
                     <th className="num">Share gains</th>
                   </tr>
                 </thead>
@@ -189,7 +191,7 @@ export default function Performance() {
                       <td className="mono num">{m.calls}</td>
                       <td className="mono num" style={{ color: 'var(--green)' }}>{money(m.premium)}</td>
                       <td className="mono num">{money(m.buybacks)}</td>
-                      <td className="mono num">{money(m.fees)}</td>
+                      {anyFees && <td className="mono num">{money(m.fees)}</td>}
                       <td className="mono num" style={{ fontWeight: 600 }}>
                         {signed(m.option_net)}
                         {m.missing_costs > 0 && (

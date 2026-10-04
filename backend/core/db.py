@@ -68,6 +68,7 @@ strategy = Table(
     Column("min_dte",                   Float, nullable=True),
     Column("max_dte",                   Float, nullable=True),
     Column("event_buyback_pct",         Float, nullable=True),
+    Column("commission_per_contract",   Float, nullable=True),
 )
 
 # Buy-back alerts (Strategy page): a single row (id = 1)
@@ -125,7 +126,7 @@ def _add_missing_columns(engine: Engine) -> None:
     """
     added_later = {"strategy": [
         strategy.c.delta_min, strategy.c.delta_max, strategy.c.min_dte, strategy.c.max_dte,
-        strategy.c.event_buyback_pct,
+        strategy.c.event_buyback_pct, strategy.c.commission_per_contract,
     ], "positions": [
         positions.c.close_cost, positions.c.open_fees, positions.c.close_fees,
         positions.c.cost_basis, positions.c.rolled_from, positions.c.assignment_reviewed,

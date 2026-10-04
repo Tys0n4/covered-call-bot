@@ -27,14 +27,14 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 - **Smart allocation** — maintains a 70/30 income/balanced contract split per ticker, accounting for already-open positions
 - **Position management** — tracks open covered call positions and evaluates buyback opportunities based on profit capture %
 - **Buy-back alerts** — a Discord message when an open call reaches your buy-back target, checked every 15 minutes during market hours
-- **Real fills and fees** — record the price your broker actually filled and your commissions when you sell, buy back or roll
+- **Real fills** — record the price your broker actually filled when you sell, buy back or roll; set your broker's commission per contract on the Strategy page ($0 by default, and the fee boxes stay hidden at $0)
 - **Rolling** — buy back a call and sell a new one on the same shares in one step
 - **Assignment tracking** — record shares called away (early or at expiry); calls that expired in the money are flagged for review
 - **Event awareness** — expiries that span earnings, a Fed rate decision, or earnings from the stock's industry leaders and your other stocks in the same industry are flagged, and picks lean to the safe end of your range; ex-dividend dates are flagged too
 - **Performance** — realized results by month, net after buybacks and fees, gains on shares called away, and yearly return on capital
 - **Multi-ticker support** — manage covered calls across multiple stock positions independently
 - **REST API** — FastAPI backend with auto-generated interactive docs at `/docs`
-- **React app** — dark-themed, works on desktop and phones
+- **React app** — dark-themed, works on desktop and phones. One meaning per color (cyan = action, green = money in, amber = heads up, red = loss, violet = Balanced); Syne for titles, Geist for text and Geist Mono for numbers, bundled with the app
 
 ---
 
@@ -42,15 +42,15 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 *Demo portfolio with simulated market data.*
 
-**Dashboard** — a "Needs attention" list (calls to buy back, contracts to sell, calls expiring soon, your monthly goal), then one row per stock.
+**Dashboard** — your monthly goal as a ring next to the one thing to do next, anything else that needs you, a "Coming up" strip (expiries, Fed decisions, earnings for your stocks), then one row per stock.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
-**Scanner** — a recommended trade split into income and balanced calls, your actual fills, the two top picks, and warnings such as earnings before expiry.
+**Scanner** — a recommended trade split into income and balanced calls, each with where its chance of being called sits in your range, your actual fills, the two top picks, and warnings such as earnings before expiry.
 
 ![Scanner](docs/screenshots/scanner.png)
 
-**Positions** — every open call across your stocks, with live prices checked automatically to show which are ready to buy back. Roll and Close sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone.
+**Positions** — every open call across your stocks, with live prices checked automatically to show which are ready to buy back, and the buy-back limit price with a Copy button. Roll and Close sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone.
 
 ![Positions](docs/screenshots/positions.png)
 
@@ -87,7 +87,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 covered-call-bot/
 ├── backend/
 │   ├── api/                  # FastAPI app: main.py (entry), auth.py, schemas.py
-│   │   └── routes/           # portfolio, scan, positions, manage, performance, settings
+│   │   └── routes/           # portfolio, scan, positions, manage, performance, settings, alerts, upcoming
 │   ├── core/                 # Covered call logic (see core/__init__.py for a module map)
 │   │   ├── scanner.py        # Scan pipeline: price, chain, filters, picks, warnings
 │   │   ├── planner.py        # Turns a scan into the trade to place, for your split
@@ -190,7 +190,7 @@ The scanner fetches the options chain for a ticker within your expiry window (14
 - Optional minimum distance above the stock price (off by default; set it on the Scanner)
 - Maximum bid-ask spread (35% of the mid price)
 
-Each option is priced at what you can realistically get when selling: a quarter of the way from the bid to the ask, not the midpoint, so wide spreads cost you in the ranking. Your usual commission per contract is subtracted (learned from the fees you've recorded, $0.65 until then), and yields are on what's left. Options that pay less than the commission are dropped.
+Each option is priced at what you can realistically get when selling: a quarter of the way from the bid to the ask, not the midpoint, so wide spreads cost you in the ranking. Your broker's commission per contract (Strategy page, $0 by default) is subtracted, and yields are on what's left. Options that pay less than the commission are dropped.
 
 Each scan also says whether premiums are **rich**, **normal** or **thin** right now: it compares the yearly move near-the-money options are priced for (implied volatility) with how much the stock actually moved over the last 20 trading days. Rich (implied at least 1.25× realized) is a good time to sell; thin (implied below realized) means you're paid less than the risk, and waiting may pay more.
 
@@ -262,6 +262,7 @@ class ScannerConfig:
     buyback_budget_pct: float = 0.15
     profit_capture_target_pct: float = 85.0
     event_buyback_pct: float = 65.0              # before earnings or a Fed decision
+    commission_per_contract: float = 0.0         # your broker's, per option contract
 ```
 
 ---
@@ -291,6 +292,7 @@ needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`)
 | GET    | `/positions/assignment-review` | Expired calls that probably got assigned |
 | GET    | `/manage`            | Evaluate positions for buyback                |
 | GET    | `/performance`       | Realized results: summary, months, every finished call |
+| GET    | `/upcoming`          | Fed decisions and your holdings' earnings in the next 30 days (Dashboard) |
 | GET    | `/settings`          | Your saved strategy                           |
 | PUT    | `/settings`          | Save your strategy                            |
 | GET    | `/alerts`            | Buy-back alert settings (the webhook is never returned in full) |

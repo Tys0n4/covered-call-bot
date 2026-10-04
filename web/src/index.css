@@ -1,33 +1,47 @@
 @import "tailwindcss";
 
 :root {
-  /* Navy + cyan palette. Deep navy surfaces, white primary text, cyan
-     reserved for accents (active nav, key numbers, income data). */
+  /* Navy + cyan. One meaning per color:
+       cyan   = action (buttons, links, selected nav, things to do next)
+       green  = money in (premium, kept, gains, "Buy back now")
+       amber  = heads up (earnings, Fed meetings, old prices)
+       red    = loss or real risk only
+       violet = Balanced picks (Income is cyan); they differ in lightness too */
   --bg-base:      #131b28;
-  --bg-card:      #17202e;
-  --bg-card-2:    #202a3e;
+  --bg-card:      #18212f;
+  --bg-card-2:    #212b3f;
   --bg-hover:     #26324a;
 
-  --accent:       #00c2ec;
-  --accent-light: #6ae4ff;
-  --accent-dim:   rgba(106, 228, 255, 0.12);
-  --accent-glow:  rgba(106, 228, 255, 0.28);
+  --accent:       #2fc8ee;
+  --accent-light: #6ad8f4;
+  --accent-dim:   rgba(47, 200, 238, 0.12);
+  --accent-glow:  rgba(47, 200, 238, 0.28);
+  --on-accent:    #062330;
 
-  --border:       rgba(255, 255, 255, 0.07);
-  --border-hover: rgba(255, 255, 255, 0.14);
+  --border:       rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
 
-  --green:        #34edb3;
-  --green-dim:    rgba(52, 237, 179, 0.12);
-  --red:          #f0475f;
-  --red-dim:      rgba(240, 71, 95, 0.12);
-  --amber:        #f5a524;
-  --amber-dim:    rgba(245, 165, 36, 0.12);
+  --green:        #3ee0a6;
+  --green-dim:    rgba(62, 224, 166, 0.14);
+  --on-green:     #052b1e;
+  --red:          #f26b7a;
+  --red-dim:      rgba(242, 107, 122, 0.14);
+  --amber:        #f2b44a;
+  --amber-dim:    rgba(242, 180, 74, 0.14);
   --blue:         #5aa9e6;
   --blue-dim:     rgba(90, 169, 230, 0.14);
+  --violet:       #a495ff;
+  --violet-dim:   rgba(164, 149, 255, 0.16);
+  --track:        #2a3549;
 
-  --text:         #ffffff;
-  --text-dim:     #cdd0d6;
-  --text-muted:   #8a94a6;
+  --text:         #f4f6fa;
+  --text-dim:     #c9cfd9;
+  --text-muted:   #8f99ab;
+
+  /* Type: Syne for page titles and the logo, Geist for reading, Geist Mono for money */
+  --font-display: 'Syne Variable', 'Syne', sans-serif;
+  --font-body:    'Geist Variable', 'Geist', system-ui, sans-serif;
+  --font-mono:    'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,7 +49,7 @@
 body {
   background: var(--bg-base);
   color: var(--text);
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -44,13 +58,13 @@ body {
 
 .logo-mark {
   width: 32px; height: 32px; flex-shrink: 0;
-  background: linear-gradient(135deg, #00c2ec, #6ae4ff);
+  background: var(--accent);
   border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; font-weight: 700; color: #17202e;
+  font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--on-accent);
 }
 
-.mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* Cards */
 .card {
@@ -70,12 +84,12 @@ body {
 
 /* Buttons */
 .btn-primary {
-  background: #ffffff;
-  color: #17202e;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
   padding: 11px 24px;
   border-radius: 12px;
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-body);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
@@ -105,7 +119,7 @@ body {
   border: 1px solid var(--border);
   padding: 10px 20px;
   border-radius: 12px;
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-body);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
@@ -124,10 +138,10 @@ body {
 .btn-danger {
   background: var(--red-dim);
   color: var(--red);
-  border: 1px solid rgba(240, 71, 95, 0.25);
+  border: 1px solid rgba(242, 107, 122, 0.25);
   padding: 8px 16px;
   border-radius: 10px;
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-body);
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
@@ -135,7 +149,7 @@ body {
 }
 
 .btn-danger:hover {
-  background: rgba(240, 71, 95, 0.18);
+  background: rgba(242, 107, 122, 0.18);
 }
 
 /* Badges — compact pills, color used only to carry meaning (status/type),
@@ -151,11 +165,12 @@ body {
   letter-spacing: 0.02em;
 }
 
-.badge-green  { background: var(--green-dim);  color: var(--green);        border: 1px solid rgba(52,237,179,0.2); }
-.badge-red    { background: var(--red-dim);    color: var(--red);          border: 1px solid rgba(240,71,95,0.2); }
-.badge-accent { background: var(--accent-dim); color: var(--accent-light); border: 1px solid rgba(106,228,255,0.22); }
-.badge-amber  { background: var(--amber-dim);  color: var(--amber);        border: 1px solid rgba(245,165,36,0.2); }
+.badge-green  { background: var(--green-dim);  color: var(--green);        border: 1px solid rgba(62,224,166,0.22); }
+.badge-red    { background: var(--red-dim);    color: var(--red);          border: 1px solid rgba(242,107,122,0.22); }
+.badge-accent { background: var(--accent-dim); color: var(--accent-light); border: 1px solid rgba(47,200,238,0.26); }
+.badge-amber  { background: var(--amber-dim);  color: var(--amber);        border: 1px solid rgba(242,180,74,0.24); }
 .badge-blue   { background: var(--blue-dim);   color: var(--blue);         border: 1px solid rgba(90,169,230,0.24); }
+.badge-violet { background: var(--violet-dim); color: var(--violet);       border: 1px solid rgba(164,149,255,0.26); }
 
 /* Table */
 .data-table {
@@ -202,7 +217,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-body);
   font-size: 14px;
   padding: 10px 14px;
   width: 100%;
@@ -225,7 +240,7 @@ body {
 
 /* Stat number */
 .stat-num {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 26px;
   color: var(--text);
@@ -267,23 +282,20 @@ body {
 .progress-fill {
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  background: var(--accent);
   transition: width 0.5s ease;
 }
 
-/* Positions: the price to buy a call back at, and its price now */
-.buyback-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--text);
+/* Positions: kept bar with the target marked, and the buy-back limit price */
+.kept-bar { position: relative; }
+.kept-mark { position: absolute; top: -4px; width: 3px; height: 14px; margin-left: -1.5px; border-radius: 2px; }
+.buyback-box {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 12px 10px 14px; border-radius: 12px; background: var(--bg-card-2);
+  font-size: 13px; color: var(--text);
 }
-.buyback-line > span { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.buyback-line .dim { color: var(--text-dim); }
+.buyback-box .dim { color: var(--text-dim); }
+.copy-btn { min-height: 40px; padding: 0 14px; font-size: 13.5px; }
 
 /* Fade in */
 @keyframes fadeUp {
@@ -301,7 +313,7 @@ body {
 /* ===== Readability + layout helpers ===== */
 body { font-size: 15px; line-height: 1.5; }
 
-.page-title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.page-title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
 .page-subtitle { color: var(--text-dim); font-size: 15px; max-width: 640px; }
 .section-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
 .section-sub { font-size: 14px; color: var(--text-muted); }
@@ -311,12 +323,12 @@ body { font-size: 15px; line-height: 1.5; }
 /* Ticker switcher beside the page title */
 .ticker-pill,
 .ticker-switch {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: 15px;
   color: var(--accent-light);
   background: var(--accent-dim);
-  border: 1px solid rgba(106, 228, 255, 0.25);
+  border: 1px solid rgba(47, 200, 238, 0.25);
   border-radius: 10px;
   padding: 5px 12px;
 }
@@ -328,7 +340,7 @@ body { font-size: 15px; line-height: 1.5; }
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.ticker-switch:hover { border-color: var(--accent-light); background: rgba(106, 228, 255, 0.18); }
+.ticker-switch:hover { border-color: var(--accent-light); background: rgba(47, 200, 238, 0.18); }
 .ticker-switch:has(select:focus-visible) { outline: 2px solid var(--accent-light); outline-offset: 2px; }
 .ticker-switch select {
   appearance: none;
@@ -367,7 +379,7 @@ body { font-size: 15px; line-height: 1.5; }
   background: var(--bg-card-2);
   border: 1px solid var(--border-hover);
   color: var(--text);
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 400;
   line-height: 1.45;
@@ -396,7 +408,7 @@ body { font-size: 15px; line-height: 1.5; }
   border: none;
   padding: 4px 0;
   color: var(--accent-light);
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-body);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -406,12 +418,12 @@ body { font-size: 15px; line-height: 1.5; }
 /* Key/value facts row */
 .facts { display: grid; gap: 16px 24px; }
 .fact-label { font-size: 12.5px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
-.fact-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+.fact-value { font-family: var(--font-mono); font-weight: 600; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* Highlighted recommendation card */
 .rec-card {
-  background: linear-gradient(150deg, #1c2a40 0%, var(--bg-card) 70%);
-  border: 1px solid rgba(106, 228, 255, 0.28);
+  background: var(--bg-card);
+  border: 1px solid rgba(47, 200, 238, 0.35);
   border-radius: 18px;
   padding: 28px;
 }
@@ -420,7 +432,7 @@ body { font-size: 15px; line-height: 1.5; }
 .tabs { display: inline-flex; gap: 4px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 4px; }
 .tab {
   background: transparent; border: none; border-radius: 9px;
-  padding: 8px 16px; font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600;
+  padding: 8px 16px; font-family: var(--font-body); font-size: 14px; font-weight: 600;
   color: var(--text-muted); cursor: pointer; transition: background 0.15s, color 0.15s;
 }
 .tab:hover { color: var(--text); }
@@ -428,9 +440,9 @@ body { font-size: 15px; line-height: 1.5; }
 
 /* Callouts */
 .callout { display: flex; align-items: flex-start; gap: 10px; border-radius: 14px; padding: 14px 16px; font-size: 14px; line-height: 1.5; }
-.callout-amber { background: var(--amber-dim); border: 1px solid rgba(245,165,36,0.2); color: var(--amber); }
-.callout-red   { background: var(--red-dim);   border: 1px solid rgba(240,71,95,0.25); color: var(--red); }
-.callout-green { background: var(--green-dim); border: 1px solid rgba(52,237,179,0.25); color: var(--green); }
+.callout-amber { background: var(--amber-dim); border: 1px solid rgba(242,180,74,0.2); color: var(--amber); }
+.callout-red   { background: var(--red-dim);   border: 1px solid rgba(242,107,122,0.25); color: var(--red); }
+.callout-green { background: var(--green-dim); border: 1px solid rgba(62,224,166,0.25); color: var(--green); }
 
 .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
@@ -557,7 +569,7 @@ body { font-size: 15px; line-height: 1.5; }
 }
 .choice input { margin-top: 3px; accent-color: var(--accent); }
 .choice:hover { border-color: var(--border-hover); }
-.choice.active { border-color: rgba(106, 228, 255, 0.4); background: var(--accent-dim); color: var(--text); }
+.choice.active { border-color: rgba(47, 200, 238, 0.4); background: var(--accent-dim); color: var(--text); }
 
 /* Toasts (context/ToastContext.jsx) */
 .toast-stack {
@@ -600,7 +612,7 @@ body { font-size: 15px; line-height: 1.5; }
 .menu-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
   background: none; border: none; border-radius: 8px; padding: 9px 12px;
-  color: var(--text-dim); font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600;
+  color: var(--text-dim); font-family: var(--font-body); font-size: 14px; font-weight: 600;
   text-align: left; cursor: pointer;
 }
 .menu-item:hover, .menu-item:focus { background: var(--bg-hover); color: var(--text); outline: none; }
@@ -609,7 +621,7 @@ body { font-size: 15px; line-height: 1.5; }
 
 /* Small ticker label on cards when showing all stocks */
 .ticker-tag {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 13px;
   color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border);
   border-radius: 7px; padding: 2px 8px;
 }
@@ -633,6 +645,7 @@ body { font-size: 15px; line-height: 1.5; }
 .tone-green  { background: var(--green-dim);  color: var(--green); }
 .tone-amber  { background: var(--amber-dim);  color: var(--amber); }
 .tone-blue   { background: var(--blue-dim);   color: var(--blue); }
+.tone-violet { background: var(--violet-dim); color: var(--violet); }
 .tone-accent { background: var(--accent-dim); color: var(--accent-light); }
 
 /* --- Dashboard: one compact row per stock ---------------------------------- */
@@ -766,12 +779,42 @@ body { font-size: 15px; line-height: 1.5; }
   border: 1px solid var(--border); color: var(--text-dim);
 }
 .premium-check strong { color: var(--text); }
-.premium-rich   { background: var(--green-dim); border-color: rgba(52,237,179,0.25); }
+.premium-rich   { background: var(--green-dim); border-color: rgba(62,224,166,0.25); }
 .premium-rich svg:first-child { color: var(--green); }
-.premium-thin   { background: var(--amber-dim); border-color: rgba(245,165,36,0.25); }
+.premium-thin   { background: var(--amber-dim); border-color: rgba(242,180,74,0.25); }
 .premium-thin svg:first-child { color: var(--amber); }
 .premium-normal svg:first-child { color: var(--text-muted); }
 
 /* --- Strategy: which calls to sell ------------------------------------------- */
 .sell-rules { display: flex; gap: 32px; flex-wrap: wrap; }
 .range-pair { display: flex; align-items: center; gap: 10px; }
+
+/* --- Dashboard: goal ring + next step, coming up ----------------------------- */
+.hero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 20px; margin-bottom: 20px; }
+.goal-card { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.goal-ring { position: relative; width: 124px; height: 124px; flex-shrink: 0; }
+.goal-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; color: var(--text-muted); }
+.goal-ring-label .mono { font-size: 26px; font-weight: 600; color: var(--text); }
+.goal-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 180px; align-items: flex-start; }
+.goal-amount { font-size: 32px; font-weight: 500; line-height: 1.1; }
+.next-step { display: flex; flex-direction: column; justify-content: space-between; gap: 18px; border-color: rgba(47, 200, 238, 0.35); }
+.next-step:hover { border-color: rgba(47, 200, 238, 0.5); }
+.eyebrow { font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.next-title { font-family: var(--font-display); font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 6px; }
+.attention-btn { padding: 0 16px; min-height: 40px; font-size: 13.5px; flex-shrink: 0; }
+.coming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.coming-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.coming-card.event { border-color: rgba(242, 180, 74, 0.35); }
+.coming-date { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); letter-spacing: 0.02em; }
+.coming-card.event .coming-date { color: var(--amber); }
+
+/* --- Scanner: chance of being called within your range -------------------- */
+.range-meter { display: flex; flex-direction: column; gap: 8px; max-width: 420px; width: 100%; }
+.range-meter-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--text-muted); }
+.range-meter-head > span:first-child { display: inline-flex; align-items: center; gap: 5px; }
+.range-meter-track { position: relative; height: 16px; margin: 0 8px; }
+.range-meter-track::before { content: ''; position: absolute; left: -8px; right: -8px; top: 5px; height: 6px; border-radius: 3px; background: var(--track); }
+.range-meter-fill { position: absolute; left: -8px; top: 5px; height: 6px; border-radius: 3px; min-width: 8px; }
+.range-meter-dot { position: absolute; top: 0; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--text); border: 3px solid; box-sizing: border-box; }
+.range-meter-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+.rec-leg { display: flex; flex-direction: column; gap: 14px; background: var(--bg-card-2); border-radius: 14px; padding: 16px 18px; }

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { addPosition, apiError } from '../../api/client'
 import Modal from './Modal'
 import MoneyInput from '../MoneyInput'
+import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { money, plural } from '../../lib/format'
 import { moneyValue } from '../../lib/pnl'
 
@@ -12,6 +13,7 @@ const isoToday = () => {
 }
 
 export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel }) {
+  const showFees = chargesCommission(useStrategy())
   const [ticker, setTicker]   = useState(defaultTicker || tickers[0]?.ticker || '')
   const [type, setType]       = useState('Income')
   const [expiry, setExpiry]   = useState('')
@@ -93,7 +95,7 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
               onChange={e => setContracts(e.target.value.replace(/[^0-9]/g, ''))} style={bad('contracts')} />,
             show('contracts'))}
           <MoneyInput id="add-fill" label="Sold for (per share)" value={fill} onChange={setFill} error={show('fill')} />
-          <MoneyInput id="add-fees" label="Fees (total)" value={fees} onChange={setFees} />
+          {showFees && <MoneyInput id="add-fees" label="Fees (total)" value={fees} onChange={setFees} />}
           {field('add-opened', 'Sold on',
             <input id="add-opened" className="input" type="date" max={isoToday()} value={openedAt} onChange={e => setOpened(e.target.value)} style={bad('openedAt')} />,
             show('openedAt'))}

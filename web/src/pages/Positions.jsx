@@ -8,13 +8,14 @@ import {
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import {
-  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck,
+  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck, Copy,
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
 import { PositionsSkeleton } from '../components/Skeleton'
+import { useStrategy, chargesCommission } from '../lib/useStrategy'
 import ActionMenu from '../components/ActionMenu'
 import AssignmentReview from '../components/AssignmentReview'
 import CloseModal from '../components/dialogs/CloseModal'
@@ -31,7 +32,22 @@ const SCOPE_KEY = 'positions_scope'
 const loadScope = () => { try { return localStorage.getItem(SCOPE_KEY) === 'stock' ? 'stock' : 'all' } catch { return 'all' } }
 const saveScope = s => { try { localStorage.setItem(SCOPE_KEY, s) } catch { /* storage unavailable */ } }
 
+// Copy the buy-back price, ready to paste into a limit order at your broker
+function CopyPrice({ price }) {
+  const toast = useToast()
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(price.toFixed(2)); toast(`Copied ${money(price)}`) }
+    catch { toast(`Buy-back price: ${money(price)}`) }
+  }
+  return (
+    <button type="button" className="btn-secondary copy-btn" onClick={copy} aria-label={`Copy the buy-back price, ${money(price)}`}>
+      <Copy size={14} strokeWidth={2} /> Copy
+    </button>
+  )
+}
+
 function StatusPanel({ evaluation, checking, failed }) {
+  const withFees = chargesCommission(useStrategy()) ? ' with fees' : ''
   if (!evaluation) {
     if (checking) return <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 14, height: 14 }} /> Checking the price…</div>
     return <div className="hint">{failed ? "Couldn't check prices." : 'No price data for this call.'}</div>
@@ -70,27 +86,35 @@ function StatusPanel({ evaluation, checking, failed }) {
           <strong className="mono" style={{ color: buy || expire ? 'var(--green)' : 'var(--text)', marginLeft: 4 }}>{evaluation.profit_capture_pct.toFixed(0)}%</strong>
         </span>
       </div>
-      <div className="progress-bar">
-        <div className="progress-fill" style={{ width: `${kept}%`, background: buy || expire ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
+      <div className="kept-bar">
+        <div className="progress-bar">
+          <div className="progress-fill" style={{ width: `${kept}%`, background: buy || expire ? 'var(--green)' : 'var(--accent)' }} />
+        </div>
+        {evaluation.buyback_kept_pct > 0 && (
+          <span className="kept-mark" style={{ left: `${Math.min(evaluation.buyback_kept_pct, 100)}%`, background: ev ? 'var(--amber)' : 'var(--text)' }}
+            title={`Target: ${evaluation.buyback_kept_pct.toFixed(1)}% kept`} />
+        )}
       </div>
       {evaluation.buyback_price > 0 && (
-        <div className="buyback-line">
-          <span>
-            Buy back at <strong className="mono">{money(evaluation.buyback_price)}</strong> or less
-            <span className="dim"> ({evaluation.buyback_kept_pct.toFixed(1)}% kept)</span>
-            <InfoTip text={TERMS.buybackPrice} size={12} />
-          </span>
-          <span className="dim">Now <strong className="mono">{money(evaluation.current_option_price)}</strong></span>
+        <div className="buyback-box">
+          <div>
+            <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Limit order: buy back at <InfoTip text={TERMS.buybackPrice} size={12} /></div>
+            <div>
+              <strong className="mono" style={{ fontSize: 18 }}>{money(evaluation.buyback_price)}</strong>
+              <span className="dim"> or less · {evaluation.buyback_kept_pct.toFixed(1)}% kept · now <span className="mono">{money(evaluation.current_option_price)}</span></span>
+            </div>
+          </div>
+          <CopyPrice price={evaluation.buyback_price} />
         </div>
       )}
       <div className="hint" style={{ marginTop: 8 }}>
         {buy && ev
-          ? <>{evText} comes before this call expires, so the earlier {evaluation.target_pct}% target applies. Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> with fees and avoids holding through the jump.</>
+          ? <>{evText} comes before this call expires, so the earlier {evaluation.target_pct}% target applies. Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong>{withFees} and avoids holding through the jump.</>
           : buy
-          ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> with fees and locks in the gain.</>
+          ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong>{withFees} and locks in the gain.</>
           : expire
-            ? <>Expires in {plural(evaluation.days_left, 'day')} with the stock {below.toFixed(0)}% below the strike. Buying back would cost {money(evaluation.cost_to_close)} with fees for little benefit, so you can let it expire and keep that.</>
-            : <>It would cost {money(evaluation.cost_to_close)} with fees to buy back today. Not worth it yet{ev ? <>; {evText.charAt(0).toLowerCase() + evText.slice(1)} comes before expiry, so you'll be told to buy back at {evaluation.target_pct}%</> : ''}.</>}
+            ? <>Expires in {plural(evaluation.days_left, 'day')} with the stock {below.toFixed(0)}% below the strike. Buying back would cost {money(evaluation.cost_to_close)}{withFees} for little benefit, so you can let it expire and keep that.</>
+            : <>It would cost {money(evaluation.cost_to_close)}{withFees} to buy back today. Not worth it yet{ev ? <>; {evText.charAt(0).toLowerCase() + evText.slice(1)} comes before expiry, so you'll be told to buy back at {evaluation.target_pct}%</> : ''}.</>}
       </div>
     </div>
   )
@@ -100,12 +124,12 @@ function PositionCard({ p, showTicker, evaluation, checking, failed, onClose, on
   const days = daysUntil(p.expiry)
   const buy = evaluation?.should_buy_back
   return (
-    <div className="card" style={{ borderColor: buy ? 'rgba(52,237,179,0.35)' : undefined }}>
+    <div className="card" style={{ borderColor: buy ? 'rgba(62,224,166,0.35)' : undefined }}>
       <div className="grid-split">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
             {showTicker && <span className="ticker-tag">{p.ticker}</span>}
-            <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span>
+            <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
             {p.rolled_from && <span className="badge badge-blue">Rolled</span>}
             <span className="hint">Opened {fmtDate(p.opened_at)}</span>
           </div>
@@ -377,7 +401,7 @@ export default function Positions() {
                   return (
                     <tr key={p.id}>
                       {scope === 'all' && <td className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>{p.ticker}</td>}
-                      <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span></td>
+                      <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span></td>
                       <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(p.strike)}</td>
                       <td className="nowrap">{fmtDate(p.expiry)}</td>
                       <td className="mono num">{p.contracts}</td>

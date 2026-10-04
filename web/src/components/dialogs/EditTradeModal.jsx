@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { apiError, editPosition } from '../../api/client'
 import Modal from './Modal'
 import MoneyInput from '../MoneyInput'
+import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { fmtDate, money, plural } from '../../lib/format'
 import { moneyValue } from '../../lib/pnl'
 
@@ -10,6 +11,8 @@ const toText = v => (v == null ? '' : String(Number(v).toFixed(2)))
 
 export default function EditTradeModal({ position: p, onDone, onCancel }) {
   const boughtBack = p.status === 'CLOSED'
+  // Fee boxes when your broker charges, or this trade already has fees recorded
+  const showFees = chargesCommission(useStrategy()) || (p.open_fees || 0) > 0 || (p.close_fees || 0) > 0
   const [fill, setFill]           = useState(toText(p.entry_price))
   const [openFees, setOpenFees]   = useState(toText(p.open_fees))
   const [cost, setCost]           = useState(toText(p.close_cost))
@@ -56,11 +59,11 @@ export default function EditTradeModal({ position: p, onDone, onCancel }) {
         <div className="form-grid" style={{ gap: 12 }}>
           <MoneyInput id="edit-fill" label="Sold for (per share)" value={fill} onChange={setFill} error={fillError}
             hint={fillError ? null : `Premium ${money(premium)}`} />
-          <MoneyInput id="edit-open-fees" label="Fees when sold" value={openFees} onChange={setOpenFees} />
+          {showFees && <MoneyInput id="edit-open-fees" label="Fees when sold" value={openFees} onChange={setOpenFees} />}
           {boughtBack && <>
             <MoneyInput id="edit-cost" label="Paid to buy back (total)" value={cost} onChange={setCost}
               hint={p.close_cost == null ? 'Not entered yet' : null} />
-            <MoneyInput id="edit-close-fees" label="Fees when bought back" value={closeFees} onChange={setCloseFees} />
+            {showFees && <MoneyInput id="edit-close-fees" label="Fees when bought back" value={closeFees} onChange={setCloseFees} />}
           </>}
         </div>
 

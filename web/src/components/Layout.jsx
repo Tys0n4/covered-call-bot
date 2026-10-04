@@ -33,7 +33,7 @@ function Logo() {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div className="logo-mark">C</div>
       <div style={{ lineHeight: 1.2 }}>
-        <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em' }}>CovCall</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17 }}>CovCall</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Covered call scanner</div>
       </div>
     </div>

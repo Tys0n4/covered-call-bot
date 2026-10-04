@@ -1,7 +1,9 @@
 // src/pages/Scanner.jsx
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { runScan, savePositions, apiError, getStrategy } from '../api/client'
+import { runScan, savePositions, apiError } from '../api/client'
+import { useStrategy, chargesCommission } from '../lib/useStrategy'
+import RangeMeter from '../components/RangeMeter'
 import { useTicker } from '../context/TickerContext'
 import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
@@ -123,9 +125,8 @@ function BelowCostBadge() {
   return <span className="badge badge-amber" title={TERMS.belowCost}>Below your cost</span>
 }
 
-function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCost }) {
+function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCost, range }) {
   if (!pick) return null
-  const called = pick.delta != null ? `~${Math.round(pick.delta * 100)}%` : 'n/a'
   return (
     <div className="card" style={{ flex: 1, borderColor: notInPlan ? 'var(--border)' : `${accent}33` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: notInPlan ? 'var(--text-muted)' : accent, fontWeight: 700, fontSize: 15 }}>
@@ -149,7 +150,9 @@ function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCos
         <Fact label="You collect (1 contract)" tip={TERMS.premium} value={money(pick.net_per_contract ?? pick.premium_per_contract)} color="var(--green)" />
         <Fact label="Yearly return"            tip={TERMS.yield}   value={pct(pick.annualized_yield_pct)} />
         <Fact label="Room to rise"             tip={TERMS.upside}  value={pct(pick.upside_to_strike_pct)} />
-        <Fact label="Chance of being called"   tip={TERMS.delta}   value={called} />
+      </div>
+      <div style={{ marginTop: 18 }}>
+        <RangeMeter delta={pick.delta} min={range?.min} max={range?.max} color={accent} />
       </div>
       </div>
     </div>
@@ -190,9 +193,8 @@ export default function Scanner() {
   const [saving, setSaving]   = useState(false)
   const [fills, setFills]     = useState([])   // per-share fill for each planned leg, as typed
   const [feesText, setFees]   = useState('')   // total commissions for the trade, as typed
-  const [strategy, setStrategy] = useState(null)  // delta range and expiry window, for the summary
-
-  useEffect(() => { getStrategy().then(r => setStrategy(r.data)).catch(() => {}) }, [])
+  const strategy = useStrategy()          // delta range, expiry window and commission
+  const showFees = chargesCommission(strategy)
 
   const { values: config, errors: fieldErrors, valid: filtersValid } = parseForm(form)
 
@@ -255,6 +257,8 @@ export default function Scanner() {
   const planned = result?.planned_positions || []
   // Market closed: results use last traded prices, so saving waits for live prices
   const lastPrices = result?.quotes_live === false
+  const scanRange = result ? { min: result.delta_min, max: result.delta_max } : null
+  const optionFor = p => result?.candidates.find(c => c.expiry === p.expiry && c.strike === p.strike) || {}
   const nextOpen = result?.next_market_open
     ? new Date(result.next_market_open).toLocaleString('en-CA', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
     : null
@@ -382,7 +386,7 @@ export default function Scanner() {
                         Recommended trade
                         {lastPrices && <span className="badge badge-amber">Last prices</span>}
                       </div>
-                      <div style={{ fontSize: 22, fontWeight: 700 }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700 }}>
                         Sell {plural(planned.reduce((s, p) => s + p.contracts, 0), 'call')} on {result.ticker}
                       </div>
                     </div>
@@ -394,17 +398,21 @@ export default function Scanner() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                     {planned.map((p, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px 16px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div key={i} className="rec-leg">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px 16px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'blue'}`}>{p.allocation_type}</span>
+                          <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
                           <span style={{ fontSize: 15 }}>
                             Sell <strong>{plural(p.contracts, 'contract')}</strong> at the <strong>{money(p.strike)}</strong> strike, expiring <strong>{fmtDate(p.expiry)}</strong>
                           </span>
                           <span className="hint">({money(p.entry_price)} per share)</span>
                           {p.below_cost_basis && <BelowCostBadge />}
-                          <EventBadges option={result.candidates.find(c => c.expiry === p.expiry && c.strike === p.strike) || {}} />
+                          <EventBadges option={optionFor(p)} />
                         </div>
                         <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
+                        </div>
+                        <RangeMeter delta={optionFor(p).delta} min={scanRange.min} max={scanRange.max}
+                          color={p.allocation_type === 'Income' ? 'var(--accent)' : 'var(--violet)'} />
                       </div>
                     ))}
                   </div>
@@ -420,14 +428,14 @@ export default function Scanner() {
                             value={fills[i] ?? ''} onChange={v => setFills(f => f.map((x, j) => (j === i ? v : x)))}
                             error={fillValues[i] == null || !(fillValues[i] > 0) ? 'Enter the price you sold at' : null} />
                         ))}
-                        <MoneyInput id="fill-fees" label="Fees (total)" value={feesText} onChange={setFees} />
+                        {showFees && <MoneyInput id="fill-fees" label="Fees (total)" value={feesText} onChange={setFees} />}
                       </div>
                       {fillsValid && (
                         <div className="hint" style={{ marginTop: 8 }}>
                           At these fills you collect{' '}
                           <strong style={{ color: 'var(--green)' }}>
                             {money(planned.reduce((s, p, i) => s + fillValues[i] * p.contracts * 100, 0) - (moneyValue(feesText) || 0))}
-                          </strong> after fees.
+                          </strong>{showFees ? ' after fees' : ''}.
                         </div>
                       )}
                     </div>
@@ -473,9 +481,9 @@ export default function Scanner() {
                 <>
                   <div className="section-title" style={{ marginBottom: 12 }}>Top picks</div>
                   <div className="pick-row" style={{ marginBottom: 24 }}>
-                    <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#6ae4ff"
+                    <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#2fc8ee" range={scanRange}
                       notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} avgCost={result.avg_cost} />
-                    <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#5aa9e6"
+                    <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#a495ff" range={scanRange}
                       notInPlan={splitTarget.balanced === 0 ? "Your split puts all of this stock's contracts in income, so this is shown for reference only." : null} avgCost={result.avg_cost} />
                   </div>
                 </>

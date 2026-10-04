@@ -299,6 +299,7 @@ class StrategySettings(BaseModel):
     min_dte: Optional[int] = Field(default=None, ge=1, le=120)          # expiry window, days
     max_dte: Optional[int] = Field(default=None, ge=1, le=120)
     event_buyback_pct: Optional[float] = Field(default=None, ge=10, le=100)  # 65 = buy back at 65% before events
+    commission_per_contract: Optional[float] = Field(default=None, ge=0, le=10)  # dollars per option contract
 
     @model_validator(mode="after")
     def _ranges(self):
@@ -309,6 +310,18 @@ class StrategySettings(BaseModel):
         if self.event_buyback_pct is not None and self.event_buyback_pct > self.profit_capture_target_pct:
             raise ValueError("The buy-back target before events can't be above your usual target")
         return self
+
+
+class EarningsDate(BaseModel):
+    ticker: str
+    date: str
+
+
+class UpcomingEvents(BaseModel):
+    """Dashboard "Coming up": Fed decisions and your holdings' earnings in the next few weeks."""
+    fed: list[str]
+    fed_known_until: Optional[str] = None     # the Fed calendar has no dates past this
+    earnings: list[EarningsDate]
 
 
 class AlertSettingsIn(BaseModel):

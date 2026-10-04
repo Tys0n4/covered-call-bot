@@ -19,9 +19,16 @@ def _fake_quote(strike, price=100.0):
 
 # --- 1. Realistic fills and fees ---------------------------------------------------
 
+def _set_commission(client, value):
+    r = client.put("/settings", json=dict(income_weight=0.7, profit_capture_target_pct=85, buyback_budget_pct=0.15,
+                                          monthly_goal=0, commission_per_contract=value))
+    assert r.status_code == 200, r.text
+
+
 def test_scan_prices_options_at_a_likely_fill_after_fees(client, nvda):
+    _set_commission(client, 0.65)
     scan = client.post("/scan", json={"ticker": "NVDA"}).json()
-    assert scan["fee_per_contract"] == DEFAULT_CONFIG.default_fee_per_contract
+    assert scan["fee_per_contract"] == 0.65
     c = scan["candidates"][0]
     bid, ask = _fake_quote(c["strike"])
     assert c["premium_price"] == pytest.approx(bid + 0.25 * (ask - bid), abs=0.001)   # not the midpoint
@@ -33,11 +40,17 @@ def test_scan_prices_options_at_a_likely_fill_after_fees(client, nvda):
     assert scan["net_premium"] == pytest.approx(scan["gross_premium"] - scan["buyback_budget"] - scan["estimated_fees"])
 
 
-def test_fee_estimate_learns_from_the_fees_you_record(client, nvda):
+def test_no_commission_by_default_and_the_setting_is_used(client, nvda):
+    assert DEFAULT_CONFIG.commission_per_contract == 0
+    assert client.get("/settings").json()["commission_per_contract"] == 0
+    c = client.post("/scan", json={"ticker": "NVDA"}).json()["candidates"][0]
+    assert c["net_per_contract"] == c["premium_per_contract"]          # nothing taken off at $0
+    # Recorded fees don't override the setting (a $0 broker records $0)
     expiry = (date.today() + timedelta(days=25)).isoformat()
-    r = client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=2, entry_price=1.0,
-                                            premium_total=200, allocation_type="Income", fees=2.10))
-    assert r.status_code == 201, r.text
+    client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=2, entry_price=1.0,
+                                        premium_total=200, allocation_type="Income", fees=2.10))
+    assert client.post("/scan", json={"ticker": "NVDA"}).json()["fee_per_contract"] == 0
+    _set_commission(client, 1.05)
     assert client.post("/scan", json={"ticker": "NVDA"}).json()["fee_per_contract"] == 1.05
 
 
@@ -109,6 +122,7 @@ def test_below_the_target_keep_holding():
 
 def test_manage_reports_the_action(client, nvda):
     from core.market_hours import market_today     # the app counts days in New York time
+    _set_commission(client, 0.65)
     expiry = (date.fromisoformat(market_today()) + timedelta(days=25)).isoformat()
     client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=1, entry_price=25.0,
                                         premium_total=2500, allocation_type="Income"))
