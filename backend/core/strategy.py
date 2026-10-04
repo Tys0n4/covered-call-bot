@@ -9,6 +9,7 @@ Your strategy settings (edited on the Strategy page), stored in the database.
 - delta_min / delta_max:     sell calls with this chance of being called (0.20–0.30)
 - min_dte / max_dte:         expiries this many days out (14–30)
 - event_buyback_pct:         buy back at this % kept when earnings or a Fed meeting comes before expiry
+- commission_per_contract:   your broker's commission per option contract ($0 at many brokers)
 
 Until you save something, the defaults from config.py are used.
 """
@@ -24,7 +25,7 @@ from core.db import get_engine, strategy
 
 FIELDS = (
     "income_weight", "profit_capture_target_pct", "buyback_budget_pct", "monthly_goal",
-    "delta_min", "delta_max", "min_dte", "max_dte", "event_buyback_pct",
+    "delta_min", "delta_max", "min_dte", "max_dte", "event_buyback_pct", "commission_per_contract",
 )
 INT_FIELDS = ("min_dte", "max_dte")
 
@@ -40,6 +41,7 @@ def default_strategy() -> dict:
         "min_dte":                   DEFAULT_CONFIG.min_dte,
         "max_dte":                   DEFAULT_CONFIG.max_dte,
         "event_buyback_pct":         DEFAULT_CONFIG.event_buyback_pct,
+        "commission_per_contract":   DEFAULT_CONFIG.commission_per_contract,
     }
 
 

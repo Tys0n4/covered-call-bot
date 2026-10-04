@@ -141,3 +141,16 @@ def test_when_every_price_is_old_it_says_so(client, nvda, monkeypatch):
     scan = _scan(client)
     assert scan["candidates"] and all(c["quote_quality"] == "OLD" for c in scan["candidates"])
     assert any("None of the options in your range has traded since before" in w for w in scan["warnings"])
+
+
+# --- Dashboard: coming up --------------------------------------------------------------------
+
+def test_upcoming_lists_fed_and_your_holdings_earnings(client, nvda, monkeypatch):
+    from core.market_hours import market_today
+    today = date.fromisoformat(market_today())
+    monkeypatch.setattr(events, "FED_MEETINGS", ((today + timedelta(days=10)).isoformat(), (today + timedelta(days=60)).isoformat()))
+    EVENTS["NVDA"] = {"Earnings Date": [today + timedelta(days=20)]}
+    r = client.get("/upcoming").json()
+    assert r["fed"] == [(today + timedelta(days=10)).isoformat()]
+    assert r["earnings"] == [{"ticker": "NVDA", "date": (today + timedelta(days=20)).isoformat()}]
+    assert r["fed_known_until"] == (today + timedelta(days=60)).isoformat()

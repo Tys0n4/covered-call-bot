@@ -35,7 +35,7 @@ export function EventBadges({ option, compact = false }) {
 function QuoteBadge({ quality, lastTrade }) {
   if (quality === 'LIVE') return <span className="muted">Live</span>
   if (quality === 'OLD') {
-    return <span className="badge badge-red" title={`${TERMS.oldPrice}${lastTrade ? ` Last traded ${fmtDate(lastTrade)}.` : ''}`}>Old price</span>
+    return <span className="badge badge-amber" title={`${TERMS.oldPrice}${lastTrade ? ` Last traded ${fmtDate(lastTrade)}.` : ''}`}>Old price</span>
   }
   return <span className={`badge badge-${quality === 'STALE' ? 'amber' : 'red'}`}>{quality === 'STALE' ? 'Stale' : quality}</span>
 }

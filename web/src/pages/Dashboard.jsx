@@ -1,10 +1,10 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { getPortfolio, getAllPositions, getAssignmentReview, getManagement, getPerformance, getStrategy } from '../api/client'
+import { getPortfolio, getAllPositions, getAssignmentReview, getManagement, getPerformance, getStrategy, getUpcoming } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import { ScanLine, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, Target, BadgeDollarSign } from 'lucide-react'
+import { ScanLine, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, BadgeDollarSign, Landmark, Megaphone } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
@@ -20,7 +20,7 @@ import { daysUntil, fmtDate, money, plural } from '../lib/format'
 function GettingStarted({ onAdd }) {
   const steps = [
     ['Add your stocks', 'Enter the shares you own and what you paid. Every 100 shares lets you sell one covered call.'],
-    ['Scan for a call', 'The Scanner finds calls at least 15% above today’s price and recommends what to sell.'],
+    ['Scan for a call', 'The Scanner finds calls that fit your strategy and recommends what to sell.'],
     ['Track and buy back', 'Positions checks prices and tells you when to buy back, roll, or let a call expire.'],
   ]
   return (
@@ -54,6 +54,101 @@ function Attention({ icon: Icon, tone, children, action }) {
   )
 }
 
+// Monthly goal as a ring: how much you've kept this month, and how much is left to go
+function GoalCard({ goal }) {
+  if (!goal) {
+    return (
+      <section className="card goal-card" aria-label="Monthly goal">
+        <div className="goal-text">
+          <div className="section-title">Set a monthly goal</div>
+          <div className="hint" style={{ fontSize: 14 }}>A goal shows your progress here and paces the Scanner's income picks.</div>
+          <Link to="/strategy" className="link-btn">Set a goal <ArrowRight size={14} /></Link>
+        </div>
+      </section>
+    )
+  }
+  const pct = Math.max(0, Math.round((goal.kept / goal.target) * 100))
+  const r = 52, circ = 2 * Math.PI * r
+  const now = new Date()
+  const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate()
+  const month = new Date(Number(goal.month.slice(0, 4)), Number(goal.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-CA', { month: 'long' })
+  const reached = pct >= 100
+  return (
+    <section className="card goal-card" aria-label="Monthly goal">
+      <div className="goal-ring" role="img" aria-label={`${pct}% of your monthly goal`}>
+        <svg width="124" height="124" viewBox="0 0 124 124" aria-hidden="true">
+          <circle cx="62" cy="62" r={r} fill="none" stroke="var(--track)" strokeWidth="12" />
+          <circle cx="62" cy="62" r={r} fill="none" stroke="var(--green)" strokeWidth="12" strokeLinecap="round"
+            strokeDasharray={`${(Math.min(pct, 100) / 100) * circ} ${circ}`} transform="rotate(-90 62 62)" />
+        </svg>
+        <div className="goal-ring-label"><span className="mono">{pct}%</span><span>of goal</span></div>
+      </div>
+      <div className="goal-text">
+        <div className="hint" style={{ fontSize: 14 }}>Kept in {month}</div>
+        <div className="mono goal-amount" style={{ color: goal.kept < 0 ? 'var(--red)' : 'var(--green)' }}>{money(goal.kept)}</div>
+        <div style={{ color: 'var(--text-dim)', fontSize: 14.5 }}>
+          {reached
+            ? <>Goal of {money(goal.target, 0)} reached for {month}.</>
+            : <>of your {money(goal.target, 0)} goal · {money(goal.target - goal.kept, 0)} to go, {plural(daysLeft, 'day')} left</>}
+        </div>
+        <Link to="/performance" className="link-btn">See results <ArrowRight size={14} /></Link>
+      </div>
+    </section>
+  )
+}
+
+// The one thing to do first
+function NextStep({ item, footer }) {
+  return (
+    <section className="card next-step" aria-label="Next step">
+      <div>
+        <div className="eyebrow">Next step</div>
+        {item ? (
+          <>
+            <div className="next-title">{item.title}</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 14.5, lineHeight: 1.5 }}>{item.body}</div>
+          </>
+        ) : (
+          <>
+            <div className="next-title"><CheckCircle2 size={22} strokeWidth={2} style={{ color: 'var(--green)', verticalAlign: '-3px', marginRight: 8 }} />All caught up</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 14.5 }}>Every contract is working and nothing needs you right now.</div>
+          </>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+        {item?.cta && <button className="btn-primary" onClick={item.cta.onClick}>{item.cta.label} <ArrowRight size={15} strokeWidth={2} /></button>}
+        {footer}
+      </div>
+    </section>
+  )
+}
+
+// "Coming up": expiries, Fed decisions and earnings over the next 30 days
+const shortDay = iso => {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${dt.toLocaleDateString('en-US', { weekday: 'short' })}`.toUpperCase()
+}
+
+function ComingUp({ items, note }) {
+  if (!items.length) return null
+  return (
+    <section aria-label="Coming up" style={{ marginBottom: 32 }}>
+      <div className="section-title" style={{ marginBottom: 12 }}>Coming up</div>
+      <div className="coming-grid">
+        {items.map(it => (
+          <div key={it.key} className={`coming-card${it.event ? ' event' : ''}`}>
+            <div className="coming-date mono">{it.event && <it.icon size={13} strokeWidth={2} aria-hidden="true" />}{shortDay(it.date)}</div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{it.title}</div>
+            <div className="hint">{it.sub}</div>
+          </div>
+        ))}
+      </div>
+      {note && <div className="hint" style={{ marginTop: 8 }}>{note}</div>}
+    </section>
+  )
+}
+
 // Compact row per stock: shares, how many contracts are working, and the next step
 function StockRow({ ticker: t, positions, onScan, onPositions, onEdit }) {
   const collected = positions.reduce((s, p) => s + p.premium_total - (p.open_fees || 0), 0)
@@ -70,8 +165,8 @@ function StockRow({ ticker: t, positions, onScan, onPositions, onEdit }) {
           <strong>{t.open_total}</strong><span className="muted"> of {plural(total, 'contract')} working</span>
         </div>
         <div className="split-bar" title={`Income ${t.open_income}, Balanced ${t.open_balanced}, not sold ${t.available}`}>
-          <div style={{ width: w(t.open_income), background: 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
-          <div style={{ width: w(t.open_balanced), background: 'linear-gradient(90deg, #3b8fd0, var(--blue))' }} />
+          <div style={{ width: w(t.open_income), background: 'var(--accent)' }} />
+          <div style={{ width: w(t.open_balanced), background: 'var(--violet)' }} />
         </div>
       </div>
       <div className="stock-num">
@@ -109,6 +204,8 @@ export default function Dashboard() {
   const [readyIds,     setReadyIds]     = useState(null) // ids of calls ready to buy back (null = not checked yet)
   const [priceMeta,    setPriceMeta]    = useState(null) // when those prices were checked
   const [goal,         setGoal]         = useState(null) // { target, kept, month } when a monthly goal is set
+  const [upcoming,     setUpcoming]     = useState(null) // Fed decisions and earnings ahead
+  const [eventPct,     setEventPct]     = useState(null) // buy-back target before an event
 
   useEffect(() => {
     let cancelled = false
@@ -132,10 +229,12 @@ export default function Dashboard() {
       .catch(() => {})
     Promise.all([getStrategy(), getPerformance()])
       .then(([st, perf]) => {
-        if (cancelled || !(st.data.monthly_goal > 0)) return
-        setGoal({ target: st.data.monthly_goal, kept: perf.data.summary.realized_this_month, month: perf.data.summary.month })
+        if (cancelled) return
+        setEventPct(st.data.event_buyback_pct)
+        if (st.data.monthly_goal > 0) setGoal({ target: st.data.monthly_goal, kept: perf.data.summary.realized_this_month, month: perf.data.summary.month })
       })
       .catch(() => {})
+    getUpcoming().then(r => { if (!cancelled) setUpcoming(r.data) }).catch(() => {})
     return () => { cancelled = true }
   }, [reloadKey, applyPortfolio])
 
@@ -164,10 +263,63 @@ export default function Dashboard() {
   const expiring  = positions.filter(p => { const d = daysUntil(p.expiry); return d != null && d >= 0 && d <= 7 })
                       .sort((a, b) => a.expiry.localeCompare(b.expiry))
   const unsold    = portfolio.filter(t => t.available > 0)
-  const goalPct   = goal ? Math.max(0, Math.round((goal.kept / goal.target) * 100)) : 0
-  const goalMonth = goal ? new Date(Number(goal.month.slice(0, 4)), Number(goal.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-CA', { month: 'long' }) : ''
   const callList  = list => list.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)}`).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '')
-  const allClear  = reviewCount === 0 && ready.length === 0 && expiring.length === 0 && unsold.length === 0
+
+  // Everything that needs you, most urgent first: the first is the Next step, the rest are listed below it
+  const todo = []
+  if (reviewCount > 0) todo.push({
+    key: 'review', icon: AlertTriangle, tone: 'amber',
+    title: `Check ${reviewCount === 1 ? 'an expired call' : `${reviewCount} expired calls`}`,
+    body: `${reviewCount === 1 ? 'It' : 'They'} expired with the stock above the strike. Were your shares called away?`,
+    cta: { label: 'Review', onClick: () => navigate('/positions') },
+  })
+  if (ready.length > 0) todo.push({
+    key: 'ready', icon: BadgeDollarSign, tone: 'green',
+    title: ready.length === 1 ? `${ready[0].ticker} ${money(ready[0].strike, 0)} call is ready to buy back` : `${ready.length} calls are ready to buy back`,
+    body: ready.length === 1 ? 'You\'ve kept your target share of the premium. Buying back locks it in.' : `You've kept your target share of the premium on ${callList(ready)}.`,
+    cta: { label: 'Buy back', onClick: () => navigate('/positions') },
+  })
+  unsold.forEach(t => todo.push({
+    key: `unsold-${t.ticker}`, icon: ScanLine, tone: 'accent',
+    title: `Put ${plural(t.available, `${t.ticker} contract`)} to work`,
+    body: t.open_total === 0
+      ? `Your ${t.shares.toLocaleString()} ${t.ticker} shares have no calls sold against them.`
+      : `${t.open_total} of ${plural(t.total_contracts, `${t.ticker} contract`)} have a call sold; ${t.available} ${t.available === 1 ? 'is' : 'are'} free.`,
+    cta: { label: `Scan ${t.ticker}`, onClick: () => go(t.ticker, '/scanner') },
+  }))
+  if (expiring.length > 0) todo.push({
+    key: 'expiring', icon: CalendarClock, tone: 'blue',
+    title: `${plural(expiring.length, 'call')} ${expiring.length === 1 ? 'expires' : 'expire'} within a week`,
+    body: expiring.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)} on ${fmtDate(p.expiry)}`).join(', ') + (expiring.length > 3 ? ` and ${expiring.length - 3} more` : ''),
+    cta: { label: 'View', onClick: () => navigate('/positions') },
+  })
+  const [nextStep, ...rest] = todo
+
+  // Coming up (30 days): your calls' expiries, Fed decisions and your stocks' earnings
+  const comingUp = useMemo(() => {
+    const out = []
+    const byCall = new Map()
+    positions.forEach(p => {
+      const d = daysUntil(p.expiry)
+      if (d == null || d < 0 || d > 30) return
+      const k = `${p.expiry}|${p.ticker}|${p.strike}`
+      byCall.set(k, { ...(byCall.get(k) || { date: p.expiry, ticker: p.ticker, strike: p.strike, contracts: 0 }), contracts: (byCall.get(k)?.contracts || 0) + p.contracts })
+    })
+    byCall.forEach((c, k) => out.push({ key: `exp-${k}`, date: c.date, title: `${c.ticker} ${money(c.strike, 0)} call expires`, sub: plural(c.contracts, 'contract') }))
+    ;(upcoming?.fed || []).forEach(day => {
+      const after = positions.filter(p => p.expiry >= day).length
+      out.push({ key: `fed-${day}`, date: day, event: true, icon: Landmark, title: 'Fed rate decision',
+        sub: after ? `${plural(after, 'open call')} ${after === 1 ? 'expires' : 'expire'} after it${eventPct ? `: buy back at ${eventPct}%` : ''}` : 'Can move the whole market' })
+    })
+    ;(upcoming?.earnings || []).forEach(e => {
+      const after = positions.filter(p => p.ticker === e.ticker && p.expiry >= e.date).length
+      out.push({ key: `earn-${e.ticker}-${e.date}`, date: e.date, event: true, icon: Megaphone, title: `${e.ticker} earnings`,
+        sub: after ? `Before ${plural(after, `open ${e.ticker} call`)} ${after === 1 ? 'expires' : 'expire'}` : 'A stock you hold reports' })
+    })
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)).slice(0, 8)
+  }, [positions, upcoming, eventPct])
+  const fedNote = upcoming?.fed_known_until && daysUntil(upcoming.fed_known_until) != null && daysUntil(upcoming.fed_known_until) < 30
+    ? `Fed dates after ${fmtDate(upcoming.fed_known_until)} aren't in the app's calendar yet.` : null
 
   const closeEditor = () => {
     setEditing(null)
@@ -207,56 +359,25 @@ export default function Dashboard() {
         <GettingStarted onAdd={() => setEditing('new')} />
       ) : (
         <>
-          {portfolio.length > 0 && (
+          <div className="hero-grid">
+            <GoalCard goal={goal} />
+            <NextStep item={nextStep} footer={
+              readyIds === null && positions.length > 0
+                ? <span className="hint" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 12, height: 12 }} /> Checking which calls are ready to buy back…</span>
+                : readyIds && positions.length > 0 ? <PriceStamp meta={priceMeta} /> : null
+            } />
+          </div>
+
+          {rest.length > 0 && (
             <div className="card attention" style={{ marginBottom: 20 }}>
-              <div className="section-title" style={{ marginBottom: 6 }}>Needs attention</div>
-              {reviewCount > 0 && (
-                <Attention icon={AlertTriangle} tone="amber"
-                  action={<Link to="/positions" className="link-btn">Review <ArrowRight size={14} /></Link>}>
-                  {reviewCount === 1 ? 'A call' : `${reviewCount} calls`} expired with the stock above the strike. Were your shares called away?
-                </Attention>
-              )}
-              {ready.length > 0 && (
-                <Attention icon={BadgeDollarSign} tone="green"
-                  action={<Link to="/positions" className="link-btn">Buy back <ArrowRight size={14} /></Link>}>
-                  <strong>{plural(ready.length, 'call')}</strong> {ready.length === 1 ? 'is' : 'are'} ready to buy back: <span className="muted">{callList(ready)}</span>
-                </Attention>
-              )}
-              {expiring.length > 0 && (
-                <Attention icon={CalendarClock} tone="blue"
-                  action={<Link to="/positions" className="link-btn">View <ArrowRight size={14} /></Link>}>
-                  <strong>{plural(expiring.length, 'call')}</strong> {expiring.length === 1 ? 'expires' : 'expire'} within a week: <span className="muted">{expiring.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)} on ${fmtDate(p.expiry)}`).join(', ')}{expiring.length > 3 ? ` and ${expiring.length - 3} more` : ''}</span>
-                </Attention>
-              )}
-              {unsold.map(t => (
-                <Attention key={t.ticker} icon={ScanLine} tone="accent"
-                  action={<button className="link-btn" onClick={() => go(t.ticker, '/scanner')}>Scan {t.ticker} <ArrowRight size={14} /></button>}>
-                  <strong>{plural(t.available, `${t.ticker} contract`)}</strong> ready to sell
+              <div className="section-title" style={{ marginBottom: 6 }}>Also needs attention</div>
+              {rest.map(it => (
+                <Attention key={it.key} icon={it.icon} tone={it.tone}
+                  action={<button className="btn-secondary attention-btn" onClick={it.cta.onClick}>{it.cta.label}</button>}>
+                  <div style={{ fontWeight: 600, color: 'var(--text)' }}>{it.title}</div>
+                  <div className="hint">{it.body}</div>
                 </Attention>
               ))}
-              {goal && (
-                <Attention icon={Target} tone={goalPct >= 100 ? 'green' : 'accent'}
-                  action={<Link to="/performance" className="link-btn">Results <ArrowRight size={14} /></Link>}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-                    <span>Kept in {goalMonth}: <strong style={{ color: goal.kept < 0 ? 'var(--red)' : 'var(--text)' }}>{money(goal.kept)}</strong> <span className="muted">of {money(goal.target, 0)} goal</span></span>
-                    <span className="mono nowrap" style={{ color: goalPct >= 100 ? 'var(--green)' : 'var(--text-dim)' }}>{goalPct >= 100 ? 'Goal reached' : `${goalPct}%`}</span>
-                  </div>
-                  <div className="progress-bar" style={{ maxWidth: 420 }}>
-                    <div className="progress-fill" style={{ width: `${Math.min(goalPct, 100)}%`, background: goalPct >= 100 ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : undefined }} />
-                  </div>
-                </Attention>
-              )}
-              {allClear && (
-                <Attention icon={CheckCircle2} tone="green">
-                  Nothing to do right now. Every contract is working{readyIds ? ' and no call is ready to buy back' : ''}.
-                </Attention>
-              )}
-              {readyIds === null && positions.length > 0 && (
-                <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 10 }}>
-                  <span className="spinner" style={{ width: 12, height: 12 }} /> Checking which calls are ready to buy back…
-                </div>
-              )}
-              {readyIds && positions.length > 0 && <PriceStamp meta={priceMeta} style={{ paddingTop: 10 }} />}
             </div>
           )}
 
@@ -305,10 +426,12 @@ export default function Dashboard() {
             </div>
             <div className="card">
               <div className="stat-label">Ready to sell <InfoTip text={TERMS.available} size={12} /></div>
-              <div className="stat-num" style={{ fontSize: 32, color: available > 0 ? 'var(--amber)' : 'var(--text)' }}>{available}</div>
+              <div className="stat-num" style={{ fontSize: 32, color: available > 0 ? 'var(--accent)' : 'var(--text)' }}>{available}</div>
               <div className="hint" style={{ marginTop: 6 }}>{available > 0 ? 'Scan to put these to work.' : 'Everything is covered.'}</div>
             </div>
           </div>
+
+          <ComingUp items={comingUp} note={fedNote} />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="section-title" style={{ margin: 0 }}>Your stocks</div>
@@ -328,9 +451,9 @@ export default function Dashboard() {
               />
             ))}
             <div className="split-legend">
-              <span><i style={{ background: 'var(--accent-light)' }} /> Income <InfoTip text={TERMS.income} size={12} /></span>
-              <span><i style={{ background: 'var(--blue)' }} /> Balanced <InfoTip text={TERMS.balanced} size={12} /></span>
-              <span><i style={{ background: 'rgba(255,255,255,0.18)' }} /> Not sold</span>
+              <span><i style={{ background: 'var(--accent)' }} /> Income <InfoTip text={TERMS.income} size={12} /></span>
+              <span><i style={{ background: 'var(--violet)' }} /> Balanced <InfoTip text={TERMS.balanced} size={12} /></span>
+              <span><i style={{ background: 'var(--track)' }} /> Not sold</span>
             </div>
           </div>
         </>

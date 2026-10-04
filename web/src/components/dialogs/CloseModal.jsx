@@ -4,10 +4,12 @@ import { AlertTriangle } from 'lucide-react'
 import { apiError, assignPosition, closePosition } from '../../api/client'
 import Modal from './Modal'
 import MoneyInput from '../MoneyInput'
+import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { fmtDate, money, plural } from '../../lib/format'
 import { moneyValue } from '../../lib/pnl'
 
 export default function CloseModal({ position: p, evaluation, onDone, onCancel }) {
+  const showFees = chargesCommission(useStrategy())
   // Pre-fill with the estimate from "Check prices" when there is one
   const estimate = evaluation?.current_option_price > 0 ? evaluation.cost_to_close : null
   const [how, setHow]         = useState('bought')   // 'bought' | 'assigned'
@@ -59,7 +61,7 @@ export default function CloseModal({ position: p, evaluation, onDone, onCancel }
           <>
             <div className="form-grid" style={{ gap: 12 }}>
               <MoneyInput id="close-cost" label="Paid to buy it back (total)" value={costText} onChange={setCost} />
-              <MoneyInput id="close-fees" label="Fees (total)" value={feesText} onChange={setFees} />
+              {showFees && <MoneyInput id="close-fees" label="Fees (total)" value={feesText} onChange={setFees} />}
             </div>
             <div className="hint" style={{ marginTop: 8 }}>
               {estimate != null ? `Filled in from the latest price check (${money(estimate)}). ` : ''}
