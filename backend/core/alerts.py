@@ -22,7 +22,7 @@ from sqlalchemy import insert, select, update
 
 from core.buyback import evaluate_positions
 from core.db import alert_settings, get_engine, positions
-from core.market_hours import is_market_open
+from core.market_hours import delayed_quotes_live
 from core.positions import load_open_positions
 from core.strategy import effective_config
 
@@ -168,12 +168,13 @@ def check_and_alert(*, force: bool = False) -> dict:
     """
     Check open calls and send one Discord message for any that newly reached
     the buy-back target. Skips when alerts are off, and (unless force) when the
-    market is closed, since prices then are only last-close quotes.
+    market is closed or opened less than 15 minutes ago, since the delayed
+    prices then are still the last session's closing quotes.
     """
     settings = load_alert_settings()
     if not settings["enabled"] or not settings["discord_webhook"]:
         return {"status": "off", "sent": 0}
-    if not force and not is_market_open():
+    if not force and not delayed_quotes_live():
         return {"status": "market_closed", "sent": 0}
 
     open_positions = load_open_positions()

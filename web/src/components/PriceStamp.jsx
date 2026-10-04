@@ -6,15 +6,16 @@ import { SOURCE_LABEL } from '../lib/source'
 const time = iso => new Date(iso).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
 const opens = iso => new Date(iso).toLocaleString('en-CA', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
 
-// meta: { checked_at, market_open, next_market_open, data_source } from /manage
+// meta: { checked_at, market_open, next_market_open, quotes_live_at, data_source } from /manage
 export default function PriceStamp({ meta, style }) {
   if (!meta?.checked_at) return null
-  const Icon = meta.market_open ? Clock3 : Moon
+  const Icon = meta.market_open && !meta.quotes_live_at ? Clock3 : Moon
   return (
     <div className="hint price-stamp" style={style}>
       <Icon size={13} strokeWidth={2} aria-hidden="true" />
       <span>
         Prices checked {time(meta.checked_at)}{SOURCE_LABEL[meta.data_source] ? ` from ${SOURCE_LABEL[meta.data_source]}` : ''}
+        {meta.quotes_live_at && <> · Trading just opened: prices are about 15 minutes behind, so these are still last-close prices until {time(meta.quotes_live_at)}</>}
         {!meta.market_open && <> · Market closed: these are last-close prices{meta.next_market_open ? ` until it reopens (${opens(meta.next_market_open)} your time)` : ''}</>}
       </span>
     </div>

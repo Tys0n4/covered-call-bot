@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, HTTPException
 from dataclasses import replace
 
 from core.strategy import effective_config, load_strategy
-from core.market_hours import next_market_open
+from core.market_hours import next_market_open, quotes_live_at
 from core.portfolio import load_portfolio
 from core.scanner import resolve_min_strike, scan_covered_calls
 from core.planner import build_plan, compute_buyback_budget, get_allocation_targets
@@ -160,6 +160,7 @@ def run_scan(scan_config: ScanConfig):
         earnings_date=scan.events.get("earnings_date"),
         ex_dividend_date=scan.events.get("ex_dividend_date"),
         next_market_open=None if scan.quotes_live else next_market_open().isoformat(),
+        quotes_live_at=_iso(quotes_live_at()),
     )
 
 
@@ -189,3 +190,7 @@ def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_leng
     except CoverageError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     return {"saved": len(planned)}
+
+
+def _iso(when) -> str | None:
+    return when.isoformat() if when else None

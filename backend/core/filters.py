@@ -49,15 +49,18 @@ def filter_covered_calls(
         closing = (df["source"] == "cboe") if "source" in df.columns else pd.Series(False, index=df.index)
         closing &= (df["bid"].fillna(0) > 0) & (df["ask"].fillna(0) > 0)
         df.loc[closing, "quote_quality"] = "STALE"
-        df.loc[closing, "warning"] = "Closing quote (market closed)"
+        df.loc[closing, "warning"] = "Last session's closing quote"
         has_last = (df["lastPrice"].fillna(0) > 0) & ~closing
         df.loc[has_last, "premium_price"] = df.loc[has_last, "lastPrice"]
         df.loc[has_last, "premium_source"] = "LAST"
         df.loc[has_last, "quote_quality"] = "STALE"
-        df.loc[has_last, "warning"] = "Last traded price (market closed)"
+        df.loc[has_last, "warning"] = "Last traded price, not a live quote"
         if "lastTradeDate" in df.columns:
-            traded = pd.to_datetime(df["lastTradeDate"], errors="coerce", utc=True).dt.tz_convert(NEW_YORK).dt.date
-            old = has_last & traded.notna() & (traded < last_session())
+            stamps = pd.to_datetime(df["lastTradeDate"], errors="coerce", utc=True).dt.tz_convert(NEW_YORK)
+            # As plain dates (an all-empty column would otherwise stay datetime64 and not compare to a date)
+            traded = stamps.map(lambda t: t.date() if pd.notna(t) else None).astype(object)
+            session = last_session()
+            old = has_last & traded.map(lambda d: d is not None and d < session).astype(bool)
             df["last_trade_date"] = traded.map(lambda d: d.isoformat() if pd.notna(d) else None)
             df.loc[old, "quote_quality"] = "OLD"
             df.loc[old, "warning"] = "Last traded before the latest session"

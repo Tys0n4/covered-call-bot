@@ -137,6 +137,7 @@ class ScanResponse(BaseModel):
     earnings_date: Optional[str] = None      # next earnings date, if known
     ex_dividend_date: Optional[str] = None   # next ex-dividend date, if known
     next_market_open: Optional[str] = None   # ISO time of the next open, when closed
+    quotes_live_at: Optional[str] = None     # ISO time delayed quotes catch up, in the first 15 min after the open
 
 
 class TradeIn(BaseModel):
@@ -277,6 +278,7 @@ class ManagementResponse(BaseModel):
     checked_at: str                          # ISO time (UTC) the prices were fetched
     market_open: bool                        # False: prices are from the last close
     next_market_open: Optional[str] = None   # ISO time of the next open, when closed
+    quotes_live_at: Optional[str] = None     # ISO time delayed quotes catch up, in the first 15 min after the open
     data_source: Optional[str] = None        # option prices from "cboe", "yahoo" or "mixed"
 
 

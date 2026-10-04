@@ -38,7 +38,7 @@ def test_delta_falls_back_to_price_then_recent_moves():
 
 def test_scan_after_hours_still_finds_options_in_your_range(client, nvda, monkeypatch):
     IMPLIED_VOL["NVDA"] = 0.00001                      # what Yahoo reports outside market hours
-    monkeypatch.setattr(scanner, "is_market_open", lambda: False)
+    monkeypatch.setattr(scanner, "delayed_quotes_live", lambda: False)
     scan = _scan(client)
     assert scan["candidates"] and scan["income_pick"] and scan["balanced_pick"]
     assert all(0.20 <= c["delta"] <= 0.30 for c in scan["candidates"])
@@ -109,7 +109,7 @@ def test_last_session_is_the_latest_trading_day_that_opened():
 
 def _after_hours(monkeypatch):
     IMPLIED_VOL["NVDA"] = 0.00001
-    monkeypatch.setattr(scanner, "is_market_open", lambda: False)
+    monkeypatch.setattr(scanner, "delayed_quotes_live", lambda: False)
 
 
 def test_old_trades_are_marked_and_skipped_by_the_picks(client, nvda, monkeypatch):
