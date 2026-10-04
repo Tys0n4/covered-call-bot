@@ -160,6 +160,11 @@ def scan_covered_calls(
     )
 
     events = dict(get_events(position.ticker))
+    if events.get("earnings_unknown"):
+        warnings.append(
+            f"Couldn't check {position.ticker}'s earnings date (Yahoo didn't answer), so these picks don't "
+            "account for earnings. Check the date before selling; the app asks Yahoo again in a few minutes."
+        )
     today = market_today()
     last_expiry = str(raw_calls["expiry"].max())
     events["fed_dates"] = fed_meetings_between(today, last_expiry)

@@ -131,12 +131,18 @@ const shortDay = iso => {
   return `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${dt.toLocaleDateString('en-US', { weekday: 'short' })}`.toUpperCase()
 }
 
-function ComingUp({ items, note }) {
-  if (!items.length) return null
+function ComingUp({ items, moreExpiries, note, warning }) {
+  if (!items.length && !warning) return null
   return (
     <section aria-label="Coming up" style={{ marginBottom: 32 }}>
       <div className="section-title" style={{ marginBottom: 12 }}>Coming up</div>
-      <div className="coming-grid">
+      {warning && (
+        <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--amber)', fontSize: 13.5, marginBottom: items.length ? 12 : 0 }}>
+          <AlertTriangle size={15} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>{warning}</span>
+        </div>
+      )}
+      {items.length > 0 && <div className="coming-grid">
         {items.map(it => (
           <div key={it.key} className={`coming-card${it.event ? ' event' : ''}`}>
             <div className="coming-date mono">{it.event && <it.icon size={13} strokeWidth={2} aria-hidden="true" />}{shortDay(it.date)}</div>
@@ -144,7 +150,12 @@ function ComingUp({ items, note }) {
             <div className="hint">{it.sub}</div>
           </div>
         ))}
-      </div>
+      </div>}
+      {moreExpiries > 0 && (
+        <div className="hint" style={{ marginTop: 8 }}>
+          {moreExpiries} more {moreExpiries === 1 ? 'expiry' : 'expiries'} in the next 30 days on <Link to="/positions">Positions</Link>.
+        </div>
+      )}
       {note && <div className="hint" style={{ marginTop: 8 }}>{note}</div>}
     </section>
   )
@@ -329,8 +340,17 @@ export default function Dashboard() {
       out.push({ key: `earn-${e.ticker}-${e.date}`, date: e.date, event: true, icon: Megaphone, title: `${e.ticker} earnings`,
         sub: after ? `Before ${plural(after, `open ${e.ticker} call`)} ${after === 1 ? 'expires' : 'expire'}` : 'A stock you hold reports' })
     })
-    return out.sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)).slice(0, 8)
+    // Up to 8 cards: earnings and Fed decisions always make it, expiries fill the rest (soonest first)
+    const byDate = (a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)
+    const events = out.filter(i => i.event)
+    const expiries = out.filter(i => !i.event).sort(byDate)
+    const shown = expiries.slice(0, Math.max(0, 8 - events.length))
+    return { items: [...events, ...shown].sort(byDate), moreExpiries: expiries.length - shown.length }
   }, [positions, upcoming, eventPct])
+  const unknownEarnings = upcoming?.earnings_unknown || []
+  const earningsWarning = unknownEarnings.length
+    ? `Couldn't check the earnings ${unknownEarnings.length === 1 ? 'date' : 'dates'} for ${unknownEarnings.join(', ')} (Yahoo didn't answer), so ${unknownEarnings.length === 1 ? "it isn't" : "they aren't"} shown here. The app asks again in a few minutes.`
+    : null
   const fedNote = upcoming?.fed_known_until && daysUntil(upcoming.fed_known_until) != null && daysUntil(upcoming.fed_known_until) < 30
     ? `Fed dates after ${fmtDate(upcoming.fed_known_until)} aren't in the app's calendar yet.` : null
 
@@ -444,7 +464,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <ComingUp items={comingUp} note={fedNote} />
+          <ComingUp items={comingUp.items} moreExpiries={comingUp.moreExpiries} note={fedNote} warning={earningsWarning} />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="section-title" style={{ margin: 0 }}>Your stocks</div>

@@ -18,12 +18,16 @@ def upcoming(days: int = Query(30, ge=1, le=90)):
     """Fed decisions and earnings for the stocks you hold, from today through `days` ahead."""
     today = market_today()
     end = (date.fromisoformat(today) + timedelta(days=days)).isoformat()
-    earnings = []
+    earnings, unknown = [], []
     for holding in load_portfolio():
-        when = get_events(holding.ticker).get("earnings_date")
+        found = get_events(holding.ticker)
+        when = found.get("earnings_date")
         if when and today <= when <= end:
             earnings.append({"ticker": holding.ticker, "date": when})
+        elif found.get("earnings_unknown"):
+            unknown.append(holding.ticker)
     return {
+        "earnings_unknown": sorted(unknown),
         "fed": fed_meetings_between(today, end),
         "fed_known_until": last_fed_meeting(),
         "earnings": sorted(earnings, key=lambda e: (e["date"], e["ticker"])),

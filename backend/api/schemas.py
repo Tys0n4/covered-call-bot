@@ -325,6 +325,7 @@ class UpcomingEvents(BaseModel):
     fed: list[str]
     fed_known_until: Optional[str] = None     # the Fed calendar has no dates past this
     earnings: list[EarningsDate]
+    earnings_unknown: list[str] = []          # stocks whose earnings date couldn't be checked
 
 
 class AlertSettingsIn(BaseModel):

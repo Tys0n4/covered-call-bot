@@ -15,7 +15,8 @@ import requests
 import yfinance as yf
 from dotenv import load_dotenv
 
-from core.cache import CLOSE_TTL, EVENTS_TTL, HISTORY_TTL, PRICE_TTL, cached
+from core import db
+from core.cache import CLOSE_TTL, EVENTS_TTL, HISTORY_TTL, PRICE_TTL, RETRY_AFTER, cached
 from core.market_hours import market_today
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")   # backend/.env (local development)
@@ -88,29 +89,82 @@ def _as_date(v) -> date | None:
         return None
 
 
+NO_EARNINGS = ("ETF", "MUTUALFUND", "INDEX")   # Yahoo quote types that never report earnings
+
+
+def _yahoo_events(ticker_symbol: str) -> dict | None:
+    """Yahoo's upcoming earnings / ex-dividend dates, or None when Yahoo didn't answer."""
+    try:
+        cal = yf.Ticker(ticker_symbol).calendar
+    except Exception as e:
+        log.warning("Yahoo calendar for %s failed: %s", ticker_symbol, e)
+        return None
+    # yfinance turns a blocked or rate-limited request into an empty calendar
+    if not isinstance(cal, dict) or not cal:
+        log.warning("Yahoo calendar for %s came back empty", ticker_symbol)
+        return None
+    today = date.fromisoformat(market_today())
+    earnings = cal.get("Earnings Date")
+    earnings = earnings if isinstance(earnings, (list, tuple)) else [earnings]
+    upcoming = sorted(d for d in (_as_date(e) for e in earnings) if d and d >= today)
+    ex_div = _as_date(cal.get("Ex-Dividend Date"))
+    return {
+        "earnings_date": upcoming[0].isoformat() if upcoming else None,
+        "ex_dividend_date": ex_div.isoformat() if ex_div and ex_div >= today else None,
+    }
+
+
+def _save_events(ticker_symbol: str, events: dict) -> None:
+    try:
+        engine = db.get_engine()
+        with engine.begin() as c:
+            c.execute(db.known_events.delete().where(db.known_events.c.ticker == ticker_symbol))
+            c.execute(db.known_events.insert().values(
+                ticker=ticker_symbol, checked_at=datetime.now().isoformat(timespec="seconds"), **events))
+    except Exception as e:
+        log.warning("Saving %s's event dates failed: %s", ticker_symbol, e)
+
+
+def _saved_events(ticker_symbol: str) -> dict | None:
+    try:
+        with db.get_engine().connect() as c:
+            row = c.execute(db.known_events.select().where(db.known_events.c.ticker == ticker_symbol)).first()
+    except Exception as e:
+        log.warning("Reading %s's saved event dates failed: %s", ticker_symbol, e)
+        return None
+    return dict(row._mapping) if row else None
+
+
 def get_events(ticker_symbol: str) -> dict:
     """
     Upcoming earnings and ex-dividend dates (YYYY-MM-DD, or None when there's
-    no upcoming one or Yahoo doesn't know). Never raises.
+    no upcoming one). Never raises.
+
+    Yahoo's answer is cached for a few hours and saved in the database. When
+    Yahoo doesn't answer (rate limits, mostly), the saved dates are used while
+    they're still ahead and Yahoo is asked again after a few minutes. With no
+    saved earnings date ahead, earnings_unknown is True so the app can say so.
     """
     def fetch():
-        try:
-            cal = yf.Ticker(ticker_symbol).calendar or {}
-        except Exception as e:
-            log.warning("Yahoo calendar for %s failed: %s", ticker_symbol, e)
-            return None
-        if not isinstance(cal, dict):
-            return None
-        today = date.fromisoformat(market_today())
-        earnings = cal.get("Earnings Date")
-        earnings = earnings if isinstance(earnings, (list, tuple)) else [earnings]
-        upcoming = sorted(d for d in (_as_date(e) for e in earnings) if d and d >= today)
-        ex_div = _as_date(cal.get("Ex-Dividend Date"))
-        return {
-            "earnings_date": upcoming[0].isoformat() if upcoming else None,
-            "ex_dividend_date": ex_div.isoformat() if ex_div and ex_div >= today else None,
-        }
-    return cached(("events", ticker_symbol), EVENTS_TTL, fetch) or {"earnings_date": None, "ex_dividend_date": None}
+        found = _yahoo_events(ticker_symbol)
+        if found is not None:
+            _save_events(ticker_symbol, found)
+        return found
+
+    found = cached(("events", ticker_symbol), EVENTS_TTL, fetch, retry_after=RETRY_AFTER)
+    if found is not None:
+        return {**found, "earnings_unknown": False}
+
+    today = market_today()
+    saved = _saved_events(ticker_symbol) or {}
+    ahead = {k: saved.get(k) if (saved.get(k) or "") >= today else None for k in ("earnings_date", "ex_dividend_date")}
+    if ahead["earnings_date"]:
+        unknown = False
+    elif saved and saved.get("earnings_date") is None:
+        unknown = False   # Yahoo's last answer: no earnings scheduled
+    else:
+        unknown = get_info(ticker_symbol).get("quoteType") not in NO_EARNINGS
+    return {**ahead, "earnings_unknown": unknown}
 
 
 INFO_TTL = 24 * 3600
@@ -120,11 +174,12 @@ def get_info(ticker_symbol: str) -> dict:
     """Yahoo's company profile (industry, dividend rate, ...), cached for a day. Never raises."""
     def fetch():
         try:
-            return dict(yf.Ticker(ticker_symbol).info or {})
+            info = dict(yf.Ticker(ticker_symbol).info or {})
         except Exception as e:
             log.warning("Yahoo info for %s failed: %s", ticker_symbol, e)
-            return {}
-    return cached(("info", ticker_symbol), INFO_TTL, fetch) or {}
+            return None
+        return info or None   # empty = Yahoo didn't answer; ask again later instead of keeping it a day
+    return cached(("info", ticker_symbol), INFO_TTL, fetch, retry_after=RETRY_AFTER) or {}
 
 
 def get_dividend_yield(ticker_symbol: str, stock_price: float) -> float:
