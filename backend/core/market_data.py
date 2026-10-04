@@ -16,6 +16,7 @@ import yfinance as yf
 from dotenv import load_dotenv
 
 from core.cache import CLOSE_TTL, EVENTS_TTL, HISTORY_TTL, PRICE_TTL, cached
+from core.market_hours import market_today
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")   # backend/.env (local development)
 
@@ -100,7 +101,7 @@ def get_events(ticker_symbol: str) -> dict:
             return None
         if not isinstance(cal, dict):
             return None
-        today = date.today()
+        today = date.fromisoformat(market_today())
         earnings = cal.get("Earnings Date")
         earnings = earnings if isinstance(earnings, (list, tuple)) else [earnings]
         upcoming = sorted(d for d in (_as_date(e) for e in earnings) if d and d >= today)
@@ -110,6 +111,29 @@ def get_events(ticker_symbol: str) -> dict:
             "ex_dividend_date": ex_div.isoformat() if ex_div and ex_div >= today else None,
         }
     return cached(("events", ticker_symbol), EVENTS_TTL, fetch) or {"earnings_date": None, "ex_dividend_date": None}
+
+
+INFO_TTL = 24 * 3600
+
+
+def get_info(ticker_symbol: str) -> dict:
+    """Yahoo's company profile (industry, dividend rate, ...), cached for a day. Never raises."""
+    def fetch():
+        try:
+            return dict(yf.Ticker(ticker_symbol).info or {})
+        except Exception as e:
+            log.warning("Yahoo info for %s failed: %s", ticker_symbol, e)
+            return {}
+    return cached(("info", ticker_symbol), INFO_TTL, fetch) or {}
+
+
+def get_dividend_yield(ticker_symbol: str, stock_price: float) -> float:
+    """Yearly dividend as a share of the price (0.0 when none or unknown)."""
+    try:
+        rate = float(get_info(ticker_symbol).get("dividendRate") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return rate / stock_price if rate > 0 and stock_price > 0 else 0.0
 
 
 def get_close_on(ticker_symbol: str, day: str) -> float | None:

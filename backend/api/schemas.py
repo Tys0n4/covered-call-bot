@@ -70,7 +70,7 @@ class Candidate(BaseModel):
     spans_ex_dividend: bool = False  # expires on/after the next ex-dividend date
     spans_fed: bool = False          # expires on/after a Fed rate decision
     spans_industry: bool = False     # expires on/after earnings from the industry's leaders / your stocks in it
-    monthly_per_contract: Optional[float] = None   # net income per contract per month, to compare expiries
+    monthly_per_contract: Optional[float] = None   # expected to keep per contract per month (after the buy-back and both commissions)
 
 
 class PremiumCheck(BaseModel):
@@ -85,7 +85,7 @@ class GoalCheck(BaseModel):
     goal: float                  # monthly goal ($)
     contracts: int               # contracts across all your stocks
     pace_per_contract: float     # goal ÷ contracts: monthly income each contract needs
-    plan_per_contract: float     # what the picks earn per contract per month (blended by your split)
+    plan_per_contract: float     # what the picks are expected to keep per contract per month (blended by your split)
     met: bool
 
 

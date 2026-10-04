@@ -33,11 +33,11 @@ export function GoalCheck({ check, deltaMax }) {
     <div className={`premium-check ${met ? 'premium-rich' : 'premium-thin'}`}>
       <Target size={17} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
       {met ? (
-        <span><strong>On pace for your {usd(goal)} monthly goal.</strong> These calls earn about {usd(plan)} per contract a month;
+        <span><strong>On pace for your {usd(goal)} monthly goal.</strong> After buying back at your target, these calls keep about {usd(plan)} per contract a month;
           the goal needs {usd(pace)} across your {contracts} contracts, so the picks take no more risk than that needs.</span>
       ) : (
         <span><strong>Short of your {usd(goal)} monthly goal.</strong> The best calls up to a {Math.round(deltaMax * 100)}% chance of being
-          called earn about {usd(plan)} per contract a month; the goal needs {usd(pace)}. A longer expiry window or a wider range on the
+          called keep about {usd(plan)} per contract a month after buying back; the goal needs {usd(pace)}. A longer expiry window or a wider range on the
           Strategy page may help, or the goal may be high for these shares.</span>
       )}
     </div>
