@@ -284,6 +284,20 @@ body {
   transition: width 0.5s ease;
 }
 
+/* Positions: the price to buy a call back at, and its price now */
+.buyback-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.buyback-line > span { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.buyback-line .dim { color: var(--text-dim); }
+
 /* Fade in */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(10px); }

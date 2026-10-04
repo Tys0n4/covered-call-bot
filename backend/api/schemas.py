@@ -260,6 +260,8 @@ class EvaluatedPosition(BaseModel):
     stock_price: Optional[float] = None
     cost_to_close: float                     # to buy it back now, including your usual commission
     target_pct: Optional[float] = None       # buy-back target applied (lower before earnings / a Fed meeting)
+    buyback_price: Optional[float] = None    # buy back at this price per share or less (the target at the closest cent)
+    buyback_kept_pct: Optional[float] = None # share of premium kept at buyback_price
     event: Optional[dict] = None             # {"kind": "earnings" | "fed", "date"} before expiry
     allocation_type: str
     opened_at: str

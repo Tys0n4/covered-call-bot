@@ -19,3 +19,12 @@ export const DEFAULT_STRATEGY = {
   min_dte: 14,                     // expiring in 14-30 days
   max_dte: 30,
 }
+
+// Options trade in whole cents, so a buy-back target becomes a price: the
+// closest cent to (1 − target) × what you sold for. Half a cent rounds down
+// (you keep more), and it's never below $0.01. Same rule as the backend.
+export function buybackPrice(entry, targetPct) {
+  if (!(entry > 0)) return 0
+  const cents = Math.round(entry * (100 - targetPct) * 1000) / 1000
+  return Math.max(Math.ceil(cents - 0.5), 1) / 100
+}

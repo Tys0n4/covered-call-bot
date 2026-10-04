@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from decimal import ROUND_HALF_DOWN, Decimal
 
 from core.options_data import get_calls
 from core.quotes import select_quote, QuoteMode
@@ -14,6 +15,8 @@ from core.events import fed_meetings_between
 from core.market_hours import market_today
 
 log = logging.getLogger(__name__)
+
+CENT = Decimal("0.01")
 
 
 def get_current_option_price(
@@ -55,6 +58,21 @@ def get_current_option_price(
     return result.price
 
 
+def buyback_price(entry_price: float, target_pct: float) -> float:
+    """
+    The price per share to buy back at for a target share of premium kept:
+    what you sold for × (1 − target), rounded to the closest cent, since options
+    trade in whole cents. Half a cent rounds down (you keep more). At least $0.01.
+
+      sold at $0.34, 85% → $0.051 → $0.05 (85.3% kept)
+      sold at $0.38, 85% → $0.057 → $0.06 (84.2% kept: closer than $0.05)
+    """
+    if entry_price <= 0:
+        return 0.0
+    raw = Decimal(str(entry_price)) * (Decimal(100) - Decimal(str(target_pct))) / 100
+    return max(float(raw.quantize(CENT, rounding=ROUND_HALF_DOWN)), 0.01)
+
+
 def calculate_profit_capture(entry_price: float, current_price: float) -> float:
     if entry_price <= 0:
         return 0.0
@@ -73,7 +91,8 @@ def evaluate_position(
 ) -> OpenCoveredCall:
     """
     Recommend an action for one open call:
-      buy_back   — you've kept at least your target share of the premium; when
+      buy_back   — the call costs no more than your buy-back price (your target
+                   share of the premium kept, at the closest cent); when
                    earnings or a Fed meeting comes before expiry (event), the
                    lower event target applies, to avoid holding through the jump
       let_expire — past the target, but it expires within a week with the stock
@@ -90,12 +109,14 @@ def evaluate_position(
     if event:
         target = min(target, config.event_buyback_pct)
 
+    limit = buyback_price(entry_price, target)
+
     profit_capture = 0.0
     action = "hold"
     if current_option_price > 0:
         # (With no price, don't treat the call as worth $0 = 100% kept.)
         profit_capture = calculate_profit_capture(entry_price, current_option_price)
-        if profit_capture >= target:
+        if current_option_price <= limit + 1e-9:
             far_below = bool(stock_price) and strike >= stock_price * (1 + config.let_expire_cushion)
             quiet = event is None
             action = "let_expire" if quiet and days_left <= config.let_expire_days and far_below else "buy_back"
@@ -114,6 +135,8 @@ def evaluate_position(
         stock_price=stock_price,
         cost_to_close=round(current_option_price * contracts * 100 + fee_per_contract * contracts, 2),
         target_pct=target,
+        buyback_price=limit,
+        buyback_kept_pct=round(calculate_profit_capture(entry_price, limit), 1),
         event=event,
     )
 

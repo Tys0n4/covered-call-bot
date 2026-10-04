@@ -19,6 +19,7 @@ export const TERMS = {
   available:  'Contracts you can still sell. Each contract covers 100 shares.',
   buyback:    'Money set aside to buy the option back early if it becomes cheap.',
   profit:     'How much of the original premium you have kept so far. Buying back near the target locks in the gain.',
+  buybackPrice: 'Your buy-back target as a price per share. Options trade in whole cents, so it is the closest cent to your target, which can keep slightly more or less than the target. Set it as a limit order with your broker.',
   minStrike:  'Optional: only show strikes at least this far above today’s price, e.g. 5% on a $100 stock means strikes of $105 or more. Leave at 0 to rely on your chance-of-being-called range (Strategy page).',
   minPremium: 'Ignore options paying less than this per share.',
   volume:     'Minimum contracts traded today. Higher means easier to trade.',
