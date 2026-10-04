@@ -66,3 +66,32 @@ def test_manage_returns_the_buy_back_price(client, nvda):
                                         premium_total=338, allocation_type="Income"))
     e = client.get("/manage").json()["positions"][0]
     assert (e["buyback_price"], e["buyback_kept_pct"]) == (0.51, 84.9)     # $0.507 → $0.51
+
+
+# --- Outside market hours: no recommendation from a trade before the latest session ----------
+
+def test_positions_ignore_a_last_trade_from_days_ago(client, nvda, monkeypatch):
+    import core.buyback as bb
+    from conftest import TRADED_DAYS_AGO
+    from core import cache
+    from core.market_hours import last_session, market_today
+
+    expiry = (date.fromisoformat(market_today()) + timedelta(days=25)).isoformat()
+    client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=1, entry_price=25.0,
+                                        premium_total=2500, allocation_type="Income"))
+    real_get_calls = bb.get_calls
+
+    def closed_market(ticker, expiry):                 # no bid/ask outside market hours
+        calls = real_get_calls(ticker, expiry).copy()
+        calls["bid"] = calls["ask"] = 0.0
+        return calls
+    monkeypatch.setattr(bb, "get_calls", closed_market)
+
+    e = client.get("/manage").json()["positions"][0]
+    assert e["action"] == "buy_back" and e["old_trade_date"] is None      # traded just now: its last price counts
+
+    TRADED_DAYS_AGO["NVDA"] = {125.0: 10}
+    cache.clear()
+    e = client.get("/manage").json()["positions"][0]
+    assert e["current_option_price"] == 0 and e["action"] == "hold" and not e["should_buy_back"]
+    assert date.fromisoformat(e["old_trade_date"]) < last_session()

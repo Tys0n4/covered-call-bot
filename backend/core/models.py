@@ -50,6 +50,7 @@ class OpenCoveredCall:
     buyback_price: float = 0.0      # buy back at this price per share or less: the target at the closest cent
     buyback_kept_pct: float = 0.0   # share of premium kept at buyback_price
     event: dict | None = None       # {"kind": "earnings" | "fed", "date"} before expiry, if any
+    old_trade_date: str | None = None  # no live ask and the last trade is from before the latest session
 
 
 @dataclass

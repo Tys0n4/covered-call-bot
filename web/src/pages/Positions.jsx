@@ -43,7 +43,9 @@ function StatusPanel({ evaluation, checking, failed }) {
           <HelpCircle size={14} strokeWidth={2} /> Price unavailable
         </span>
         <div className="hint" style={{ marginTop: 8 }}>
-          Couldn't get a price for this call right now (common outside market hours). Check again while the market is open.
+          {evaluation.old_trade_date
+            ? <>It last traded on {fmtDate(evaluation.old_trade_date)}, when the stock was at a different price, so that's no guide to what it costs now. Check again once the market opens.</>
+            : "Couldn't get a price for this call right now (common outside market hours). Check again while the market is open."}
         </div>
       </div>
     )
