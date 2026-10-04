@@ -123,6 +123,7 @@ class ScanResponse(BaseModel):
     estimated_fees: float = 0.0              # commission for the planned contracts
     fee_per_contract: float = 0.0            # your usual commission per contract
     premium_check: Optional[PremiumCheck] = None
+    data_source: Optional[str] = None        # option prices from "cboe" (15-min delayed) or "yahoo" (fallback)
     delta_min: float = 0.20                  # the strategy used for this scan
     delta_max: float = 0.30
     min_dte: int = 14
@@ -263,6 +264,7 @@ class EvaluatedPosition(BaseModel):
     buyback_kept_pct: Optional[float] = None # share of premium kept at buyback_price
     event: Optional[dict] = None             # {"kind": "earnings" | "fed", "date"} before expiry
     old_trade_date: Optional[str] = None     # no current price: the last trade is from before the latest session
+    price_source: Optional[str] = None       # "cboe" | "yahoo"
     allocation_type: str
     opened_at: str
 
@@ -274,6 +276,7 @@ class ManagementResponse(BaseModel):
     checked_at: str                          # ISO time (UTC) the prices were fetched
     market_open: bool                        # False: prices are from the last close
     next_market_open: Optional[str] = None   # ISO time of the next open, when closed
+    data_source: Optional[str] = None        # option prices from "cboe", "yahoo" or "mixed"
 
 
 class HoldingIn(BaseModel):

@@ -75,10 +75,11 @@ def estimate_call_delta(stock_price, strike, days_to_expiry, implied_volatility,
 
 def add_estimated_delta(calls_df, stock_price, risk_free_rate=0.04, *, dividend_yield=0.0, fallback_vol=None):
     """
-    Add 'delta' and 'delta_source' ("implied" | "price" | "history" | None).
+    Add 'delta' and 'delta_source' ("cboe" | "implied" | "price" | "history" | None).
 
+    Cboe's own delta when the chain came from Cboe ('cboe_delta'); otherwise
     Black-Scholes, with the volatility from (in order):
-      1. Yahoo's implied volatility.
+      1. The chain's implied volatility.
       2. The volatility implied by the option's price (midpoint, else last
          trade): Yahoo's is junk outside market hours.
       3. fallback_vol (the stock's recent realized volatility).
@@ -96,6 +97,9 @@ def add_estimated_delta(calls_df, stock_price, risk_free_rate=0.04, *, dividend_
         return None
 
     def _resolve(row):
+        exchange = row.get("cboe_delta")
+        if exchange is not None and not pd.isna(exchange) and 0 < float(exchange) < 1:
+            return round(float(exchange), 3), "cboe"
         strike, days = row.get("strike"), row.get("dte")
         vol, source = row.get("impliedVolatility"), "implied"
         if not _valid_vol(vol):

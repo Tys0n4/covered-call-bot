@@ -31,7 +31,7 @@ def test_scan_prices_options_at_a_likely_fill_after_fees(client, nvda):
     assert scan["fee_per_contract"] == 0.65
     c = scan["candidates"][0]
     bid, ask = _fake_quote(c["strike"])
-    assert c["premium_price"] == pytest.approx(bid + 0.25 * (ask - bid), abs=0.001)   # not the midpoint
+    assert c["premium_price"] == pytest.approx((bid + ask) / 2, abs=0.001)   # sells usually fill at the midpoint
     assert c["net_per_contract"] == pytest.approx(c["premium_per_contract"] - 0.65, abs=0.01)
     yearly_on_net = c["net_per_contract"] / 100 / 100.0 / c["dte"] * 365 * 100
     assert c["annualized_yield_pct"] == pytest.approx(yearly_on_net, abs=0.02)
@@ -54,16 +54,14 @@ def test_no_commission_by_default_and_the_setting_is_used(client, nvda):
     assert client.post("/scan", json={"ticker": "NVDA"}).json()["fee_per_contract"] == 1.05
 
 
-def test_wider_spread_ranks_lower_at_the_same_midpoint():
+def test_options_are_priced_at_the_midpoint_whatever_the_spread():
     expiry = (date.today() + timedelta(days=30)).isoformat()
     calls = pd.DataFrame([
         dict(strike=120.0, bid=0.95, ask=1.05, lastPrice=1.0, volume=100, openInterest=500, expiry=expiry, dte=30),
         dict(strike=121.0, bid=0.85, ask=1.15, lastPrice=1.0, volume=100, openInterest=500, expiry=expiry, dte=30),
     ])
     df = add_option_metrics(filter_covered_calls(calls, 115, 100.0), 100.0, fee_per_contract=0.65)
-    tight, wide = df.iloc[0], df.iloc[1]
-    assert tight["premium_price"] > wide["premium_price"]           # same mid ($1.00), worse likely fill
-    assert tight["annualized_yield_pct"] > wide["annualized_yield_pct"]
+    assert df["premium_price"].tolist() == pytest.approx([1.00, 1.00])  # both $1.00 midpoints
 
 
 def test_very_wide_spreads_are_skipped():

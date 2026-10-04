@@ -15,6 +15,7 @@ from core import cache
 from core import db
 from core import scanner
 from core import events
+from core import cboe
 
 # Fake stock prices; any other ticker "doesn't exist"
 PRICES = {"NVDA": 100.0, "AAPL": 200.0}
@@ -33,6 +34,9 @@ INFO: dict[str, dict] = {}
 
 # Fake implied volatility per ticker (default 35%); ~0 mimics Yahoo outside market hours
 IMPLIED_VOL: dict[str, float] = {}
+
+# Fake Cboe delayed-quote payloads per ticker (Cboe's JSON shape); none = Cboe has nothing, so Yahoo is used
+CBOE: dict[str, dict] = {}
 
 # Strikes whose last trade was this many days ago (ticker -> {strike: days}); the rest traded just now
 TRADED_DAYS_AGO: dict[str, dict[float, int]] = {}
@@ -101,6 +105,8 @@ def fake_market(monkeypatch):
     INFO.clear()
     IMPLIED_VOL.clear()
     TRADED_DAYS_AGO.clear()
+    CBOE.clear()
+    monkeypatch.setattr(cboe, "_download", lambda symbol: CBOE.get(symbol))
     # No real Fed calendar unless a test sets one, so results don't depend on today's date
     monkeypatch.setattr(events, "FED_MEETINGS", ())
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)

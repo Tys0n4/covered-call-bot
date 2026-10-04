@@ -48,20 +48,21 @@ def get_current_option_quote(
     """
     calls = get_calls(ticker, expiry)
     if calls is None or calls.empty or "strike" not in calls.columns:
-        return {"price": 0.0, "old_trade_date": None}
+        return {"price": 0.0, "old_trade_date": None, "source": None}
     calls = calls.copy()
     calls["strike"] = calls["strike"].astype(float)
     calls["_diff"] = (calls["strike"] - float(strike)).abs()
     row = calls.sort_values("_diff").iloc[0]
+    source = row.get("source")
     if float(row["_diff"]) > float(strike_tolerance):
-        return {"price": 0.0, "old_trade_date": None}
+        return {"price": 0.0, "old_trade_date": None, "source": source}
 
     result = select_quote(bid=row.get("bid"), ask=row.get("ask"), last_price=row.get("lastPrice"), mode=mode)
     if result.source == "LAST":
         traded = _trade_day(row.get("lastTradeDate"))
         if traded and traded < last_session():
-            return {"price": 0.0, "old_trade_date": traded.isoformat()}
-    return {"price": result.price, "old_trade_date": None}
+            return {"price": 0.0, "old_trade_date": traded.isoformat(), "source": source}
+    return {"price": result.price, "old_trade_date": None, "source": source}
 
 
 def buyback_price(entry_price: float, target_pct: float) -> float:
@@ -186,6 +187,7 @@ def evaluate_positions(
                                    stock_price=stock_prices[pos["ticker"]], fee_per_contract=fee,
                                    event=next_event(pos["ticker"], pos["expiry"]))
         result.old_trade_date = quote["old_trade_date"]
+        result.price_source = quote["source"]
         results.append(result)
 
     return results

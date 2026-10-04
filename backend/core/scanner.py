@@ -139,6 +139,8 @@ def scan_covered_calls(
             warnings=["No options found in DTE window."],
         )
 
+    source = str(raw_calls["source"].iloc[0]) if "source" in raw_calls.columns else None
+
     # Outside market hours (or when Yahoo has no live quotes at all, e.g. a
     # holiday) bid/ask are empty, so price options at their last trade instead.
     if "bid" in raw_calls.columns and "ask" in raw_calls.columns:
@@ -214,7 +216,7 @@ def scan_covered_calls(
             position=position, current_price=current_price, candidates=pd.DataFrame(),
             income_pick=None, balanced_pick=None, quotes_live=quotes_live, events=events,
             warnings=warnings + ["Every matching option pays less than the commission to sell it."],
-            fee_per_contract=fee, premium_check=check,
+            fee_per_contract=fee, premium_check=check, data_source=source,
         )
 
     sources = set(enriched["delta_source"].dropna())
@@ -247,7 +249,7 @@ def scan_covered_calls(
                 f"{config.delta_min:.0%}–{config.delta_max:.0%} chance of being called. "
                 "Widen the range or the expiry window on the Strategy page."
             ],
-            fee_per_contract=fee, premium_check=check,
+            fee_per_contract=fee, premium_check=check, data_source=source,
         )
     old = int((in_range["quote_quality"] == "OLD").sum()) if "quote_quality" in in_range.columns else 0
     if old:
@@ -288,4 +290,5 @@ def scan_covered_calls(
         fee_per_contract=fee,
         premium_check=check,
         plan_per_contract=plan_per_contract,
+        data_source=source,
     )

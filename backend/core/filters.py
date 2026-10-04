@@ -16,7 +16,7 @@ def filter_covered_calls(
     """
     Filter option candidates and attach premium/quote columns.
 
-    premium_price is the likely fill when selling (see sell_fill_share), not the midpoint.
+    premium_price is the likely fill when selling (sell_fill_share: the midpoint by default).
 
     Filters applied:
       - Strike within [min_strike_price, stock_price * max_strike_multiple]
@@ -44,7 +44,13 @@ def filter_covered_calls(
     df = apply_quote_policy_to_df(df, mode="mid_or_last")
 
     if use_last_price and "lastPrice" in df.columns:
-        has_last = df["lastPrice"].fillna(0) > 0
+        # Cboe keeps each option's closing bid/ask after hours: its midpoint beats
+        # a last trade that may be hours or days old
+        closing = (df["source"] == "cboe") if "source" in df.columns else pd.Series(False, index=df.index)
+        closing &= (df["bid"].fillna(0) > 0) & (df["ask"].fillna(0) > 0)
+        df.loc[closing, "quote_quality"] = "STALE"
+        df.loc[closing, "warning"] = "Closing quote (market closed)"
+        has_last = (df["lastPrice"].fillna(0) > 0) & ~closing
         df.loc[has_last, "premium_price"] = df.loc[has_last, "lastPrice"]
         df.loc[has_last, "premium_source"] = "LAST"
         df.loc[has_last, "quote_quality"] = "STALE"
@@ -57,9 +63,8 @@ def filter_covered_calls(
             df.loc[old, "warning"] = "Last traded before the latest session"
     df["mid"] = ((df["bid"].fillna(0) + df["ask"].fillna(0)) / 2).round(3)
 
-    # Price live quotes at a realistic sell fill, not the midpoint: a sell order
-    # usually fills between the bid and the mid, and the wider the spread, the
-    # more that costs you. (Last-traded prices, when the market is closed, stay as is.)
+    # Price quotes at your usual sell fill (sell_fill_share of the way from the
+    # bid to the ask; the midpoint by default). Last-traded prices stay as is.
     live = df["premium_source"] == "MID"
     df.loc[live, "premium_price"] = (
         df.loc[live, "bid"] + config.sell_fill_share * (df.loc[live, "ask"] - df.loc[live, "bid"])

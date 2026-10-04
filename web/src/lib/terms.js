@@ -8,7 +8,7 @@ export const TERMS = {
   keep:       'The premium minus the buyback reserve and your usual commission.',
   fed:        'Expires after a Federal Reserve rate decision, which can move the whole market.',
   industry:   'Expires after earnings from big companies in the same industry (or your other stocks in it), which often move the whole group.',
-  fillPrice:  'What you can realistically get per share when selling: between the bid and the midpoint. Before commission.',
+  fillPrice:  'What you can expect per share when selling: the midpoint between the bid and the ask, where sell orders usually fill. Before commission.',
   yield:      'What you keep after commission, as a yearly return on your shares, so options with different lengths can be compared.',
   upside:     'How much the stock can rise before it reaches the strike and your shares may be sold.',
   delta:      'Delta, shown as a rough chance the stock ends above the strike and your shares get called away.',
