@@ -63,10 +63,20 @@ EVENT_DELTA_SLACK = 0.03
 DAYS_PER_MONTH = 30.4
 
 
-def add_monthly_income(df: pd.DataFrame) -> pd.DataFrame:
-    """What each option earns per contract per month after commission, to compare expiries."""
+def add_monthly_income(df: pd.DataFrame, config: ScannerConfig, fee_per_contract: float = 0.0) -> pd.DataFrame:
+    """
+    What you expect to keep per contract per month, to compare expiries and pace
+    the monthly goal: you buy back at your target (the earlier event target when
+    earnings or a Fed decision comes before expiry), so you keep that share of
+    the premium, minus the commission to sell and the one to buy back.
+    """
     df = df.copy()
-    df["monthly_per_contract"] = (df["net_per_contract"] / df["dte"] * DAYS_PER_MONTH).round(2)
+    kept = pd.Series(config.profit_capture_target_pct / 100, index=df.index)
+    if "spans_earnings" in df.columns or "spans_fed" in df.columns:
+        event = df.get("spans_earnings", False) | df.get("spans_fed", False)
+        kept = kept.where(~event.astype(bool), min(config.event_buyback_pct, config.profit_capture_target_pct) / 100)
+    expected = df["premium_per_contract"] * kept - 2 * fee_per_contract
+    df["monthly_per_contract"] = (expected / df["dte"] * DAYS_PER_MONTH).round(2)
     return df
 
 

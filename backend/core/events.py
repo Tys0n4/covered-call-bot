@@ -13,16 +13,13 @@ earlier (strategy.event_buyback_pct).
 """
 from __future__ import annotations
 
-from datetime import date
-
-import yfinance as yf
-
-from core.cache import cached
-from core.market_data import get_events
+from core.market_data import get_events, get_info
+from core.market_hours import market_today
 
 # FOMC rate decision days (the second day of each meeting), from the Federal
 # Reserve's published calendar. The Fed publishes each year's dates in advance:
-# add the next year's here when they're out (federalreserve.gov/monetarypolicy/fomccalendars.htm).
+# add the next year's here once they're confirmed on federalreserve.gov/monetarypolicy/fomccalendars.htm.
+# Only confirmed dates: past the last one, the Scanner says the calendar ends there.
 FED_MEETINGS: tuple[str, ...] = (
     "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
     "2026-07-29", "2026-09-16", "2026-10-28", "2026-12-09",
@@ -48,18 +45,14 @@ INDUSTRY_LEADERS: dict[str, tuple[str, ...]] = {
     "Entertainment": ("NFLX", "DIS"),
 }
 
-INFO_TTL = 24 * 3600
-
-
 def industry_of(ticker: str) -> str | None:
     """Yahoo Finance's industry for a stock (e.g. "Semiconductors"), or None."""
-    def fetch():
-        try:
-            info = yf.Ticker(ticker).info or {}
-            return info.get("industry") or None
-        except Exception:
-            return None
-    return cached(("industry", ticker), INFO_TTL, fetch)
+    return get_info(ticker).get("industry") or None
+
+
+def last_fed_meeting() -> str | None:
+    """The last Fed decision day the app knows about."""
+    return max(FED_MEETINGS) if FED_MEETINGS else None
 
 
 def fed_meetings_between(start: str, end: str) -> list[str]:
@@ -73,7 +66,7 @@ def related_earnings(ticker: str, holdings: list[str], today: str | None = None)
     leaders, and your other holdings in the same industry.
     [{"ticker", "date", "why": "leader" | "yours"}], soonest first.
     """
-    today = today or date.today().isoformat()
+    today = today or market_today()
     industry = industry_of(ticker)
     if not industry:
         return []

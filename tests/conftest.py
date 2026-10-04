@@ -31,6 +31,9 @@ HISTORY: dict[str, list[float]] = {}
 # Fake Yahoo info (e.g. {"industry": "Semiconductors"}) per ticker; tests may set it
 INFO: dict[str, dict] = {}
 
+# Fake implied volatility per ticker (default 35%); ~0 mimics Yahoo outside market hours
+IMPLIED_VOL: dict[str, float] = {}
+
 
 def fake_expiries() -> tuple[str, ...]:
     today = date.today()
@@ -79,7 +82,7 @@ class FakeTicker:
             mid = max(0.05, 6.0 - max(strike - price, 0) * 0.12)
             rows.append(dict(
                 strike=strike, bid=round(mid * 0.95, 2), ask=round(mid * 1.05, 2), lastPrice=round(mid, 2),
-                volume=100 + k, openInterest=500, impliedVolatility=0.35,
+                volume=100 + k, openInterest=500, impliedVolatility=IMPLIED_VOL.get(self.symbol, 0.35),
             ))
         return _Chain(pd.DataFrame(rows).drop_duplicates("strike").reset_index(drop=True))
 
@@ -91,6 +94,7 @@ def fake_market(monkeypatch):
     CLOSES.clear()
     HISTORY.clear()
     INFO.clear()
+    IMPLIED_VOL.clear()
     # No real Fed calendar unless a test sets one, so results don't depend on today's date
     monkeypatch.setattr(events, "FED_MEETINGS", ())
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)

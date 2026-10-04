@@ -1,22 +1,22 @@
 # scanner.py
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 
 import pandas as pd
 
 from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.models import PortfolioPosition, ScanResult
-from core.market_data import get_current_price, get_events
+from core.market_data import get_current_price, get_dividend_yield, get_events, get_recent_closes
 from core.options_data import get_call_options_in_dte_range
 from core.filters import filter_covered_calls
 from core.calculations import add_option_metrics
 from core.greeks import add_estimated_delta
 from core.fees import typical_fee_per_contract
-from core.volatility import premium_check
+from core.volatility import premium_check, realized_volatility
 from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, score_options
-from core.events import fed_meetings_between, related_earnings
-from core.market_hours import is_market_open
+from core.events import fed_meetings_between, last_fed_meeting, related_earnings
+from core.market_hours import is_market_open, market_today
 
 
 def resolve_min_strike(current_price: float, config: ScannerConfig, avg_cost: float = 0.0) -> float:
@@ -158,9 +158,15 @@ def scan_covered_calls(
     )
 
     events = dict(get_events(position.ticker))
-    today = date.today().isoformat()
+    today = market_today()
     last_expiry = str(raw_calls["expiry"].max())
     events["fed_dates"] = fed_meetings_between(today, last_expiry)
+    known_until = last_fed_meeting()
+    if known_until and last_expiry > known_until:
+        warnings.append(
+            f"The app's Fed calendar ends {_fmt_day(known_until)}, so meetings after that aren't checked "
+            "for these expiries. Dates are added once the Fed confirms them."
+        )
     events["industry_earnings"] = [
         e for e in related_earnings(position.ticker, holdings or [], today) if e["date"] <= last_expiry
     ]
@@ -192,7 +198,13 @@ def scan_covered_calls(
     if quotes_live and bad_quote_count > 0:
         warnings.append(f"{bad_quote_count} candidate(s) have STALE or BAD quotes — verify on broker.")
 
-    enriched = add_estimated_delta(filtered, current_price, risk_free_rate=config.risk_free_rate)
+    # Outside market hours Yahoo's implied volatility is ~0, so delta comes from
+    # each option's price instead, or the stock's recent moves as a last resort
+    recent_vol = (check or {}).get("realized_vol") or realized_volatility(get_recent_closes(position.ticker) or [])
+    enriched = add_estimated_delta(
+        filtered, current_price, risk_free_rate=config.risk_free_rate,
+        dividend_yield=get_dividend_yield(position.ticker, current_price), fallback_vol=recent_vol,
+    )
     fee = typical_fee_per_contract()
     enriched = add_option_metrics(enriched, current_price, fee_per_contract=fee)
     # An option whose commission eats the whole premium isn't income
@@ -205,6 +217,13 @@ def scan_covered_calls(
             fee_per_contract=fee, premium_check=check,
         )
 
+    sources = set(enriched["delta_source"].dropna())
+    if "price" in sources or "history" in sources:
+        how = "last trade prices" + (" and the stock's recent moves" if "history" in sources else "")
+        warnings.append(
+            f"Live volatility isn't available right now, so the chance of being called is estimated from {how}. "
+            "It can shift once the market opens."
+        )
     missing_delta = enriched["delta"].isna().sum()
     if missing_delta > 0:
         warnings.append(
@@ -212,7 +231,9 @@ def scan_covered_calls(
             "so the balanced pick may be less accurate."
         )
 
-    scored = add_monthly_income(score_options(enriched, config=config))
+    scored = add_monthly_income(score_options(enriched, config=config), config, fee)
+    # Options that would keep nothing after the buy-back and commissions aren't income
+    scored = scored[scored["monthly_per_contract"] > 0]
     scored["below_cost_basis"] = (position.avg_cost > 0) & (scored["strike"] < position.avg_cost)
 
     # Your delta range is the main risk rule: only those options are candidates
