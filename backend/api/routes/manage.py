@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from core.strategy import effective_config
 from core.positions import load_open_positions
 from core.buyback import evaluate_positions
-from core.market_hours import is_market_open, next_market_open
+from core.market_hours import is_market_open, next_market_open, quotes_live_at
 from api.schemas import ManagementResponse, EvaluatedPosition
 
 router = APIRouter(prefix="/manage", tags=["management"])
@@ -58,6 +58,7 @@ def evaluate_open_positions(ticker: Optional[str] = None):
     evaluated.sort(key=lambda x: (not x.should_buy_back, -x.profit_capture_pct))
 
     market_open = is_market_open()
+    catch_up = quotes_live_at()
     return ManagementResponse(
         positions_evaluated=len(evaluated),
         buyback_recommended=sum(1 for e in evaluated if e.should_buy_back),
@@ -66,6 +67,7 @@ def evaluate_open_positions(ticker: Optional[str] = None):
         market_open=market_open,
         next_market_open=None if market_open else next_market_open().isoformat(),
         data_source=_source(evaluated),
+        quotes_live_at=catch_up.isoformat() if catch_up else None,
     )
 
 

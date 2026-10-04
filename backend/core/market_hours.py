@@ -106,6 +106,25 @@ def is_market_open(now: datetime | None = None) -> bool:
     return is_trading_day(n.date()) and OPEN <= n.time() < close_time(n.date())
 
 
+# Option quotes from Cboe (and Yahoo) are about 15 minutes behind: right after the open they
+# still show the last session's closing quotes
+QUOTE_DELAY = timedelta(minutes=15)
+
+
+def delayed_quotes_live(now: datetime | None = None) -> bool:
+    """The market is open and has been for QUOTE_DELAY, so delayed quotes reflect today's trading."""
+    n = _ny(now)
+    return is_market_open(n) and is_market_open(n - QUOTE_DELAY)
+
+
+def quotes_live_at(now: datetime | None = None) -> datetime | None:
+    """In the first QUOTE_DELAY after the open, when delayed quotes catch up; otherwise None."""
+    n = _ny(now)
+    if is_market_open(n) and not is_market_open(n - QUOTE_DELAY):
+        return datetime.combine(n.date(), OPEN, tzinfo=NEW_YORK) + QUOTE_DELAY
+    return None
+
+
 def market_today(now: datetime | None = None) -> str:
     """Today's date in New York (the market's calendar), as YYYY-MM-DD."""
     return _ny(now).strftime("%Y-%m-%d")

@@ -170,7 +170,7 @@ def test_event_target_drives_alerts(client, nvda, monkeypatch):
     from core import alerts
     sent = []
     monkeypatch.setattr(alerts.requests, "post", lambda url, json, timeout: sent.append(json) or type("R", (), {"status_code": 204})())
-    monkeypatch.setattr(alerts, "is_market_open", lambda: True)
+    monkeypatch.setattr(alerts, "delayed_quotes_live", lambda: True)
     from core.market_hours import market_today
     monkeypatch.setattr(events, "FED_MEETINGS", ((date.fromisoformat(market_today()) + timedelta(days=10)).isoformat(),))
     client.put("/alerts", json={"discord_webhook": "https://discord.com/api/webhooks/1/abc", "enabled": True})

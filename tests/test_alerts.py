@@ -26,7 +26,7 @@ def discord(monkeypatch):
         box.sent.append((url, json))
         return _Resp(box.status)
     monkeypatch.setattr(alerts.requests, "post", fake_post)
-    monkeypatch.setattr(alerts, "is_market_open", lambda: True)
+    monkeypatch.setattr(alerts, "delayed_quotes_live", lambda: True)
     return box
 
 
@@ -100,7 +100,7 @@ def test_check_does_nothing_when_off_or_market_closed(client, nvda, discord, mon
     _call(client, entry_price=25.0)
     assert client.post("/alerts/check").json() == {"status": "off", "sent": 0, "checked": None}
     _turn_on(client)
-    monkeypatch.setattr(alerts, "is_market_open", lambda: False)
+    monkeypatch.setattr(alerts, "delayed_quotes_live", lambda: False)
     assert client.post("/alerts/check").json()["status"] == "market_closed"
     assert client.post("/alerts/check", params={"force": True}).json()["sent"] == 1
     assert len(discord.sent) == 1

@@ -63,7 +63,7 @@ def test_falls_back_to_yahoo_when_cboe_has_nothing(client, nvda):
 
 
 def test_after_hours_cboe_uses_the_closing_quote_not_an_old_trade(client, nvda, monkeypatch):
-    monkeypatch.setattr(scanner, "is_market_open", lambda: False)
+    monkeypatch.setattr(scanner, "delayed_quotes_live", lambda: False)
     IMPLIED_VOL["NVDA"] = 0.00001
     CBOE["NVDA"] = cboe_payload(days=(25,), delta_for=_delta, traded="2026-09-01T10:00:00")   # trades weeks old
     cache.clear()
@@ -113,3 +113,26 @@ def test_a_failed_cboe_download_is_not_retried_on_every_lookup(monkeypatch):
     assert market_data.get_price_quote("NVDA") == (100.0, "yahoo")
     assert get_cboe_calls("NVDA") is None and get_cboe_price("NVDA") is None
     assert calls == ["NVDA"]                                                        # one try, then a short wait
+
+
+def test_first_15_minutes_after_the_open_use_the_closing_quote(client, nvda, monkeypatch):
+    from datetime import timezone
+    from api.routes import scan as scan_route
+    CBOE["NVDA"] = cboe_payload(days=(18, 25), delta_for=_delta)
+    monkeypatch.setattr(scanner, "delayed_quotes_live", lambda: False)          # 9:35: quotes still show yesterday
+    at = datetime(2026, 10, 5, 13, 45, tzinfo=timezone.utc)
+    monkeypatch.setattr(scan_route, "quotes_live_at", lambda: at)
+    scan = client.post("/scan", json={"ticker": "NVDA"}).json()
+    assert scan["quotes_live"] is False and scan["quotes_live_at"] == at.isoformat()
+    assert all(c["quote_quality"] == "STALE" for c in scan["candidates"])
+
+
+def test_closed_market_scan_works_when_no_option_has_a_last_trade_time(client, nvda, monkeypatch):
+    payload = cboe_payload(days=(18, 25), delta_for=_delta)
+    for o in payload["data"]["options"]:
+        o["last_trade_time"] = None
+    CBOE["NVDA"] = payload
+    monkeypatch.setattr(scanner, "delayed_quotes_live", lambda: False)
+    r = client.post("/scan", json={"ticker": "NVDA"})
+    assert r.status_code == 200, r.text           # used to fail comparing an all-empty date column
+    assert r.json()["candidates"]

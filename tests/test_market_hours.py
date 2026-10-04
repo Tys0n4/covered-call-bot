@@ -64,3 +64,14 @@ def test_next_open_skips_weekends_and_holidays():
     assert next_market_open(ny(2026, 4, 2, 18, 0)) == ny(2026, 4, 6, 9, 30)
     # Before the open on a trading day -> same day
     assert next_market_open(ny(2026, 4, 6, 8, 0)) == ny(2026, 4, 6, 9, 30)
+
+
+def test_delayed_quotes_catch_up_15_minutes_after_the_open():
+    from core.market_hours import delayed_quotes_live, quotes_live_at
+    assert not delayed_quotes_live(ny(2025, 12, 23, 9, 35))         # open, but quotes still show yesterday
+    assert quotes_live_at(ny(2025, 12, 23, 9, 35)) == ny(2025, 12, 23, 9, 45)
+    assert delayed_quotes_live(ny(2025, 12, 23, 9, 45))
+    assert quotes_live_at(ny(2025, 12, 23, 9, 45)) is None
+    assert delayed_quotes_live(ny(2025, 12, 23, 15, 59))
+    assert not delayed_quotes_live(ny(2025, 12, 23, 16, 5))           # closed
+    assert quotes_live_at(ny(2025, 12, 23, 16, 5)) is None and quotes_live_at(ny(2025, 12, 27, 9, 35)) is None

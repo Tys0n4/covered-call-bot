@@ -116,7 +116,7 @@ def fake_market(monkeypatch):
     # Stock prices: Cboe's snapshot when a test sets one, else the fake Yahoo price (no Alpha Vantage key)
     monkeypatch.setattr(market_data, "ALPHA_VANTAGE_KEY", None)
     monkeypatch.setattr(market_data, "_av_limited_on", None)
-    monkeypatch.setattr(scanner, "is_market_open", lambda: True)
+    monkeypatch.setattr(scanner, "delayed_quotes_live", lambda: True)
 
 
 @pytest.fixture(autouse=True)

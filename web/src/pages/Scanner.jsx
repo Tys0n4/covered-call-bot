@@ -256,8 +256,12 @@ export default function Scanner() {
     : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
 
   const planned = result?.planned_positions || []
-  // Market closed: results use last traded prices, so saving waits for live prices
+  // Market closed (or opened under 15 min ago, while the delayed quotes catch up):
+  // results use last-session prices, so saving waits for live prices
   const lastPrices = result?.quotes_live === false
+  const liveAt = lastPrices && result?.quotes_live_at
+    ? new Date(result.quotes_live_at).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
+    : null
   const scanRange = result ? { min: result.delta_min, max: result.delta_max } : null
   const optionFor = p => result?.candidates.find(c => c.expiry === p.expiry && c.strike === p.strike) || {}
   const nextOpen = result?.next_market_open
@@ -366,9 +370,14 @@ export default function Scanner() {
                 <div className="callout callout-amber" style={{ marginBottom: 20 }}>
                   <Moon size={18} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
-                    <strong>The market is closed, so these are last traded prices, not live quotes.</strong>{' '}
-                    Use them to plan. Prices will change when trading starts{nextOpen ? ` (${nextOpen} your time)` : ''}.
-                    Scan again then to save a trade.
+                    {liveAt ? <>
+                      <strong>Trading just opened, but option prices are about 15 minutes behind, so these are still the last session's closing prices.</strong>{' '}
+                      Scan again after {liveAt} your time to see today's prices and save a trade.
+                    </> : <>
+                      <strong>The market is closed, so these are last traded prices, not live quotes.</strong>{' '}
+                      Use them to plan. Prices will change when trading starts{nextOpen ? ` (${nextOpen} your time)` : ''}.
+                      Scan again then to save a trade.
+                    </>}
                   </div>
                 </div>
               )}
@@ -462,14 +471,14 @@ export default function Scanner() {
                       </div>
                     ) : (
                       <button className="btn-primary" onClick={handleSave} disabled={saving || lastPrices || !fillsValid}
-                        title={lastPrices ? 'Available when the market is open and prices are live' : undefined}>
+                        title={lastPrices ? (liveAt ? `Available after ${liveAt}, once prices catch up` : 'Available when the market is open and prices are live') : undefined}>
                         {saving ? <><span className="spinner" /> Saving…</> : 'Save this trade'}
                       </button>
                     )}
                   </div>
                   <div className="hint" style={{ marginTop: 14 }}>
                     {lastPrices
-                      ? 'Saving is turned off until the market opens, so trades are never recorded at an out-of-date price.'
+                      ? `Saving is turned off until ${liveAt ? `prices catch up at ${liveAt}` : 'the market opens'}, so trades are never recorded at an out-of-date price.`
                       : 'Saving records the trade here so you can track it. It does not place an order with your broker.'}
                   </div>
                 </div>

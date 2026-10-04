@@ -16,7 +16,7 @@ from core.fees import typical_fee_per_contract
 from core.volatility import premium_check, realized_volatility
 from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, recent_prices_only
 from core.events import fed_meetings_between, last_fed_meeting, related_earnings
-from core.market_hours import is_market_open, last_session, market_today
+from core.market_hours import delayed_quotes_live, last_session, market_today
 
 
 def resolve_min_strike(current_price: float, config: ScannerConfig, avg_cost: float = 0.0) -> float:
@@ -141,15 +141,17 @@ def scan_covered_calls(
 
     source = str(raw_calls["source"].iloc[0]) if "source" in raw_calls.columns else None
 
-    # Outside market hours (or when Yahoo has no live quotes at all, e.g. a
-    # holiday) bid/ask are empty, so price options at their last trade instead.
+    # Outside market hours, and in the first 15 minutes after the open (the
+    # quotes are 15 minutes behind, so they still show the last session), price
+    # options at the closing quote or last trade instead. Same when there are no
+    # live quotes at all (e.g. a holiday).
     if "bid" in raw_calls.columns and "ask" in raw_calls.columns:
         bid = pd.to_numeric(raw_calls["bid"], errors="coerce").fillna(0)
         ask = pd.to_numeric(raw_calls["ask"], errors="coerce").fillna(0)
         has_live_quotes = bool(((bid > 0) & (ask > 0)).any())
     else:
         has_live_quotes = False
-    quotes_live = is_market_open() and has_live_quotes
+    quotes_live = delayed_quotes_live() and has_live_quotes
 
     filtered = filter_covered_calls(
         raw_calls,
