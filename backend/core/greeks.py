@@ -5,7 +5,8 @@ Delta (the chance a call ends up in the money) for each option, from Black-Schol
 The volatility it needs comes from, in order:
   1. Yahoo's implied volatility for the option
   2. outside market hours Yahoo reports ~0 there, so it's worked out from the
-     option's own price (the volatility that makes Black-Scholes match it)
+     option's own price (the volatility that makes Black-Scholes match it),
+     unless that price is a trade from before the latest session (quote_quality OLD)
   3. the stock's recent realized volatility, if neither works
 """
 import math
@@ -86,7 +87,10 @@ def add_estimated_delta(calls_df, stock_price, risk_free_rate=0.04, *, dividend_
     df = calls_df.copy()
 
     def _option_price(row):
-        for col in ("mid", "lastPrice"):
+        # A last trade from days ago was made at a different stock price, so it
+        # can't tell today's volatility
+        cols = ("mid",) if row.get("quote_quality") == "OLD" else ("mid", "lastPrice")
+        for col in cols:
             v = row.get(col)
             if v is not None and not pd.isna(v) and float(v) > 0:
                 return float(v)

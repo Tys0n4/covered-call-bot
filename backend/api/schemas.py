@@ -62,7 +62,8 @@ class Candidate(BaseModel):
     upside_to_strike_pct: float
     delta: Optional[float]
     spread_pct: Optional[float]
-    quote_quality: str
+    quote_quality: str                   # LIVE | STALE (last trade, market closed) | OLD (traded before the latest session) | BAD
+    last_trade_date: Optional[str] = None  # New York date of the last trade, when known
     income_score: Optional[float]
     balanced_score: Optional[float]
     below_cost_basis: bool = False   # strike is under your average cost per share

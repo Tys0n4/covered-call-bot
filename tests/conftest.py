@@ -5,7 +5,7 @@ API can be tested end to end without network access.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
@@ -33,6 +33,9 @@ INFO: dict[str, dict] = {}
 
 # Fake implied volatility per ticker (default 35%); ~0 mimics Yahoo outside market hours
 IMPLIED_VOL: dict[str, float] = {}
+
+# Strikes whose last trade was this many days ago (ticker -> {strike: days}); the rest traded just now
+TRADED_DAYS_AGO: dict[str, dict[float, int]] = {}
 
 
 def fake_expiries() -> tuple[str, ...]:
@@ -83,6 +86,8 @@ class FakeTicker:
             rows.append(dict(
                 strike=strike, bid=round(mid * 0.95, 2), ask=round(mid * 1.05, 2), lastPrice=round(mid, 2),
                 volume=100 + k, openInterest=500, impliedVolatility=IMPLIED_VOL.get(self.symbol, 0.35),
+                lastTradeDate=pd.Timestamp(datetime.now(timezone.utc)
+                                           - timedelta(days=TRADED_DAYS_AGO.get(self.symbol, {}).get(strike, 0))),
             ))
         return _Chain(pd.DataFrame(rows).drop_duplicates("strike").reset_index(drop=True))
 
@@ -95,6 +100,7 @@ def fake_market(monkeypatch):
     HISTORY.clear()
     INFO.clear()
     IMPLIED_VOL.clear()
+    TRADED_DAYS_AGO.clear()
     # No real Fed calendar unless a test sets one, so results don't depend on today's date
     monkeypatch.setattr(events, "FED_MEETINGS", ())
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)

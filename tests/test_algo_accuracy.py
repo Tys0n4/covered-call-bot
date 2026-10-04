@@ -94,3 +94,50 @@ def test_earnings_dates_are_judged_in_new_york_time(monkeypatch):
     EVENTS["NVDA"] = {"Earnings Date": [date(2026, 10, 20)]}
     monkeypatch.setattr(market_data, "market_today", lambda: "2026-10-21")    # already past in New York
     assert market_data.get_events("NVDA")["earnings_date"] is None
+
+
+# --- Old last trades outside market hours -------------------------------------------------
+
+def test_last_session_is_the_latest_trading_day_that_opened():
+    from datetime import datetime
+
+    from core.market_hours import NEW_YORK, last_session
+    assert last_session(datetime(2026, 10, 4, 12, tzinfo=NEW_YORK)) == date(2026, 10, 2)    # Sunday → Friday
+    assert last_session(datetime(2026, 10, 5, 8, tzinfo=NEW_YORK)) == date(2026, 10, 2)     # Monday before the open
+    assert last_session(datetime(2026, 10, 5, 10, tzinfo=NEW_YORK)) == date(2026, 10, 5)
+
+
+def _after_hours(monkeypatch):
+    IMPLIED_VOL["NVDA"] = 0.00001
+    monkeypatch.setattr(scanner, "is_market_open", lambda: False)
+
+
+def test_old_trades_are_marked_and_skipped_by_the_picks(client, nvda, monkeypatch):
+    from conftest import TRADED_DAYS_AGO
+    _after_hours(monkeypatch)
+    fresh = _scan(client)
+    bal = fresh["balanced_pick"]["strike"]
+    TRADED_DAYS_AGO["NVDA"] = {bal: 10}                # the balanced pick's strike last traded 10 days ago
+    cache.clear()
+    scan = _scan(client)
+    old = [c for c in scan["candidates"] if c["quote_quality"] == "OLD"]
+    assert old and all(c["strike"] == bal for c in old)
+    assert all(c["last_trade_date"] for c in scan["candidates"])
+    assert scan["balanced_pick"]["strike"] != bal and scan["income_pick"]["strike"] != bal
+    assert any("haven't traded since before" in w and "picks skip them" in w for w in scan["warnings"])
+
+
+def test_old_trades_dont_set_the_volatility():
+    df = pd.DataFrame([dict(strike=110.0, dte=25, impliedVolatility=0.00001, mid=0.0, lastPrice=9.99, quote_quality="OLD")])
+    out = add_estimated_delta(df, 100.0, fallback_vol=0.35)
+    assert out["delta_source"].iloc[0] == "history"
+    assert out["delta"].iloc[0] == pytest.approx(estimate_call_delta(100, 110, 25, 0.35), abs=0.001)
+
+
+def test_when_every_price_is_old_it_says_so(client, nvda, monkeypatch):
+    from conftest import TRADED_DAYS_AGO
+    _after_hours(monkeypatch)
+    TRADED_DAYS_AGO["NVDA"] = {float(k): 10 for k in range(80, 200)}
+    scan = _scan(client)
+    assert scan["candidates"] and all(c["quote_quality"] == "OLD" for c in scan["candidates"])
+    assert any("None of the options in your range has traded since before" in w for w in scan["warnings"])

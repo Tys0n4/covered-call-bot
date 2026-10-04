@@ -111,6 +111,17 @@ def market_today(now: datetime | None = None) -> str:
     return _ny(now).strftime("%Y-%m-%d")
 
 
+def last_session(now: datetime | None = None) -> date:
+    """The latest trading day whose session has started (today once it opens, else the one before)."""
+    n = _ny(now)
+    day = n.date()
+    if not is_trading_day(day) or n.time() < OPEN:
+        day -= timedelta(days=1)
+        while not is_trading_day(day):
+            day -= timedelta(days=1)
+    return day
+
+
 def has_expired(expiry: str, now: datetime | None = None) -> bool:
     """Options stop trading at the close (4:00pm, or 1:00pm on early-close days) on their expiry date."""
     n = _ny(now)
