@@ -72,7 +72,9 @@ class FakeTicker:
 
     @property
     def calendar(self):
-        return EVENTS.get(self.symbol, {})
+        # A real stock with nothing scheduled still gets an answer; unknown tickers get the empty
+        # calendar yfinance returns when Yahoo doesn't answer
+        return EVENTS.get(self.symbol, {"Earnings Date": []} if self.symbol in PRICES else {})
 
     def history(self, start=None, end=None, period=None):
         if start and (self.symbol, start) in CLOSES:

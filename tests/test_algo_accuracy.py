@@ -154,3 +154,24 @@ def test_upcoming_lists_fed_and_your_holdings_earnings(client, nvda, monkeypatch
     assert r["fed"] == [(today + timedelta(days=10)).isoformat()]
     assert r["earnings"] == [{"ticker": "NVDA", "date": (today + timedelta(days=20)).isoformat()}]
     assert r["fed_known_until"] == (today + timedelta(days=60)).isoformat()
+    assert r["earnings_unknown"] == []
+
+
+def test_when_yahoo_is_blocked_the_dashboard_and_scanner_say_earnings_are_unknown(client, nvda, monkeypatch):
+    FakeTicker = type(market_data.yf.Ticker("NVDA"))
+    monkeypatch.setattr(FakeTicker, "calendar", property(lambda self: {}))   # what yfinance returns when blocked
+    assert client.get("/upcoming").json()["earnings_unknown"] == ["NVDA"]
+    assert any("Couldn't check NVDA's earnings date" in w for w in _scan(client)["warnings"])
+
+
+def test_a_saved_earnings_date_survives_a_blocked_yahoo(client, nvda, monkeypatch):
+    from core.market_hours import market_today
+    soon = (date.fromisoformat(market_today()) + timedelta(days=20)).isoformat()
+    EVENTS["NVDA"] = {"Earnings Date": [date.fromisoformat(soon)]}
+    client.get("/upcoming")                                                   # Yahoo answers; date saved
+    cache.clear()                                                             # e.g. a redeploy
+    FakeTicker = type(market_data.yf.Ticker("NVDA"))
+    monkeypatch.setattr(FakeTicker, "calendar", property(lambda self: {}))
+    r = client.get("/upcoming").json()
+    assert r["earnings"] == [{"ticker": "NVDA", "date": soon}] and r["earnings_unknown"] == []
+    assert not any("Couldn't check" in w for w in _scan(client)["warnings"])

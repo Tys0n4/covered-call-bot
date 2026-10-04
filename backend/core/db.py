@@ -80,6 +80,15 @@ alert_settings = Table(
     Column("last_check_at",   String(25), nullable=True),   # last time the scheduled check ran
 )
 
+# Last earnings / ex-dividend dates Yahoo gave per stock, used when Yahoo doesn't answer
+known_events = Table(
+    "known_events", metadata,
+    Column("ticker",           String(12), primary_key=True),
+    Column("earnings_date",    String(10), nullable=True),
+    Column("ex_dividend_date", String(10), nullable=True),
+    Column("checked_at",       String(25), nullable=False),   # when Yahoo last answered
+)
+
 
 def database_url() -> str:
     """DATABASE_URL if set (normalized for SQLAlchemy + psycopg), else the local SQLite file."""
