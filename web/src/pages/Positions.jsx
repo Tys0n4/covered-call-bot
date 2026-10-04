@@ -8,7 +8,7 @@ import {
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import {
-  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck, Copy,
+  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck, Copy, ArrowUpRight,
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
@@ -26,7 +26,7 @@ import ConfirmDialog from '../components/dialogs/ConfirmDialog'
 import PriceStamp from '../components/PriceStamp'
 import { TERMS } from '../lib/terms'
 import { fmtDate, daysUntil, money, plural } from '../lib/format'
-import { optionNet, resultLabel, totalFees } from '../lib/pnl'
+import { againstYou, optionNet, resultLabel, totalFees } from '../lib/pnl'
 
 const SCOPE_KEY = 'positions_scope'
 const loadScope = () => { try { return localStorage.getItem(SCOPE_KEY) === 'stock' ? 'stock' : 'all' } catch { return 'all' } }
@@ -46,8 +46,60 @@ function CopyPrice({ price }) {
   )
 }
 
-function StatusPanel({ evaluation, checking, failed }) {
+// The call costs more than you sold it for: the two real choices, in dollars
+function AgainstYouPanel({ p, a }) {
+  const signed = v => `${v < 0 ? '−' : '+'}${money(Math.abs(v), 0)}`
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+        {a.aboveStrike
+          ? <span className="badge badge-red" style={{ fontSize: 13 }}><ArrowUpRight size={14} strokeWidth={2.2} /> Stock above strike</span>
+          : <span className="badge badge-amber" style={{ fontSize: 13 }}><AlertTriangle size={14} strokeWidth={2} /> Call is up</span>}
+        <span className="hint">
+          {p.ticker} <span className="mono" style={{ color: a.aboveStrike ? 'var(--red)' : 'var(--text)' }}>{money(a.stock)}</span>
+          {' '}· {a.fromStrikePct.toFixed(1)}% {a.aboveStrike ? 'above' : 'below'} the strike
+          {' '}· call now <span className="mono" style={{ color: 'var(--text)' }}>{money(a.now)}</span>, sold at <span className="mono" style={{ color: 'var(--text)' }}>{money(p.entry_price)}</span>
+        </span>
+      </div>
+      {!a.aboveStrike && (
+        <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 12 }}>
+          The call costs more than you sold it for, but {p.ticker} is still below your strike. If it stays there
+          until {fmtDate(p.expiry)}, the call expires worthless and you keep all <span className="mono" style={{ color: 'var(--green)' }}>{money(a.collected)}</span>.
+        </div>
+      )}
+      <div className="choice-pair">
+        <div className="choice-card">
+          <div style={{ fontWeight: 600 }}>Buy back now</div>
+          <div className="mono choice-amount" style={{ color: a.buybackPL < 0 ? 'var(--red)' : 'var(--green)' }}>{signed(a.buybackPL)}</div>
+          <div className="hint">Costs {money(a.buybackCost)} against the {money(a.collected)} you collected. You keep your {a.shares.toLocaleString()} shares.</div>
+        </div>
+        <div className="choice-card">
+          <div style={{ fontWeight: 600 }}>{a.aboveStrike ? 'Let it be called away' : `If it's called away at ${money(p.strike, 0)}`}</div>
+          {a.calledPL != null ? (
+            <>
+              <div className="mono choice-amount" style={{ color: a.calledPL < 0 ? 'var(--red)' : 'var(--green)' }}>{signed(a.calledPL)}</div>
+              <div className="hint">
+                {a.aboveStrike ? `If ${p.ticker} is above ${money(p.strike, 0)} on ${fmtDate(p.expiry)}: ` : ''}{a.shares.toLocaleString()} shares sold at {money(p.strike)}.
+                {' '}{money(a.collected)} premium {a.shareGain >= 0 ? '+' : '−'} {money(Math.abs(a.shareGain))} {a.shareGain >= 0 ? 'over' : 'under'} your {money(a.cost)} average cost.
+              </div>
+            </>
+          ) : (
+            <div className="hint">{a.shares.toLocaleString()} shares sold at {money(p.strike)}, and you keep the {money(a.collected)} premium. Add your average cost to the holding to see the total.</div>
+          )}
+        </div>
+      </div>
+      {a.aboveStrike && a.upsideGiven > 0 && (
+        <div className="hint" style={{ marginTop: 10 }}>
+          At today's price, {money(a.upsideGiven, 0)} of {p.ticker}'s rise above {money(p.strike, 0)} goes to the buyer of the call. Buying back keeps that upside; letting it go locks in the sale at {money(p.strike, 0)}.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatusPanel({ p, evaluation, checking, failed, avgCost }) {
   const withFees = chargesCommission(useStrategy()) ? ' with fees' : ''
+  const against = againstYou(p, evaluation, avgCost)
   if (!evaluation) {
     if (checking) return <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 14, height: 14 }} /> Checking the price…</div>
     return <div className="hint">{failed ? "Couldn't check prices." : 'No price data for this call.'}</div>
@@ -66,6 +118,7 @@ function StatusPanel({ evaluation, checking, failed }) {
       </div>
     )
   }
+  if (against) return <AgainstYouPanel p={p} a={against} />
   const kept = Math.max(0, Math.min(evaluation.profit_capture_pct, 100))
   const buy = evaluation.should_buy_back
   const expire = evaluation.action === 'let_expire'
@@ -120,11 +173,13 @@ function StatusPanel({ evaluation, checking, failed }) {
   )
 }
 
-function PositionCard({ p, showTicker, evaluation, checking, failed, onClose, onRoll, onEdit, onDelete }) {
+function PositionCard({ p, showTicker, evaluation, checking, failed, avgCost, onClose, onRoll, onEdit, onDelete }) {
   const days = daysUntil(p.expiry)
   const buy = evaluation?.should_buy_back
+  const against = againstYou(p, evaluation, avgCost)
+  const border = against ? (against.aboveStrike ? 'rgba(242,107,122,0.45)' : 'rgba(242,180,74,0.4)') : buy ? 'rgba(62,224,166,0.35)' : undefined
   return (
-    <div className="card" style={{ borderColor: buy ? 'rgba(62,224,166,0.35)' : undefined }}>
+    <div className="card" style={{ borderColor: border }}>
       <div className="grid-split">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -145,7 +200,7 @@ function PositionCard({ p, showTicker, evaluation, checking, failed, onClose, on
           </div>
         </div>
         <div>
-          <StatusPanel evaluation={evaluation} checking={checking} failed={failed} />
+          <StatusPanel p={p} evaluation={evaluation} checking={checking} failed={failed} avgCost={avgCost} />
           <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
             <button className="btn-secondary" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => onRoll(p)}>
               <Repeat size={14} strokeWidth={2} /> Roll
@@ -369,6 +424,7 @@ export default function Positions() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {sortedOpen.map(p => (
                 <PositionCard key={p.id} p={p} showTicker={scope === 'all'} evaluation={evals?.[p.id]} checking={checking} failed={prices.failed}
+                  avgCost={tickers.find(t => t.ticker === p.ticker)?.avg_cost}
                   onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
               ))}
             </div>

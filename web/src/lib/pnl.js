@@ -38,3 +38,29 @@ export function cleanMoney(raw) {
 
 // '' or '.' -> null, otherwise the number
 export const moneyValue = t => (t === '' || t === '.' ? null : Number(t))
+
+// A call that's gone against you: it now costs more to buy back than you sold
+// it for. Returns null otherwise (or without a current price for the call and
+// the stock). The two real choices, in dollars:
+//   buybackPL - buy it back now (premium kept minus the cost to close)
+//   calledPL  - let it be called away at the strike: premium kept plus the gain
+//               (or loss) on the shares over your cost; null if the cost is unknown
+export function againstYou(p, evaluation, avgCost) {
+  const now = evaluation?.current_option_price
+  const stock = evaluation?.stock_price
+  if (!(now > 0) || !(stock > 0) || !(now > p.entry_price)) return null
+  const shares = p.contracts * 100
+  const collected = p.premium_total - n(p.open_fees)
+  const cost = p.cost_basis ?? avgCost ?? null
+  return {
+    aboveStrike: stock > p.strike,
+    stock, now, shares, collected,
+    fromStrikePct: Math.abs(stock / p.strike - 1) * 100,
+    buybackCost: evaluation.cost_to_close,
+    buybackPL: collected - evaluation.cost_to_close,
+    shareGain: cost > 0 ? (p.strike - cost) * shares : null,
+    calledPL: cost > 0 ? collected + (p.strike - cost) * shares : null,
+    cost,
+    upsideGiven: stock > p.strike ? (stock - p.strike) * shares : 0,
+  }
+}
