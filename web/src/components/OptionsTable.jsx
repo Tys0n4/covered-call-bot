@@ -32,12 +32,14 @@ export function EventBadges({ option, compact = false }) {
   </>
 }
 
-function QuoteBadge({ quality, lastTrade }) {
-  if (quality === 'LIVE') return <span className="muted">Live</span>
+function QuoteBadge({ quality, basis, lastTrade }) {
+  if (quality === 'LIVE') return <span className="muted">Current</span>
   if (quality === 'OLD') {
     return <span className="badge badge-amber" title={`${TERMS.oldPrice}${lastTrade ? ` Last traded ${fmtDate(lastTrade)}.` : ''}`}>Old price</span>
   }
-  return <span className={`badge badge-${quality === 'STALE' ? 'amber' : 'red'}`}>{quality === 'STALE' ? 'Stale' : quality}</span>
+  if (quality === 'STALE' && basis === 'closing') return <span className="muted" title={TERMS.closingQuote}>Closing</span>
+  if (quality === 'STALE') return <span className="badge badge-amber" title={TERMS.lastTrade}>Last trade</span>
+  return <span className="badge badge-red">{quality}</span>
 }
 
 function SortHeader({ col, sort, onSort, className = 'num' }) {
@@ -128,7 +130,7 @@ export default function OptionsTable({ candidates }) {
             ...g.items.map(c => (
               <tr key={`${c.expiry}-${c.strike}`}>
                 <Cells c={c} />
-                {showQuote && <td><QuoteBadge quality={c.quote_quality} lastTrade={c.last_trade_date} /></td>}
+                {showQuote && <td><QuoteBadge quality={c.quote_quality} basis={c.price_basis} lastTrade={c.last_trade_date} /></td>}
               </tr>
             )),
           ]) : rows.map(c => (
@@ -144,7 +146,7 @@ export default function OptionsTable({ candidates }) {
     </div>
       <div className="hint" style={{ padding: '10px 14px 2px', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {!grouped && hasEvents && <span><span className="event-mark tone-amber">E</span> expires after earnings · <span className="event-mark tone-amber">F</span> a Fed decision · <span className="event-mark tone-amber">I</span> industry earnings · <span className="event-mark tone-blue">D</span> an ex-dividend date</span>}
-        {!showQuote && <span>All prices are live quotes.</span>}
+        {!showQuote && <span>All prices are current quotes, about 15 minutes behind.</span>}
       </div>
     </>
   )

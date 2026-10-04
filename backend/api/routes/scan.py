@@ -25,6 +25,13 @@ def _num(value):
     return None if math.isnan(f) or math.isinf(f) else f
 
 
+def _price_basis(row) -> str | None:
+    """How a non-live option is priced: the last session's closing quote, or its last trade."""
+    if str(row.get("quote_quality")) != "STALE":
+        return None
+    return "last_trade" if row.get("premium_source") == "LAST" else "closing"
+
+
 def _row_to_candidate(row) -> Candidate:
     return Candidate(
         expiry=str(row["expiry"]),
@@ -38,6 +45,7 @@ def _row_to_candidate(row) -> Candidate:
         delta=_num(row.get("delta")),
         spread_pct=_num(row.get("spread_pct")),
         quote_quality=str(row["quote_quality"]),
+        price_basis=_price_basis(row),
         last_trade_date=row.get("last_trade_date") if isinstance(row.get("last_trade_date"), str) else None,
         below_cost_basis=bool(row.get("below_cost_basis", False)),
         spans_earnings=bool(row.get("spans_earnings", False)),
