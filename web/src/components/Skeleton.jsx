@@ -1,7 +1,7 @@
 // src/components/Skeleton.jsx — grey placeholder shapes in the page's layout
 // while data loads, so the page doesn't jump when it arrives.
 
-export function Bone({ w = '100%', h = 14, r = 8, style }) {
+function Bone({ w = '100%', h = 14, r = 8, style }) {
   return <span className="skeleton" style={{ width: w, height: h, borderRadius: r, ...style }} />
 }
 

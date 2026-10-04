@@ -2,7 +2,7 @@
 Covered call logic, independent of the web API (backend/api uses it).
 
 Scanning a stock
-    scanner.py       the scan pipeline: price, option chain, filters, scoring, warnings
+    scanner.py       the scan pipeline: price, option chain, filters, picks, warnings
     options_data.py  option chains and expiries from Yahoo
     market_data.py   stock price (Alpha Vantage, Yahoo fallback), earnings/ex-dividend dates, past closes
     events.py        Fed meeting dates, a stock's industry, earnings that move the industry
@@ -10,7 +10,7 @@ Scanning a stock
     quotes.py        which price to use for an option (mid, last, ask)
     calculations.py  yields, upside and spread per option
     greeks.py        Black-Scholes delta
-    scoring.py       scores, your delta range, the two picks paced to your monthly goal
+    scoring.py       monthly income, your delta range, the two picks paced to your monthly goal
     planner.py       turns a scan into the trade to place, for your split
 
 Your calls and holdings

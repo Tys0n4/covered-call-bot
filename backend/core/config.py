@@ -43,16 +43,6 @@ class ScannerConfig:
     let_expire_days: int = 7
     let_expire_cushion: float = 0.05
 
-    # --- Scoring weights ---
-    # Income: annualized yield weighted heavily for fair cross-DTE comparison
-    income_yield_weight: float = 0.70
-    income_volume_weight: float = 0.30
-
-    # Balanced: rewards delta near target, upside, and annualized yield
-    balanced_yield_weight: float = 0.30
-    balanced_upside_weight: float = 0.30
-    balanced_delta_weight: float = 0.40     # raised — delta proximity is the key differentiator
-
     # Tolerance for float-based strike matching (dollars)
     strike_match_tolerance: float = 0.01
 

@@ -39,7 +39,9 @@ def get_current_option_quote(
     strike_tolerance: float = DEFAULT_CONFIG.strike_match_tolerance,
 ) -> dict:
     """
-    {"price", "old_trade_date"}. Without a live ask (outside market hours) the
+    {"price", "old_trade_date"} for an open call: the ask by default (a buyback
+    pays it). Chains are cached briefly (options_data.get_calls), so positions
+    on the same expiry share one download. Without a live ask (outside market hours) the
     last trade is used, unless it's from before the latest session: a quiet
     strike's trade from days ago was at a different stock price, so then
     price is 0 (no recommendation) and old_trade_date says when it last traded.
@@ -60,23 +62,6 @@ def get_current_option_quote(
         if traded and traded < last_session():
             return {"price": 0.0, "old_trade_date": traded.isoformat()}
     return {"price": result.price, "old_trade_date": None}
-
-
-def get_current_option_price(
-    ticker: str,
-    expiry: str,
-    strike: float,
-    *,
-    mode: QuoteMode = "ask",   # use ask for buybacks — more conservative cost estimate
-    strike_tolerance: float = DEFAULT_CONFIG.strike_match_tolerance,
-) -> float:
-    """
-    Current price of an open call (the ask by default: a buyback pays it), or 0.0
-    when there's none or only a trade from before the latest session.
-    Chains are cached briefly (options_data.get_calls), so positions on the
-    same expiry share one download.
-    """
-    return get_current_option_quote(ticker, expiry, strike, mode=mode, strike_tolerance=strike_tolerance)["price"]
 
 
 def buyback_price(entry_price: float, target_pct: float) -> float:

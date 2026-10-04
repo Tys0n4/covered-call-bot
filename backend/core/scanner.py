@@ -14,7 +14,7 @@ from core.calculations import add_option_metrics
 from core.greeks import add_estimated_delta
 from core.fees import typical_fee_per_contract
 from core.volatility import premium_check, realized_volatility
-from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, recent_prices_only, score_options
+from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, recent_prices_only
 from core.events import fed_meetings_between, last_fed_meeting, related_earnings
 from core.market_hours import is_market_open, last_session, market_today
 
@@ -231,7 +231,7 @@ def scan_covered_calls(
             "so the balanced pick may be less accurate."
         )
 
-    scored = add_monthly_income(score_options(enriched, config=config), config, fee)
+    scored = add_monthly_income(enriched, config, fee)
     # Options that would keep nothing after the buy-back and commissions aren't income
     scored = scored[scored["monthly_per_contract"] > 0]
     scored["below_cost_basis"] = (position.avg_cost > 0) & (scored["strike"] < position.avg_cost)

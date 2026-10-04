@@ -39,8 +39,6 @@ def _row_to_candidate(row) -> Candidate:
         spread_pct=_num(row.get("spread_pct")),
         quote_quality=str(row["quote_quality"]),
         last_trade_date=row.get("last_trade_date") if isinstance(row.get("last_trade_date"), str) else None,
-        income_score=_num(row.get("income_score")),
-        balanced_score=_num(row.get("balanced_score")),
         below_cost_basis=bool(row.get("below_cost_basis", False)),
         spans_earnings=bool(row.get("spans_earnings", False)),
         spans_ex_dividend=bool(row.get("spans_ex_dividend", False)),
