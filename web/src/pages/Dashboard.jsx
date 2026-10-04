@@ -131,7 +131,7 @@ const shortDay = iso => {
   return `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${dt.toLocaleDateString('en-US', { weekday: 'short' })}`.toUpperCase()
 }
 
-function ComingUp({ items, note, warning }) {
+function ComingUp({ items, moreExpiries, note, warning }) {
   if (!items.length && !warning) return null
   return (
     <section aria-label="Coming up" style={{ marginBottom: 32 }}>
@@ -151,6 +151,11 @@ function ComingUp({ items, note, warning }) {
           </div>
         ))}
       </div>}
+      {moreExpiries > 0 && (
+        <div className="hint" style={{ marginTop: 8 }}>
+          {moreExpiries} more {moreExpiries === 1 ? 'expiry' : 'expiries'} in the next 30 days on <Link to="/positions">Positions</Link>.
+        </div>
+      )}
       {note && <div className="hint" style={{ marginTop: 8 }}>{note}</div>}
     </section>
   )
@@ -335,7 +340,12 @@ export default function Dashboard() {
       out.push({ key: `earn-${e.ticker}-${e.date}`, date: e.date, event: true, icon: Megaphone, title: `${e.ticker} earnings`,
         sub: after ? `Before ${plural(after, `open ${e.ticker} call`)} ${after === 1 ? 'expires' : 'expire'}` : 'A stock you hold reports' })
     })
-    return out.sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)).slice(0, 8)
+    // Up to 8 cards: earnings and Fed decisions always make it, expiries fill the rest (soonest first)
+    const byDate = (a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)
+    const events = out.filter(i => i.event)
+    const expiries = out.filter(i => !i.event).sort(byDate)
+    const shown = expiries.slice(0, Math.max(0, 8 - events.length))
+    return { items: [...events, ...shown].sort(byDate), moreExpiries: expiries.length - shown.length }
   }, [positions, upcoming, eventPct])
   const unknownEarnings = upcoming?.earnings_unknown || []
   const earningsWarning = unknownEarnings.length
@@ -454,7 +464,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <ComingUp items={comingUp} note={fedNote} warning={earningsWarning} />
+          <ComingUp items={comingUp.items} moreExpiries={comingUp.moreExpiries} note={fedNote} warning={earningsWarning} />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="section-title" style={{ margin: 0 }}>Your stocks</div>
