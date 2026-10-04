@@ -62,6 +62,12 @@ strategy = Table(
     Column("profit_capture_target_pct", Float, nullable=False),
     Column("buyback_budget_pct",        Float, nullable=False),
     Column("monthly_goal",              Float, nullable=False, default=0),
+    # Added later (empty = use the default from config.py)
+    Column("delta_min",                 Float, nullable=True),
+    Column("delta_max",                 Float, nullable=True),
+    Column("min_dte",                   Float, nullable=True),
+    Column("max_dte",                   Float, nullable=True),
+    Column("event_buyback_pct",         Float, nullable=True),
 )
 
 # Buy-back alerts (Strategy page): a single row (id = 1)
@@ -117,7 +123,10 @@ def _add_missing_columns(engine: Engine) -> None:
     create_all() makes missing tables but never changes existing ones, so add
     any column introduced after a table was first created (safe to re-run).
     """
-    added_later = {"positions": [
+    added_later = {"strategy": [
+        strategy.c.delta_min, strategy.c.delta_max, strategy.c.min_dte, strategy.c.max_dte,
+        strategy.c.event_buyback_pct,
+    ], "positions": [
         positions.c.close_cost, positions.c.open_fees, positions.c.close_fees,
         positions.c.cost_basis, positions.c.rolled_from, positions.c.assignment_reviewed,
         positions.c.buyback_alerted_at,

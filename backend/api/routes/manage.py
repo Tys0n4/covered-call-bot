@@ -44,6 +44,8 @@ def evaluate_open_positions(ticker: Optional[str] = None):
             days_left=r.days_left,
             stock_price=r.stock_price,
             cost_to_close=r.cost_to_close,
+            target_pct=r.target_pct,
+            event=r.event,
             allocation_type=pos.get("allocation_type", ""),
             opened_at=pos.get("opened_at", ""),
         )

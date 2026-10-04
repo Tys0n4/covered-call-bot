@@ -76,7 +76,6 @@ def test_scan_unknown_ticker_is_404_not_another_stock(client, nvda):
 
 @pytest.mark.parametrize("bad", [
     {"min_strike_pct": -5},
-    {"min_strike_pct": 0.10},   # below the 15% floor
     {"min_dte": 50, "max_dte": 10},
     {"min_premium": -1},
     {"ticker": "bad ticker!"},
@@ -96,10 +95,11 @@ def test_scan_flags_strikes_below_cost_basis(client, nvda):
 
 
 def test_scan_can_skip_strikes_below_cost(client, nvda):
+    client.put("/portfolio/NVDA", json={"ticker": "NVDA", "shares": 500, "avg_cost": 107})
     scan = client.post("/scan", json={"ticker": "NVDA", "exclude_below_cost": True}).json()
     assert scan["candidates"]
-    assert all(c["strike"] >= 130 for c in scan["candidates"])
-    assert scan["min_strike"] == 130
+    assert all(c["strike"] >= 107 for c in scan["candidates"])
+    assert scan["min_strike"] == 107
 
 
 # --- Saving trades ---------------------------------------------------------------
@@ -189,9 +189,9 @@ def _days(n):
 
 def test_scan_flags_expiries_spanning_earnings_and_ex_dividend(client, nvda):
     from conftest import EVENTS
-    # Fake expiries are 7, 25, 32 and 60 days out; the 20-38 day window keeps 25 and 32
+    # Fake expiries are 7, 25, 32 and 60 days out; a 20-38 day window keeps 25 and 32
     EVENTS["NVDA"] = {"Earnings Date": [_days(28)], "Ex-Dividend Date": _days(20)}
-    scan = client.post("/scan", json={"ticker": "NVDA"}).json()
+    scan = client.post("/scan", json={"ticker": "NVDA", "min_dte": 20, "max_dte": 38}).json()
     assert scan["earnings_date"] == _days(28).isoformat()
     assert scan["ex_dividend_date"] == _days(20).isoformat()
     by_expiry = {c["expiry"]: c for c in scan["candidates"]}

@@ -11,7 +11,7 @@ from core.scanner import resolve_min_strike, scan_covered_calls
 from core.planner import build_plan, compute_buyback_budget, get_allocation_targets
 from core.positions import CoverageError, load_open_positions, save_positions
 from core.models import PlannedCall
-from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem, TradeIn
+from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem, TradeIn, GoalCheck
 
 router = APIRouter(prefix="/scan", tags=["scanner"])
 
@@ -43,6 +43,9 @@ def _row_to_candidate(row) -> Candidate:
         below_cost_basis=bool(row.get("below_cost_basis", False)),
         spans_earnings=bool(row.get("spans_earnings", False)),
         spans_ex_dividend=bool(row.get("spans_ex_dividend", False)),
+        spans_fed=bool(row.get("spans_fed", False)),
+        spans_industry=bool(row.get("spans_industry", False)),
+        monthly_per_contract=_num(row.get("monthly_per_contract")),
     )
 
 
@@ -59,11 +62,13 @@ def run_scan(scan_config: ScanConfig):
             detail=f"{scan_config.ticker} is not in your portfolio. Add it on the Dashboard first.",
         )
 
-    # Filters come from the Scanner page; split and buyback reserve from your saved strategy
+    # Your saved strategy (delta range, expiry window, split, buyback) plus the
+    # Scanner page's filters; an expiry window sent with the scan overrides the strategy's
+    strategy_config = effective_config()
     config = replace(
-        effective_config(),
-        min_dte=scan_config.min_dte,
-        max_dte=scan_config.max_dte,
+        strategy_config,
+        min_dte=scan_config.min_dte if scan_config.min_dte is not None else strategy_config.min_dte,
+        max_dte=scan_config.max_dte if scan_config.max_dte is not None else strategy_config.max_dte,
         min_strike_pct_above_current=scan_config.min_strike_pct,
         min_premium=scan_config.min_premium,
         min_volume=scan_config.min_volume,
@@ -72,7 +77,13 @@ def run_scan(scan_config: ScanConfig):
         avoid_earnings=scan_config.avoid_earnings,
     )
 
-    scan = scan_covered_calls(position, config=config)
+    # Goal pace: monthly income each contract you own needs to reach your monthly goal
+    holdings = load_portfolio()
+    total_contracts = sum(h.total_contracts for h in holdings)
+    goal = load_strategy()["monthly_goal"]
+    goal_pace = goal / total_contracts if goal > 0 and total_contracts else 0.0
+
+    scan = scan_covered_calls(position, config=config, holdings=[h.ticker for h in holdings], goal_pace=goal_pace)
 
     if scan.current_price == 0.0:
         raise HTTPException(status_code=503, detail="Could not fetch current price.")
@@ -133,6 +144,16 @@ def run_scan(scan_config: ScanConfig):
         estimated_fees=est_fees,
         fee_per_contract=scan.fee_per_contract,
         premium_check=scan.premium_check,
+        delta_min=config.delta_min,
+        delta_max=config.delta_max,
+        min_dte=config.min_dte,
+        max_dte=config.max_dte,
+        goal_check=GoalCheck(
+            goal=goal, contracts=total_contracts, pace_per_contract=round(goal_pace, 2),
+            plan_per_contract=scan.plan_per_contract, met=scan.plan_per_contract >= goal_pace,
+        ) if goal_pace > 0 and scan.income_pick is not None else None,
+        fed_dates=scan.events.get("fed_dates", []),
+        industry_earnings=scan.events.get("industry_earnings", []),
         warnings=scan.warnings,
         quotes_live=scan.quotes_live,
         earnings_date=scan.events.get("earnings_date"),

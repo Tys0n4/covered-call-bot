@@ -83,7 +83,7 @@ def test_discord_errors_are_explained(client, discord):
 
 def test_alerts_once_for_calls_that_reach_the_target(client, nvda, discord):
     _turn_on(client)
-    _call(client, entry_price=20.0)      # costs ~$3.15 now: 84% kept, past the 80% target
+    _call(client, entry_price=25.0)      # costs ~$3.15 now: 87% kept, past the 85% target
     _call(client, entry_price=4.0)       # 21% kept: keep holding
     first = client.post("/alerts/check").json()
     assert first == {"status": "ok", "checked": 2, "sent": 1}
@@ -97,7 +97,7 @@ def test_alerts_once_for_calls_that_reach_the_target(client, nvda, discord):
 
 
 def test_check_does_nothing_when_off_or_market_closed(client, nvda, discord, monkeypatch):
-    _call(client, entry_price=20.0)
+    _call(client, entry_price=25.0)
     assert client.post("/alerts/check").json() == {"status": "off", "sent": 0, "checked": None}
     _turn_on(client)
     monkeypatch.setattr(alerts, "is_market_open", lambda: False)
@@ -108,7 +108,7 @@ def test_check_does_nothing_when_off_or_market_closed(client, nvda, discord, mon
 
 def test_failed_send_is_retried_next_time(client, nvda, discord):
     _turn_on(client)
-    _call(client, entry_price=20.0)
+    _call(client, entry_price=25.0)
     discord.status = 500
     assert client.post("/alerts/check").status_code == 502
     discord.status = 204
@@ -118,8 +118,8 @@ def test_failed_send_is_retried_next_time(client, nvda, discord):
 def test_no_alert_for_a_call_that_should_just_expire(client, nvda, discord):
     _turn_on(client)
     expiry = (date.today() + timedelta(days=3)).isoformat()   # 3 days left, strike 25% above the stock
-    r = client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=1, entry_price=20.0,
-                                            premium_total=2000, allocation_type="Income"))
+    r = client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=1, entry_price=25.0,
+                                            premium_total=2500, allocation_type="Income"))
     assert r.status_code == 201, r.text
     assert client.post("/alerts/check").json()["sent"] == 0
     assert discord.sent == []

@@ -7,7 +7,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from core.config import MIN_STRIKE_PCT
 
 # Same rule as app/portfolio.py: 1–10 characters, letters, digits, dot or dash
 _TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -30,9 +29,10 @@ def _iso_date(v: str) -> str:
 class ScanConfig(BaseModel):
     """Filters from the Scanner page. The split and buyback reserve come from your saved strategy."""
     ticker: str
-    min_dte: int = Field(default=20, ge=0, le=365)
-    max_dte: int = Field(default=38, ge=1, le=730)
-    min_strike_pct: float = Field(default=MIN_STRIKE_PCT, ge=MIN_STRIKE_PCT, le=1)   # 0.15 = strikes 15%+ above price
+    # Expiry window: from your saved strategy unless given here
+    min_dte: Optional[int] = Field(default=None, ge=0, le=365)
+    max_dte: Optional[int] = Field(default=None, ge=1, le=730)
+    min_strike_pct: float = Field(default=0.0, ge=0, le=1)     # optional floor: 0.05 = strikes 5%+ above price
     min_premium: float = Field(default=0.05, ge=0, le=1000)
     min_volume: int = Field(default=10, ge=0, le=10_000_000)
     min_open_interest: int = Field(default=50, ge=0, le=10_000_000)
@@ -46,7 +46,7 @@ class ScanConfig(BaseModel):
 
     @model_validator(mode="after")
     def _dte_window(self):
-        if self.max_dte < self.min_dte:
+        if self.min_dte is not None and self.max_dte is not None and self.max_dte < self.min_dte:
             raise ValueError("max_dte must be at least min_dte")
         return self
 
@@ -68,6 +68,9 @@ class Candidate(BaseModel):
     below_cost_basis: bool = False   # strike is under your average cost per share
     spans_earnings: bool = False     # expires on/after the next earnings date
     spans_ex_dividend: bool = False  # expires on/after the next ex-dividend date
+    spans_fed: bool = False          # expires on/after a Fed rate decision
+    spans_industry: bool = False     # expires on/after earnings from the industry's leaders / your stocks in it
+    monthly_per_contract: Optional[float] = None   # net income per contract per month, to compare expiries
 
 
 class PremiumCheck(BaseModel):
@@ -75,6 +78,21 @@ class PremiumCheck(BaseModel):
     level: Literal["rich", "normal", "thin"]
     implied_vol: float      # what near-the-money options are priced for, per year (0.30 = 30%)
     realized_vol: float     # how much the stock actually moved over the last 20 trading days, per year
+
+
+class GoalCheck(BaseModel):
+    """How the picks compare with the pace your monthly goal needs."""
+    goal: float                  # monthly goal ($)
+    contracts: int               # contracts across all your stocks
+    pace_per_contract: float     # goal ÷ contracts: monthly income each contract needs
+    plan_per_contract: float     # what the picks earn per contract per month (blended by your split)
+    met: bool
+
+
+class RelatedEarnings(BaseModel):
+    ticker: str
+    date: str
+    why: Literal["leader", "yours"]   # an industry leader, or another stock you hold in the industry
 
 
 class AllocationItem(BaseModel):
@@ -106,6 +124,13 @@ class ScanResponse(BaseModel):
     estimated_fees: float = 0.0              # commission for the planned contracts
     fee_per_contract: float = 0.0            # your usual commission per contract
     premium_check: Optional[PremiumCheck] = None
+    delta_min: float = 0.20                  # the strategy used for this scan
+    delta_max: float = 0.30
+    min_dte: int = 14
+    max_dte: int = 30
+    goal_check: Optional[GoalCheck] = None
+    fed_dates: list[str] = []                # Fed decisions within the expiry window
+    industry_earnings: list[RelatedEarnings] = []
     warnings: list[str]
     quotes_live: bool = True                 # False = priced at last trades (market closed)
     earnings_date: Optional[str] = None      # next earnings date, if known
@@ -234,6 +259,8 @@ class EvaluatedPosition(BaseModel):
     days_left: Optional[int] = None
     stock_price: Optional[float] = None
     cost_to_close: float                     # to buy it back now, including your usual commission
+    target_pct: Optional[float] = None       # buy-back target applied (lower before earnings / a Fed meeting)
+    event: Optional[dict] = None             # {"kind": "earnings" | "fed", "date"} before expiry
     allocation_type: str
     opened_at: str
 
@@ -260,11 +287,26 @@ class HoldingUpdate(BaseModel):
 
 
 class StrategySettings(BaseModel):
-    """Your strategy, as shown and edited on the Strategy page."""
+    """Your strategy, as shown and edited on the Strategy page. Fields left out keep their saved value."""
     income_weight: float = Field(ge=0, le=1)                       # 0.70 = 70% income
-    profit_capture_target_pct: float = Field(ge=1, le=100)         # 80 = buy back at 80% kept
+    profit_capture_target_pct: float = Field(ge=1, le=100)         # 85 = buy back at 85% kept
     buyback_budget_pct: float = Field(ge=0, le=1)                  # 0.15 = 15% set aside
     monthly_goal: float = Field(default=0, ge=0, le=10_000_000)    # dollars per month, 0 = off
+    delta_min: Optional[float] = Field(default=None, ge=0.05, le=0.6)   # 0.20 = 20% chance of being called
+    delta_max: Optional[float] = Field(default=None, ge=0.05, le=0.6)
+    min_dte: Optional[int] = Field(default=None, ge=1, le=120)          # expiry window, days
+    max_dte: Optional[int] = Field(default=None, ge=1, le=120)
+    event_buyback_pct: Optional[float] = Field(default=None, ge=10, le=100)  # 65 = buy back at 65% before events
+
+    @model_validator(mode="after")
+    def _ranges(self):
+        if self.delta_min is not None and self.delta_max is not None and self.delta_min >= self.delta_max:
+            raise ValueError("The lowest chance of being called must be below the highest")
+        if self.min_dte is not None and self.max_dte is not None and self.min_dte >= self.max_dte:
+            raise ValueError("The shortest expiry must be before the longest")
+        if self.event_buyback_pct is not None and self.event_buyback_pct > self.profit_capture_target_pct:
+            raise ValueError("The buy-back target before events can't be above your usual target")
+        return self
 
 
 class AlertSettingsIn(BaseModel):
