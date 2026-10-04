@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getPortfolio, getAllPositions, getAssignmentReview, getManagement, getPerformance, getStrategy, getUpcoming } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import { ScanLine, ArrowRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, BadgeDollarSign, Landmark, Megaphone } from 'lucide-react'
+import { ScanLine, ArrowRight, ArrowUpRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, BadgeDollarSign, Landmark, Megaphone } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
@@ -15,6 +15,7 @@ import ServerDown from '../components/ServerDown'
 import { DashboardSkeleton } from '../components/Skeleton'
 import { TERMS } from '../lib/terms'
 import { daysUntil, fmtDate, money, plural } from '../lib/format'
+import { againstYou } from '../lib/pnl'
 
 // First visit: what the app does, in three steps, and the one thing to do now
 function GettingStarted({ onAdd }) {
@@ -203,6 +204,7 @@ export default function Dashboard() {
   const [reviewCount,  setReviewCount]  = useState(0)   // expired calls that may have been assigned
   const [readyIds,     setReadyIds]     = useState(null) // ids of calls ready to buy back (null = not checked yet)
   const [priceMeta,    setPriceMeta]    = useState(null) // when those prices were checked
+  const [evals,        setEvals]        = useState({})   // price check per open call, by id
   const [goal,         setGoal]         = useState(null) // { target, kept, month } when a monthly goal is set
   const [upcoming,     setUpcoming]     = useState(null) // Fed decisions and earnings ahead
   const [eventPct,     setEventPct]     = useState(null) // buy-back target before an event
@@ -225,7 +227,7 @@ export default function Dashboard() {
       .catch(() => {})
     // Live option prices are slower, so they fill in after the page shows
     getManagement()
-      .then(r => { if (!cancelled) { setReadyIds(new Set(r.data.positions.filter(e => e.should_buy_back).map(e => e.id))); setPriceMeta(r.data) } })
+      .then(r => { if (!cancelled) { setReadyIds(new Set(r.data.positions.filter(e => e.should_buy_back).map(e => e.id))); setEvals(Object.fromEntries(r.data.positions.map(e => [e.id, e]))); setPriceMeta(r.data) } })
       .catch(() => {})
     Promise.all([getStrategy(), getPerformance()])
       .then(([st, perf]) => {
@@ -278,6 +280,17 @@ export default function Dashboard() {
     title: ready.length === 1 ? `${ready[0].ticker} ${money(ready[0].strike, 0)} call is ready to buy back` : `${ready.length} calls are ready to buy back`,
     body: ready.length === 1 ? 'You\'ve kept your target share of the premium. Buying back locks it in.' : `You've kept your target share of the premium on ${callList(ready)}.`,
     cta: { label: 'Buy back', onClick: () => navigate('/positions') },
+  })
+  // Calls with the stock above the strike: buy back at a loss, or let the shares go
+  positions.forEach(p => {
+    const a = againstYou(p, evals[p.id], portfolio.find(t => t.ticker === p.ticker)?.avg_cost)
+    if (!a?.aboveStrike) return
+    todo.push({
+      key: `above-${p.id}`, icon: ArrowUpRight, tone: 'red',
+      title: `${p.ticker} is above your ${money(p.strike, 0)} strike`,
+      body: `Buy back for ${a.buybackPL < 0 ? '−' : '+'}${money(Math.abs(a.buybackPL), 0)}, or let ${a.shares.toLocaleString()} shares be called away at ${money(p.strike, 0)} on ${fmtDate(p.expiry)}.`,
+      cta: { label: 'Review', onClick: () => go(p.ticker, '/positions') },
+    })
   })
   unsold.forEach(t => todo.push({
     key: `unsold-${t.ticker}`, icon: ScanLine, tone: 'accent',
