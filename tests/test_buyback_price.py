@@ -95,3 +95,26 @@ def test_positions_ignore_a_last_trade_from_days_ago(client, nvda, monkeypatch):
     e = client.get("/manage").json()["positions"][0]
     assert e["current_option_price"] == 0 and e["action"] == "hold" and not e["should_buy_back"]
     assert date.fromisoformat(e["old_trade_date"]) < last_session()
+
+
+# --- Buy-backs are priced at the midpoint, like sells -----------------------------------------
+
+def test_buy_back_price_is_the_midpoint_or_the_ask_without_a_bid():
+    from core.quotes import select_quote
+    assert select_quote(0.03, 0.07, 0.10, mode="mid_or_ask").price == pytest.approx(0.05)
+    no_bid = select_quote(0.0, 0.05, 0.02, mode="mid_or_ask")
+    assert no_bid.price == 0.05 and no_bid.source == "ASK"        # no buyer: count on paying the ask
+    assert select_quote(0.0, 0.0, 0.04, mode="mid_or_ask").source == "LAST"
+
+
+def test_target_reached_at_the_midpoint_before_the_ask(monkeypatch):
+    """Sold 9 at $0.34, 85% target = $0.05; quoted $0.03 × $0.07: the midpoint ($0.05) is there."""
+    import pandas as pd
+    from core import buyback as bb
+    calls = pd.DataFrame([{"strike": 110.0, "bid": 0.03, "ask": 0.07, "lastPrice": 0.06, "source": "cboe"}])
+    monkeypatch.setattr(bb, "get_calls", lambda ticker, expiry: calls)
+    pos = _pos(0.34)
+    quote = bb.get_current_option_quote("NVDA", pos["expiry"], 110.0)
+    assert quote["price"] == pytest.approx(0.05)
+    result = evaluate_position(pos, quote["price"], today=TODAY)
+    assert result.action == "buy_back" and result.buyback_price == 0.05

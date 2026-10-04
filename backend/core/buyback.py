@@ -35,13 +35,14 @@ def get_current_option_quote(
     expiry: str,
     strike: float,
     *,
-    mode: QuoteMode = "ask",
+    mode: QuoteMode = "mid_or_ask",
     strike_tolerance: float = DEFAULT_CONFIG.strike_match_tolerance,
 ) -> dict:
     """
-    {"price", "old_trade_date"} for an open call: the ask by default (a buyback
-    pays it). Chains are cached briefly (options_data.get_calls), so positions
-    on the same expiry share one download. Without a live ask (outside market hours) the
+    {"price", "old_trade_date", "source"} for an open call: what buying it back
+    costs, at the midpoint by default, where buy orders usually fill (the ask
+    when there's no bid). Chains are cached briefly (options_data.get_calls), so
+    positions on the same expiry share one download. Without a bid or ask the
     last trade is used, unless it's from before the latest session: a quiet
     strike's trade from days ago was at a different stock price, so then
     price is 0 (no recommendation) and old_trade_date says when it last traded.
@@ -162,11 +163,12 @@ def next_event(ticker: str, expiry: str, today: str | None = None) -> dict | Non
 def evaluate_positions(
     positions: list[dict],
     config: ScannerConfig = DEFAULT_CONFIG,
-    price_mode: QuoteMode = "ask",
+    price_mode: QuoteMode = "mid_or_ask",
 ) -> list[OpenCoveredCall]:
     """
-    Batch evaluate open positions: current ask for each call (a buyback pays
-    the ask), the stock price, and your usual commission.
+    Batch evaluate open positions: what buying each call back costs now (the
+    midpoint, see get_current_option_quote), the stock price, and your usual
+    commission.
     """
     results: list[OpenCoveredCall] = []
     fee = typical_fee_per_contract()

@@ -127,5 +127,5 @@ def test_manage_reports_the_action(client, nvda):
     e = client.get("/manage").json()["positions"][0]
     assert e["action"] == "buy_back" and e["should_buy_back"] is True
     assert e["stock_price"] == 100.0 and e["days_left"] == 25
-    _, ask = _fake_quote(125)
-    assert e["cost_to_close"] == pytest.approx(ask * 100 + 0.65)
+    bid, ask = _fake_quote(125)
+    assert e["cost_to_close"] == pytest.approx((bid + ask) / 2 * 100 + 0.65)     # bought back at the midpoint
