@@ -49,6 +49,7 @@ def evaluate_open_positions(ticker: Optional[str] = None):
             buyback_kept_pct=r.buyback_kept_pct,
             event=r.event,
             old_trade_date=r.old_trade_date,
+            price_source=r.price_source,
             allocation_type=pos.get("allocation_type", ""),
             opened_at=pos.get("opened_at", ""),
         )
@@ -64,4 +65,10 @@ def evaluate_open_positions(ticker: Optional[str] = None):
         checked_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         market_open=market_open,
         next_market_open=None if market_open else next_market_open().isoformat(),
+        data_source=_source(evaluated),
     )
+
+
+def _source(evaluated) -> str | None:
+    sources = {e.price_source for e in evaluated if e.price_source}
+    return None if not sources else sources.pop() if len(sources) == 1 else "mixed"

@@ -21,7 +21,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 ## Features
 
-- **Live options scanning** — options chains from Yahoo Finance (yfinance); stock price from Alpha Vantage with an automatic Yahoo fallback; NYSE holidays and early closes handled
+- **Live options scanning** — options chains from Cboe's delayed quotes (about 15 minutes behind), with Yahoo Finance as the fallback; stock price from Alpha Vantage with an automatic Yahoo fallback; NYSE holidays and early closes handled
 - **Baseline strategy** — calls with a 20–30% chance of being called (delta 0.20–0.30), 14–30 days out, picked to reach your monthly goal with as little risk as possible; every part is editable on the Strategy page
 - **Goal-paced picks** — compares options by the monthly income you expect to keep after buy-backs and fees, within your delta range
 - **Smart allocation** — maintains a 70/30 income/balanced contract split per ticker, accounting for already-open positions
@@ -97,7 +97,8 @@ covered-call-bot/
 │   │   ├── performance.py    # Realized results and return on capital
 │   │   ├── market_data.py    # Stock price, earnings/ex-dividend dates
 │   │   ├── events.py         # Fed meeting dates, industry leaders, related earnings
-│   │   ├── options_data.py   # Option chains from Yahoo
+│   │   ├── cboe.py           # Option chains from Cboe's delayed quotes
+│   │   ├── options_data.py   # Option chains: Cboe, else Yahoo
 │   │   ├── market_hours.py   # NYSE hours, holidays, early closes
 │   │   ├── db.py             # Database tables (Postgres, or SQLite locally)
 │   │   └── ...               # filters, quotes, calculations, greeks, scoring, strategy, ...
@@ -190,7 +191,7 @@ The scanner fetches the options chain for a ticker within your expiry window (14
 - Optional minimum distance above the stock price (off by default; set it on the Scanner)
 - Maximum bid-ask spread (35% of the mid price)
 
-Each option is priced at what you can realistically get when selling: a quarter of the way from the bid to the ask, not the midpoint, so wide spreads cost you in the ranking. Your broker's commission per contract (Strategy page, $0 by default) is subtracted, and yields are on what's left. Options that pay less than the commission are dropped.
+Each option is priced at the midpoint between the bid and the ask, where sell orders usually fill. Your broker's commission per contract (Strategy page, $0 by default) is subtracted, and yields are on what's left. Options that pay less than the commission are dropped.
 
 Each scan also says whether premiums are **rich**, **normal** or **thin** right now: it compares the yearly move near-the-money options are priced for (implied volatility) with how much the stock actually moved over the last 20 trading days. Rich (implied at least 1.25× realized) is a good time to sell; thin (implied below realized) means you're paid less than the risk, and waiting may pay more.
 
@@ -201,7 +202,9 @@ From the options in your range the scanner picks two:
 
 Monthly income is what you expect to keep per contract: the premium × your buy-back target (the earlier event target when earnings or a Fed decision comes first), minus the commission to sell and the one to buy back, ÷ days to expiry × 30.4. The goal check uses the same number, so "on pace" means after buy-backs.
 
-**Chance of being called (delta)** is Black-Scholes delta, lowered slightly for dividend payers. Its volatility comes from Yahoo's implied volatility; outside market hours Yahoo reports roughly zero there, so it's worked out from each option's own price instead, or from the stock's recent moves as a last resort. The Scanner says when it's using these estimates. A quiet strike whose last trade is from before the latest session is marked **Old price**: the stock has moved since, so that price doesn't set its volatility and the picks skip it.
+**Option prices** come from Cboe's delayed quotes, about 15 minutes behind. When Cboe fails or has nothing for a stock, the app uses Yahoo Finance instead; Yahoo isn't used at all while Cboe works. The Scanner and the price check say which source was used. After the close, Cboe's closing bid and ask are used (at their midpoint) and marked as a closing quote.
+
+**Chance of being called (delta)** is Cboe's own delta when Cboe supplies one. Otherwise it's Black-Scholes delta, lowered slightly for dividend payers. Its volatility comes from Yahoo's implied volatility; outside market hours Yahoo reports roughly zero there, so it's worked out from each option's own price instead, or from the stock's recent moves as a last resort. The Scanner says when it's using these estimates. A quiet strike whose last trade is from before the latest session is marked **Old price**: the stock has moved since, so that price doesn't set its volatility and the picks skip it.
 
 **Events.** When earnings, a Fed rate decision (FOMC dates in `backend/core/events.py`), or earnings from the industry's largest companies or your other stocks in the same industry fall before an option's expiry, it's flagged and both picks stay within 3 points of your lowest delta. Industry comes from Yahoo Finance; the leaders list is in `backend/core/events.py`. Only confirmed Fed dates go there; when an expiry runs past the last one, the Scanner says the calendar ends there.
 

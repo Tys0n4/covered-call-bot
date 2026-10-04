@@ -20,7 +20,7 @@ class ScannerConfig:
     min_volume: int = 10
     min_open_interest: int = 50              # ensures you can get filled and buy back
     max_spread_pct: float = 0.35             # max (ask-bid)/mid — filters wide/illiquid spreads
-    sell_fill_share: float = 0.25            # selling usually fills this far from the bid toward the ask
+    sell_fill_share: float = 0.5             # where a sell usually fills, from the bid (0) to the ask (1): 0.5 = midpoint
     commission_per_contract: float = 0.0     # your broker's commission per option contract (Strategy page)
 
     # --- Greeks ---

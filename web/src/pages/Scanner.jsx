@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { runScan, savePositions, apiError } from '../api/client'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
 import RangeMeter from '../components/RangeMeter'
+import { SOURCE_LABEL } from '../lib/source'
 import { useTicker } from '../context/TickerContext'
 import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
@@ -345,6 +346,9 @@ export default function Scanner() {
                 <strong style={{ color: 'var(--text)' }}>{result.ticker}</strong> {lastPrices ? 'last traded at' : 'is trading at'}{' '}
                 <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.{' '}
                 {plural(result.candidates.length, 'option')} matched your filters.
+                {SOURCE_LABEL[result.data_source] && (
+                  <span className="hint" style={{ display: 'block', marginTop: 4 }}>Option prices: {SOURCE_LABEL[result.data_source]}</span>
+                )}
                 {(result.earnings_date || result.ex_dividend_date) && (
                   <span className="hint" style={{ display: 'block', marginTop: 4 }}>
                     {result.earnings_date && <>Next earnings: <strong style={{ color: 'var(--text-dim)' }}>{fmtDate(result.earnings_date)}</strong></>}
