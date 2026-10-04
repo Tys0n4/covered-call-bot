@@ -332,14 +332,16 @@ body { font-size: 15px; line-height: 1.5; }
   border-radius: 10px;
   padding: 5px 12px;
 }
+/* The select fills the whole pill (arrow included), so a click anywhere opens it */
 .ticker-switch {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  padding: 0;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
+.ticker-switch svg { position: absolute; right: 10px; pointer-events: none; }
 .ticker-switch:hover { border-color: var(--accent-light); background: rgba(47, 200, 238, 0.18); }
 .ticker-switch:has(select:focus-visible) { outline: 2px solid var(--accent-light); outline-offset: 2px; }
 .ticker-switch select {
@@ -350,7 +352,8 @@ body { font-size: 15px; line-height: 1.5; }
   color: inherit;
   font: inherit;
   cursor: pointer;
-  padding-right: 2px;
+  min-height: 40px;
+  padding: 0 32px 0 12px;
 }
 .ticker-switch select option { background: var(--bg-card); color: var(--text); }
 
