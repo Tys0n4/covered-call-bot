@@ -347,7 +347,9 @@ export default function Scanner() {
                 <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.{' '}
                 {plural(result.candidates.length, 'option')} matched your filters.
                 {SOURCE_LABEL[result.data_source] && (
-                  <span className="hint" style={{ display: 'block', marginTop: 4 }}>Option prices: {SOURCE_LABEL[result.data_source]}</span>
+                  <span className="hint" style={{ display: 'block', marginTop: 4 }}>
+                    {result.price_source === 'cboe' && result.data_source === 'cboe' ? 'Stock and option prices' : 'Option prices'}: {SOURCE_LABEL[result.data_source]}
+                  </span>
                 )}
                 {(result.earnings_date || result.ex_dividend_date) && (
                   <span className="hint" style={{ display: 'block', marginTop: 4 }}>

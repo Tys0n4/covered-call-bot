@@ -7,7 +7,7 @@ import pandas as pd
 
 from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.models import PortfolioPosition, ScanResult
-from core.market_data import get_current_price, get_dividend_yield, get_events, get_recent_closes
+from core.market_data import get_dividend_yield, get_events, get_price_quote, get_recent_closes
 from core.options_data import get_call_options_in_dte_range
 from core.filters import filter_covered_calls
 from core.calculations import add_option_metrics
@@ -110,7 +110,7 @@ def scan_covered_calls(
     """
     warnings: list[str] = []
 
-    current_price = get_current_price(position.ticker)
+    current_price, price_source = get_price_quote(position.ticker)
     if current_price is None:
         return ScanResult(
             position=position,
@@ -221,7 +221,7 @@ def scan_covered_calls(
             position=position, current_price=current_price, candidates=pd.DataFrame(),
             income_pick=None, balanced_pick=None, quotes_live=quotes_live, events=events,
             warnings=warnings + ["Every matching option pays less than the commission to sell it."],
-            fee_per_contract=fee, premium_check=check, data_source=source,
+            fee_per_contract=fee, premium_check=check, data_source=source, price_source=price_source,
         )
 
     sources = set(enriched["delta_source"].dropna())
@@ -254,7 +254,7 @@ def scan_covered_calls(
                 f"{config.delta_min:.0%}–{config.delta_max:.0%} chance of being called. "
                 "Widen the range or the expiry window on the Strategy page."
             ],
-            fee_per_contract=fee, premium_check=check, data_source=source,
+            fee_per_contract=fee, premium_check=check, data_source=source, price_source=price_source,
         )
     old = int((in_range["quote_quality"] == "OLD").sum()) if "quote_quality" in in_range.columns else 0
     if old:
@@ -295,5 +295,5 @@ def scan_covered_calls(
         fee_per_contract=fee,
         premium_check=check,
         plan_per_contract=plan_per_contract,
-        data_source=source,
+        data_source=source, price_source=price_source,
     )

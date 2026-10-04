@@ -2,9 +2,10 @@
 """
 Stock prices and calendar events.
 
-Price: Alpha Vantage GLOBAL_QUOTE first (1 API call; the free plan allows ~25 a
-day), then Yahoo Finance (yfinance) if Alpha Vantage has no key, is rate
-limited or doesn't answer.
+Price: Cboe first, from the same delayed snapshot as the option prices so the
+two always match (core/cboe.py). Then Alpha Vantage GLOBAL_QUOTE (the free plan
+allows ~25 calls a day; once it says the limit is reached it's skipped until the
+next day), then Yahoo Finance (yfinance).
 """
 import logging
 import os
@@ -16,6 +17,7 @@ import yfinance as yf
 from dotenv import load_dotenv
 
 from core import db
+from core.cboe import get_cboe_price
 from core.cache import CLOSE_TTL, EVENTS_TTL, HISTORY_TTL, PRICE_TTL, RETRY_AFTER, cached
 from core.market_hours import market_today
 
@@ -26,10 +28,14 @@ log = logging.getLogger(__name__)
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
 BASE_URL = "https://www.alphavantage.co/query"
 
+# New York day on which Alpha Vantage said its daily limit was reached (skip it for the rest of that day)
+_av_limited_on: str | None = None
+
 
 def _alpha_vantage_price(ticker_symbol: str) -> float | None:
     """'price' (last trade) during hours, falling back to 'previous close'."""
-    if not ALPHA_VANTAGE_KEY:
+    global _av_limited_on
+    if not ALPHA_VANTAGE_KEY or _av_limited_on == market_today():
         return None
     params = {"function": "GLOBAL_QUOTE", "symbol": ticker_symbol, "apikey": ALPHA_VANTAGE_KEY}
     try:
@@ -46,6 +52,9 @@ def _alpha_vantage_price(ticker_symbol: str) -> float | None:
         # Rate limits come back as 200 with a "Note" / "Information" message
         note = data.get("Note") or data.get("Information") or "no quote returned"
         log.warning("Alpha Vantage had no price for %s: %s", ticker_symbol, str(note)[:120])
+        if "per day" in str(note).lower() or "daily" in str(note).lower():
+            _av_limited_on = market_today()
+            log.warning("Alpha Vantage's daily limit is reached; skipping it until tomorrow")
         return None
     try:
         return float(price)
@@ -69,11 +78,20 @@ def _yahoo_price(ticker_symbol: str) -> float | None:
         return None
 
 
-def get_current_price(ticker_symbol: str) -> float | None:
-    """Latest stock price, or None if neither source has one."""
+def get_price_quote(ticker_symbol: str) -> tuple[float | None, str | None]:
+    """(stock price, "cboe" | "alpha_vantage" | "yahoo"), or (None, None) if no source has one."""
     def fetch():
-        return _alpha_vantage_price(ticker_symbol) or _yahoo_price(ticker_symbol)
-    return cached(("price", ticker_symbol), PRICE_TTL, fetch)
+        for source, get in (("cboe", get_cboe_price), ("alpha_vantage", _alpha_vantage_price), ("yahoo", _yahoo_price)):
+            price = get(ticker_symbol)
+            if price:
+                return price, source
+        return None
+    return cached(("price", ticker_symbol), PRICE_TTL, fetch) or (None, None)
+
+
+def get_current_price(ticker_symbol: str) -> float | None:
+    """Latest stock price (see get_price_quote), or None."""
+    return get_price_quote(ticker_symbol)[0]
 
 
 def _as_date(v) -> date | None:

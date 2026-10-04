@@ -16,6 +16,7 @@ from core import db
 from core import scanner
 from core import events
 from core import cboe
+from core import market_data
 
 # Fake stock prices; any other ticker "doesn't exist"
 PRICES = {"NVDA": 100.0, "AAPL": 200.0}
@@ -112,7 +113,9 @@ def fake_market(monkeypatch):
     # No real Fed calendar unless a test sets one, so results don't depend on today's date
     monkeypatch.setattr(events, "FED_MEETINGS", ())
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)
-    monkeypatch.setattr(scanner, "get_current_price", lambda t: PRICES.get(t))
+    # Stock prices: Cboe's snapshot when a test sets one, else the fake Yahoo price (no Alpha Vantage key)
+    monkeypatch.setattr(market_data, "ALPHA_VANTAGE_KEY", None)
+    monkeypatch.setattr(market_data, "_av_limited_on", None)
     monkeypatch.setattr(scanner, "is_market_open", lambda: True)
 
 
