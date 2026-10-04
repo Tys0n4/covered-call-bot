@@ -65,21 +65,8 @@ body {
   border-color: var(--border-hover);
 }
 
-.card-sm {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
-}
-
 /* Gradient card — used sparingly, for the one or two elements that should
    carry the accent (a highlighted hero card), not every panel. */
-.card-gradient {
-  background: linear-gradient(150deg, var(--bg-card) 0%, #1d2c44 100%);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 24px;
-}
 
 /* Buttons */
 .btn-primary {

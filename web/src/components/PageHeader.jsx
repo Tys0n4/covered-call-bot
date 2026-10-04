@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useTicker } from '../context/TickerContext'
 
-export function TickerSwitcher() {
+function TickerSwitcher() {
   const { tickers, selected, selectTicker } = useTicker()
   if (tickers.length === 0) return null
   if (tickers.length === 1) return <span className="ticker-pill">{tickers[0].ticker}</span>

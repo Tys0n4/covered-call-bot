@@ -15,7 +15,7 @@ A full-stack financial tool for scanning, planning, and managing covered call op
 
 ## Overview
 
-Covered Call Scanner automates the process of finding, evaluating, and tracking covered call opportunities for stock positions you already own. Instead of manually scanning options chains, the app fetches live market data, scores candidates by income potential and risk profile, and builds a contract allocation plan that maintains a configurable 70/30 income-to-balanced split across your portfolio.
+Covered Call Scanner automates the process of finding, evaluating, and tracking covered call opportunities for stock positions you already own. Instead of manually scanning options chains, the app fetches live market data, picks calls within your chance-of-being-called range that keep you on pace for your monthly goal, and builds a contract allocation plan that maintains a configurable 70/30 income-to-balanced split across your portfolio.
 
 ---
 
@@ -23,7 +23,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 - **Live options scanning** — options chains from Yahoo Finance (yfinance); stock price from Alpha Vantage with an automatic Yahoo fallback; NYSE holidays and early closes handled
 - **Baseline strategy** — calls with a 20–30% chance of being called (delta 0.20–0.30), 14–30 days out, picked to reach your monthly goal with as little risk as possible; every part is editable on the Strategy page
-- **Candidate scoring** — ranks options by monthly income after fees, delta, bid-ask spread quality, and volume
+- **Goal-paced picks** — compares options by the monthly income you expect to keep after buy-backs and fees, within your delta range
 - **Smart allocation** — maintains a 70/30 income/balanced contract split per ticker, accounting for already-open positions
 - **Position management** — tracks open covered call positions and evaluates buyback opportunities based on profit capture %
 - **Buy-back alerts** — a Discord message when an open call reaches your buy-back target, checked every 15 minutes during market hours
@@ -89,7 +89,7 @@ covered-call-bot/
 │   ├── api/                  # FastAPI app: main.py (entry), auth.py, schemas.py
 │   │   └── routes/           # portfolio, scan, positions, manage, performance, settings
 │   ├── core/                 # Covered call logic (see core/__init__.py for a module map)
-│   │   ├── scanner.py        # Scan pipeline: price, chain, filters, scoring, warnings
+│   │   ├── scanner.py        # Scan pipeline: price, chain, filters, picks, warnings
 │   │   ├── planner.py        # Turns a scan into the trade to place, for your split
 │   │   ├── positions.py      # Save, close, roll, assign, edit, undo, delete calls
 │   │   ├── buyback.py        # "Check prices": time to buy back?

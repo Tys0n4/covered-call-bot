@@ -75,14 +75,13 @@ def estimate_call_delta(stock_price, strike, days_to_expiry, implied_volatility,
 
 def add_estimated_delta(calls_df, stock_price, risk_free_rate=0.04, *, dividend_yield=0.0, fallback_vol=None):
     """
-    Add 'delta' and 'delta_source' ("provider" | "implied" | "price" | "history" | None).
+    Add 'delta' and 'delta_source' ("implied" | "price" | "history" | None).
 
-    Priority:
-      1. Alpha Vantage's delta ('av_delta'), if present and valid.
-      2. Black-Scholes with Yahoo's implied volatility.
-      3. Black-Scholes with the volatility implied by the option's price
-         (midpoint, else last trade): Yahoo's is junk outside market hours.
-      4. Black-Scholes with fallback_vol (the stock's recent realized volatility).
+    Black-Scholes, with the volatility from (in order):
+      1. Yahoo's implied volatility.
+      2. The volatility implied by the option's price (midpoint, else last
+         trade): Yahoo's is junk outside market hours.
+      3. fallback_vol (the stock's recent realized volatility).
     """
     df = calls_df.copy()
 
@@ -97,15 +96,6 @@ def add_estimated_delta(calls_df, stock_price, risk_free_rate=0.04, *, dividend_
         return None
 
     def _resolve(row):
-        av = row.get("av_delta")
-        if av is not None and not (isinstance(av, float) and pd.isna(av)):
-            try:
-                val = float(av)
-                if 0.0 <= val <= 1.0:
-                    return round(val, 3), "provider"
-            except (ValueError, TypeError):
-                pass
-
         strike, days = row.get("strike"), row.get("dte")
         vol, source = row.get("impliedVolatility"), "implied"
         if not _valid_vol(vol):
