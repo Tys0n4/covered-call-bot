@@ -51,6 +51,8 @@ function StatusPanel({ evaluation, checking, failed }) {
   const kept = Math.max(0, Math.min(evaluation.profit_capture_pct, 100))
   const buy = evaluation.should_buy_back
   const expire = evaluation.action === 'let_expire'
+  const ev = evaluation.event
+  const evText = ev ? `${ev.kind === 'earnings' ? 'Earnings' : "The Fed's rate decision"} on ${fmtDate(ev.date)}` : null
   // How far the stock is under the strike, as a share of the strike
   const below = evaluation.stock_price > 0 ? (1 - evaluation.stock_price / evaluation.strike) * 100 : null
   return (
@@ -70,11 +72,13 @@ function StatusPanel({ evaluation, checking, failed }) {
         <div className="progress-fill" style={{ width: `${kept}%`, background: buy || expire ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
-        {buy
+        {buy && ev
+          ? <>{evText} comes before this call expires, so the earlier {evaluation.target_pct}% target applies. Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> with fees and avoids holding through the jump.</>
+          : buy
           ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> with fees and locks in the gain.</>
           : expire
             ? <>Expires in {plural(evaluation.days_left, 'day')} with the stock {below.toFixed(0)}% below the strike. Buying back would cost {money(evaluation.cost_to_close)} with fees for little benefit, so you can let it expire and keep that.</>
-            : <>It would cost {money(evaluation.cost_to_close)} with fees to buy back today. Not worth it yet.</>}
+            : <>It would cost {money(evaluation.cost_to_close)} with fees to buy back today. Not worth it yet{ev ? <>; {evText.charAt(0).toLowerCase() + evText.slice(1)} comes before expiry, so you'll be told to buy back at {evaluation.target_pct}%</> : ''}.</>}
       </div>
     </div>
   )

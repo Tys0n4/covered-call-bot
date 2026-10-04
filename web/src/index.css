@@ -770,3 +770,7 @@ body { font-size: 15px; line-height: 1.5; }
 .premium-thin   { background: var(--amber-dim); border-color: rgba(245,165,36,0.25); }
 .premium-thin svg:first-child { color: var(--amber); }
 .premium-normal svg:first-child { color: var(--text-muted); }
+
+/* --- Strategy: which calls to sell ------------------------------------------- */
+.sell-rules { display: flex; gap: 32px; flex-wrap: wrap; }
+.range-pair { display: flex; align-items: center; gap: 10px; }

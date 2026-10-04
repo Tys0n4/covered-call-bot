@@ -1,7 +1,7 @@
 // src/pages/Scanner.jsx
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { runScan, savePositions, apiError } from '../api/client'
+import { runScan, savePositions, apiError, getStrategy } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
@@ -11,14 +11,14 @@ import MoneyInput from '../components/MoneyInput'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
 import OptionsTable, { EventBadges } from '../components/OptionsTable'
-import PremiumCheck from '../components/PremiumCheck'
+import PremiumCheck, { GoalCheck } from '../components/PremiumCheck'
 import { TERMS } from '../lib/terms'
 import { fmtDate, money, pct, plural } from '../lib/format'
 import { moneyValue, splitFees } from '../lib/pnl'
 
+// The expiry window and delta range come from your strategy (Strategy page)
 const DEFAULT_CONFIG = {
-  min_dte: 20, max_dte: 38,
-  min_strike_pct: 0.15, min_premium: 0.05,
+  min_strike_pct: 0, min_premium: 0.05,
   min_volume: 10, min_open_interest: 50,
   exclude_below_cost: false,
   avoid_earnings: false,
@@ -34,9 +34,7 @@ const STORAGE_KEY = 'scanner_config'
 
 // The filter boxes: what each accepts and the allowed range
 const FIELDS = [
-  { name: 'min_dte',           label: 'Shortest expiry (days)',      tip: TERMS.dte,         kind: 'int', min: 1,    max: 60 },
-  { name: 'max_dte',           label: 'Longest expiry (days)',       tip: TERMS.dte,         kind: 'int', min: 1,    max: 120 },
-  { name: 'min_strike_pct',    label: 'Min. distance above price',   tip: TERMS.minStrike,   kind: 'dec', min: 0.15, max: 0.5, pct: true },
+  { name: 'min_strike_pct',    label: 'Min. distance above price (optional)', tip: TERMS.minStrike, kind: 'dec', min: 0, max: 0.5, pct: true },
   { name: 'min_premium',       label: 'Min. premium per share ($)',  tip: TERMS.minPremium,  kind: 'dec', min: 0.01, max: 1000 },
   { name: 'min_volume',        label: 'Min. daily volume',           tip: TERMS.volume,      kind: 'int', min: 1,    max: 1000000 },
   { name: 'min_open_interest', label: 'Min. open interest',          tip: TERMS.openInt,     kind: 'int', min: 1,    max: 1000000 },
@@ -59,7 +57,6 @@ function loadConfig() {
     const v = Number(saved[f.name])
     if (saved[f.name] !== null && saved[f.name] !== '' && inRange(f, v)) config[f.name] = v
   }
-  if (config.max_dte < config.min_dte) { config.min_dte = DEFAULT_CONFIG.min_dte; config.max_dte = DEFAULT_CONFIG.max_dte }
   for (const t of TOGGLES) config[t.name] = saved[t.name] === true
   return config
 }
@@ -78,9 +75,6 @@ function parseForm(form) {
     if (text === '' || text === '.') errors[f.name] = 'Enter a number'
     else if (!inRange(f, v)) errors[f.name] = `Must be ${f.kind === 'int' ? 'a whole number ' : ''}between ${shownLimit(f, f.min)} and ${shownLimit(f, f.max)}`
     else values[f.name] = v
-  }
-  if (!errors.min_dte && !errors.max_dte && values.max_dte < values.min_dte) {
-    errors.max_dte = 'Must be at least the shortest expiry'
   }
   return { values, errors, valid: Object.keys(errors).length === 0 }
 }
@@ -196,6 +190,9 @@ export default function Scanner() {
   const [saving, setSaving]   = useState(false)
   const [fills, setFills]     = useState([])   // per-share fill for each planned leg, as typed
   const [feesText, setFees]   = useState('')   // total commissions for the trade, as typed
+  const [strategy, setStrategy] = useState(null)  // delta range and expiry window, for the summary
+
+  useEffect(() => { getStrategy().then(r => setStrategy(r.data)).catch(() => {}) }, [])
 
   const { values: config, errors: fieldErrors, valid: filtersValid } = parseForm(form)
 
@@ -247,9 +244,10 @@ export default function Scanner() {
     finally { setSaving(false) }
   }
 
+  const rules = strategy ? `Calls with a ${Math.round(strategy.delta_min * 100)}–${Math.round(strategy.delta_max * 100)}% chance of being called, expiring in ${strategy.min_dte}–${strategy.max_dte} days` : 'Calls in your strategy'
   const filterSummary = filtersValid
-    ? `Calls expiring in ${config.min_dte}–${config.max_dte} days, with strikes at least ` +
-      `${Math.round(config.min_strike_pct * 100)}% above today's price and paying at least ${money(config.min_premium)} per share.` +
+    ? `${rules}, paying at least ${money(config.min_premium)} per share` +
+      (config.min_strike_pct > 0 ? `, with strikes at least ${Math.round(config.min_strike_pct * 100)}% above today's price.` : '.') +
       (config.exclude_below_cost ? ' Strikes below your average cost are skipped.' : '') +
       (config.avoid_earnings ? ' Expiries that span earnings are skipped.' : '')
     : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
@@ -289,7 +287,8 @@ export default function Scanner() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px 24px', flexWrap: 'wrap' }}>
               <div>
                 <div className="section-title">What we'll look for</div>
-                <div className="section-sub" style={{ maxWidth: 680, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}</div>
+                <div className="section-sub" style={{ maxWidth: 680, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}{' '}
+                  <Link to="/strategy" style={{ color: 'var(--accent-light)', whiteSpace: 'nowrap' }}>Edit strategy</Link></div>
               </div>
               <button className="btn-primary" onClick={handleScan} disabled={loading || !filtersValid} style={{ padding: '13px 28px', fontSize: 15, flexShrink: 0 }}>
                 {loading ? <><span className="spinner" /> Scanning…</> : <><ScanLine size={17} strokeWidth={2} /> Scan {selected}</>}
@@ -350,6 +349,7 @@ export default function Scanner() {
                   </span>
                 )}
               </div>
+              <GoalCheck check={result.goal_check} deltaMax={result.delta_max} />
               <PremiumCheck check={result.premium_check} />
 
               {lastPrices && (
@@ -495,10 +495,11 @@ export default function Scanner() {
                   <TrendingDown size={24} strokeWidth={1.75} style={{ marginBottom: 12, opacity: 0.6 }} />
                   <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)', marginBottom: 8 }}>No options matched</div>
                   <div style={{ fontSize: 14, lineHeight: 1.7, maxWidth: 520, margin: '0 auto' }}>
-                    None of the {result.ticker} calls expiring in {config.min_dte}–{config.max_dte} days passed every filter.
-                    Under <strong style={{ color: 'var(--text-dim)' }}>Adjust filters</strong>, try a wider expiry window,
-                    a smaller distance above price (now {Math.round(config.min_strike_pct * 100)}%),
-                    or a lower minimum premium, volume or open interest.
+                    None of the {result.ticker} calls expiring in {result.min_dte}–{result.max_dte} days with
+                    a {Math.round(result.delta_min * 100)}–{Math.round(result.delta_max * 100)}% chance of being called passed every filter.
+                    Try a wider range or expiry window on the <Link to="/strategy" style={{ color: 'var(--accent-light)' }}>Strategy</Link> page,
+                    or under <strong style={{ color: 'var(--text-dim)' }}>Adjust filters</strong> a lower minimum premium, volume or open interest
+                    {config.min_strike_pct > 0 ? `, or a smaller distance above price (now ${Math.round(config.min_strike_pct * 100)}%)` : ''}.
                     {lastPrices && <><br />The market is closed, so options are priced at their last trade. Ones that haven't traded recently have no price and are skipped.</>}
                   </div>
                 </div>

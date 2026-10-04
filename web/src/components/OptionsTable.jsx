@@ -20,10 +20,14 @@ const COLUMNS = [
 export function EventBadges({ option, compact = false }) {
   if (compact) return <>
     {option.spans_earnings && <span className="event-mark tone-amber" title={TERMS.earnings} aria-label="Spans earnings">E</span>}
+    {option.spans_fed && <span className="event-mark tone-amber" title={TERMS.fed} aria-label="Spans a Fed rate decision">F</span>}
+    {option.spans_industry && <span className="event-mark tone-amber" title={TERMS.industry} aria-label="Spans industry earnings">I</span>}
     {option.spans_ex_dividend && <span className="event-mark tone-blue" title={TERMS.exDividend} aria-label="Spans an ex-dividend date">D</span>}
   </>
   return <>
     {option.spans_earnings && <span className="badge badge-amber" title={TERMS.earnings}>Earnings</span>}
+    {option.spans_fed && <span className="badge badge-amber" title={TERMS.fed}>Fed</span>}
+    {option.spans_industry && <span className="badge badge-amber" title={TERMS.industry}>Industry earnings</span>}
     {option.spans_ex_dividend && <span className="badge badge-blue" title={TERMS.exDividend}>Ex-div</span>}
   </>
 }
@@ -71,7 +75,7 @@ export default function OptionsTable({ candidates }) {
   // Only show the quote column when some prices aren't live
   const showQuote = candidates.some(c => c.quote_quality !== 'LIVE')
   const grouped = sort.key === 'expiry'
-  const hasEvents = candidates.some(c => c.spans_earnings || c.spans_ex_dividend)
+  const hasEvents = candidates.some(c => c.spans_earnings || c.spans_ex_dividend || c.spans_fed || c.spans_industry)
   const span = COLUMNS.length + (grouped ? 0 : 2) + (showQuote ? 1 : 0)
 
   const sign = sort.dir === 'asc' ? 1 : -1
@@ -136,7 +140,7 @@ export default function OptionsTable({ candidates }) {
       </table>
     </div>
       <div className="hint" style={{ padding: '10px 14px 2px', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {!grouped && hasEvents && <span><span className="event-mark tone-amber">E</span> expires after earnings · <span className="event-mark tone-blue">D</span> after an ex-dividend date</span>}
+        {!grouped && hasEvents && <span><span className="event-mark tone-amber">E</span> expires after earnings · <span className="event-mark tone-amber">F</span> a Fed decision · <span className="event-mark tone-amber">I</span> industry earnings · <span className="event-mark tone-blue">D</span> an ex-dividend date</span>}
         {!showQuote && <span>All prices are live quotes.</span>}
       </div>
     </>

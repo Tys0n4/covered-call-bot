@@ -1,6 +1,6 @@
 // src/components/PremiumCheck.jsx — one line on the Scanner: are option premiums
 // rich, normal or thin right now? (backend core/volatility.py)
-import { Gauge } from 'lucide-react'
+import { Gauge, Target } from 'lucide-react'
 import InfoTip from './InfoTip'
 
 const pctYear = v => `${Math.round(v * 100)}%`
@@ -19,6 +19,27 @@ export default function PremiumCheck({ check }) {
     <div className={`premium-check premium-${level}`}>
       <Gauge size={17} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
       <span><strong>{copy[0]}.</strong> {copy[1]} <InfoTip text={TIP} size={12} /></span>
+    </div>
+  )
+}
+
+const usd = v => `$${Math.round(v).toLocaleString('en-US')}`
+
+// One line: do the picks earn enough per contract to reach your monthly goal?
+export function GoalCheck({ check, deltaMax }) {
+  if (!check) return null
+  const { goal, contracts, pace_per_contract: pace, plan_per_contract: plan, met } = check
+  return (
+    <div className={`premium-check ${met ? 'premium-rich' : 'premium-thin'}`}>
+      <Target size={17} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+      {met ? (
+        <span><strong>On pace for your {usd(goal)} monthly goal.</strong> These calls earn about {usd(plan)} per contract a month;
+          the goal needs {usd(pace)} across your {contracts} contracts, so the picks take no more risk than that needs.</span>
+      ) : (
+        <span><strong>Short of your {usd(goal)} monthly goal.</strong> The best calls up to a {Math.round(deltaMax * 100)}% chance of being
+          called earn about {usd(plan)} per contract a month; the goal needs {usd(pace)}. A longer expiry window or a wider range on the
+          Strategy page may help, or the goal may be high for these shares.</span>
+      )}
     </div>
   )
 }

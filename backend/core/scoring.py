@@ -99,7 +99,14 @@ def pick_for_strategy(df: pd.DataFrame, config: ScannerConfig, goal_pace: float 
     pool = low_end if not low_end.empty else eligible.nsmallest(1, "delta")
     balanced = pool.sort_values(["monthly_per_contract", "delta"], ascending=[False, True]).iloc[0]
 
-    others = eligible.drop(index=balanced.name) if len(eligible) > 1 else eligible
+    # Income is the higher-premium side: at least the balanced pick's delta and monthly income
+    others = eligible[
+        (eligible["delta"] >= balanced["delta"])
+        & (eligible["monthly_per_contract"] >= balanced["monthly_per_contract"])
+        & (eligible.index != balanced.name)
+    ]
+    if others.empty:
+        others = eligible.loc[[balanced.name]]
     w = config.income_weight
     blend = others["monthly_per_contract"] * w + float(balanced["monthly_per_contract"]) * (1 - w)
     income = None

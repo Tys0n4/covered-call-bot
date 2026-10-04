@@ -10,7 +10,12 @@ export function splitContracts(total, incomeWeight) {
 
 export const DEFAULT_STRATEGY = {
   income_weight: 0.70,             // share of contracts sold as Income picks
-  profit_capture_target_pct: 80,   // "Buy back now" once this much premium is kept
+  profit_capture_target_pct: 85,   // "Buy back now" once this much premium is kept
+  event_buyback_pct: 65,           // ...or this much when earnings / a Fed meeting comes before expiry
   buyback_budget_pct: 0.15,        // part of each premium set aside for buybacks
   monthly_goal: 0,                 // premium goal per month in dollars (0 = off)
+  delta_min: 0.20,                 // sell calls with a 20-30% chance of being called
+  delta_max: 0.30,
+  min_dte: 14,                     // expiring in 14-30 days
+  max_dte: 30,
 }

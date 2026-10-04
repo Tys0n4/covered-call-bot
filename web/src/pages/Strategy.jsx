@@ -41,6 +41,22 @@ function Slider({ value, onChange, min, max, step, label }) {
   )
 }
 
+// A small whole-number box; empty or invalid shows as '' and is caught before saving
+function NumberBox({ id, value, onChange, width = 72, suffix, invalid }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-block' }}>
+      <input id={id} className="input" type="text" inputMode="numeric" autoComplete="off" maxLength={3}
+        value={Number.isFinite(value) ? String(value) : ''} aria-invalid={invalid}
+        onChange={e => {
+          const t = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '')
+          onChange(t === '' ? NaN : Number(t))
+        }}
+        style={{ width, paddingRight: suffix ? 28 : undefined, textAlign: 'right', ...(invalid ? { borderColor: 'var(--red)' } : {}) }} />
+      {suffix && <span aria-hidden="true" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>{suffix}</span>}
+    </span>
+  )
+}
+
 // 1000 -> '1000', 0 -> '' (empty box shows the placeholder)
 const goalToText = g => (g > 0 ? String(Math.round(g)) : '')
 
@@ -125,6 +141,10 @@ export default function Strategy() {
 
   const incomePct = Math.round(draft.income_weight * 100)
   const reservePct = Math.round(draft.buyback_budget_pct * 100)
+  const dMin = Math.round(draft.delta_min * 100), dMax = Math.round(draft.delta_max * 100)
+  const deltaErr = !(dMin >= 5 && dMax <= 60 && dMin < dMax)
+  const dteErr = !(draft.min_dte >= 1 && draft.max_dte <= 120 && draft.min_dte < draft.max_dte)
+  const invalid = deltaErr || dteErr
 
   return (
     <div className="fade-up">
@@ -140,6 +160,34 @@ export default function Strategy() {
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* 0. Which calls to sell */}
+        <Section title="Which calls to sell" tip={TERMS.delta} hint="The Scanner only considers calls in this range. Balanced picks sit near the low end; income picks go only as high as your monthly goal needs.">
+          <div className="sell-rules">
+            <div>
+              <div className="label" id="delta-label">Chance of being called (delta)</div>
+              <div className="range-pair" role="group" aria-labelledby="delta-label">
+                <NumberBox id="delta-min" value={dMin} suffix="%" invalid={deltaErr} onChange={v => set('delta_min', v / 100)} />
+                <span className="muted">to</span>
+                <NumberBox id="delta-max" value={dMax} suffix="%" invalid={deltaErr} onChange={v => set('delta_max', v / 100)} />
+              </div>
+              {deltaErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use a range between 5% and 60%, low to high.</div>}
+            </div>
+            <div>
+              <div className="label" id="dte-label">Expiring in</div>
+              <div className="range-pair" role="group" aria-labelledby="dte-label">
+                <NumberBox id="dte-min" value={draft.min_dte} invalid={dteErr} onChange={v => set('min_dte', v)} />
+                <span className="muted">to</span>
+                <NumberBox id="dte-max" value={draft.max_dte} invalid={dteErr} onChange={v => set('max_dte', v)} />
+                <span className="muted">days</span>
+              </div>
+              {dteErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use 1 to 120 days, shortest first.</div>}
+            </div>
+          </div>
+          <div className="hint" style={{ marginTop: 12 }}>
+            When earnings, a Fed meeting, or earnings from big companies in the same industry come before expiry, picks stay near {dMin}%.
+          </div>
+        </Section>
+
         <div className="grid-2">
           {/* 1. Split */}
           <Section title="Income vs. balanced split" tip={`${TERMS.income} ${TERMS.balanced}`} hint="How your contracts are divided when the app recommends a trade.">
@@ -171,9 +219,17 @@ export default function Strategy() {
             <div style={{ fontSize: 15, marginBottom: 10 }}>
               Buy back at <strong style={{ color: 'var(--green)' }}>{draft.profit_capture_target_pct}%</strong> of premium kept
             </div>
-            <Slider label="Buyback target" value={draft.profit_capture_target_pct} min={50} max={95} step={5} onChange={v => set('profit_capture_target_pct', v)} />
+            <Slider label="Buyback target" value={draft.profit_capture_target_pct} min={50} max={95} step={5}
+              onChange={v => setDraft(d => ({ ...d, profit_capture_target_pct: v, event_buyback_pct: Math.min(d.event_buyback_pct, v) }))} />
             <div className="hint" style={{ marginTop: 10 }}>
               Example: sold for $500 → buy back once it costs {money(500 * (1 - draft.profit_capture_target_pct / 100), 0)} or less.
+            </div>
+            <div style={{ fontSize: 15, margin: '18px 0 10px' }}>
+              Before earnings or a Fed meeting: <strong style={{ color: 'var(--green)' }}>{draft.event_buyback_pct}%</strong>
+            </div>
+            <Slider label="Buyback target before earnings or a Fed meeting" value={draft.event_buyback_pct} min={30} max={draft.profit_capture_target_pct} step={5} onChange={v => set('event_buyback_pct', v)} />
+            <div className="hint" style={{ marginTop: 10 }}>
+              Buying back a little earlier avoids holding through the jump these events can cause.
             </div>
           </Section>
 
@@ -251,7 +307,8 @@ export default function Strategy() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {error && <span style={{ color: 'var(--red)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={14} /> {error}</span>}
           <button className="btn-secondary" onClick={() => { setDraft(saved); setGoalText(goalToText(saved.monthly_goal)); setError(null) }} disabled={!dirty || saving}>Discard</button>
-          <button className="btn-primary" onClick={handleSave} disabled={!dirty || saving}>
+          {invalid && <span style={{ color: 'var(--red)', fontSize: 13 }}>Fix the highlighted boxes first</span>}
+          <button className="btn-primary" onClick={handleSave} disabled={!dirty || saving || invalid}>
             {saving ? <><span className="spinner" /> Saving…</> : 'Save strategy'}
           </button>
         </div>
