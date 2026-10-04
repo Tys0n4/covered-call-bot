@@ -1,18 +1,16 @@
 # config.py
 from dataclasses import dataclass
 
-# Strikes closer than this to the stock price are never considered
-MIN_STRIKE_PCT = 0.15
 
 
 @dataclass(frozen=True)
 class ScannerConfig:
     # --- DTE window ---
-    min_dte: int = 20
-    max_dte: int = 38
+    min_dte: int = 14
+    max_dte: int = 30
 
     # --- Strike constraints ---
-    min_strike_pct_above_current: float = MIN_STRIKE_PCT   # 15% OTM minimum
+    min_strike_pct_above_current: float = 0.0   # optional extra floor; the delta range is the main risk rule
     max_strike_multiple: float = 1.40
     exclude_below_cost: bool = False             # skip strikes under your average cost per share
     avoid_earnings: bool = False                 # skip expiries on or after the next earnings date
@@ -27,14 +25,19 @@ class ScannerConfig:
 
     # --- Greeks ---
     risk_free_rate: float = 0.04
-    target_delta: float = 0.12              # balanced pick aims for ~12% chance of being called (fits the 15%+ distance)
+    # Sell calls with this chance of being called (delta). Balanced picks sit near the
+    # low end, income picks go as high as the monthly goal needs, never past the top.
+    delta_min: float = 0.20
+    delta_max: float = 0.30
 
     # --- Allocation ---
     income_weight: float = 0.70
 
     # --- Buyback / management ---
     buyback_budget_pct: float = 0.15
-    profit_capture_target_pct: float = 80.0
+    profit_capture_target_pct: float = 85.0
+    # When earnings or a Fed meeting comes before expiry, buy back once this much is kept
+    event_buyback_pct: float = 65.0
     # Past the target, a call this close to expiry with the stock this far below the
     # strike is better left to expire: buying back mostly pays the spread and fees
     let_expire_days: int = 7

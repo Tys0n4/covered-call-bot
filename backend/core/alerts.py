@@ -109,7 +109,15 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
-def buyback_message(ready: list[dict], target_pct: float) -> dict:
+def _event_line(event: dict | None) -> str:
+    if not event:
+        return ""
+    day = datetime.strptime(event["date"], "%Y-%m-%d").strftime("%b %-d")
+    what = "Earnings" if event["kind"] == "earnings" else "The Fed's rate decision"
+    return f"{what} on {day} comes before expiry, so the earlier target applies.\n"
+
+
+def buyback_message(ready: list[dict]) -> dict:
     """One Discord message listing every call that just became ready to buy back."""
     embeds = []
     for c in ready[:10]:                     # Discord allows 10 embeds per message
@@ -117,8 +125,9 @@ def buyback_message(ready: list[dict], target_pct: float) -> dict:
             "title": f"Buy back now: {c['ticker']} {_money(c['strike'])} call",
             "color": GREEN,
             "description": (
-                f"You've kept **{c['profit_capture_pct']:.0f}%** of the premium (your target is {target_pct:.0f}%).\n"
-                f"Buying back {_plural(c['contracts'], 'contract')} costs about **{_money(c['cost_to_close'])}**."
+                f"You've kept **{c['profit_capture_pct']:.0f}%** of the premium (your target is {c['target_pct']:.0f}%).\n"
+                + _event_line(c.get("event"))
+                + f"Buying back {_plural(c['contracts'], 'contract')} costs about **{_money(c['cost_to_close'])}**."
             ),
             "fields": [
                 {"name": "Expires", "value": c["expiry"], "inline": True},
@@ -165,14 +174,14 @@ def check_and_alert(*, force: bool = False) -> dict:
 
     ready = [
         {**pos, "profit_capture_pct": r.profit_capture_pct, "current_price": r.current_option_price,
-         "cost_to_close": r.cost_to_close}
+         "cost_to_close": r.cost_to_close, "target_pct": r.target_pct, "event": r.event}
         for pos, r in zip(open_positions, results, strict=True)
         if r.should_buy_back and r.current_option_price > 0 and not pos.get("buyback_alerted_at")
     ]
     if not ready:
         return {"status": "ok", "checked": len(open_positions), "sent": 0}
 
-    send_discord(settings["discord_webhook"], buyback_message(ready, config.profit_capture_target_pct))
+    send_discord(settings["discord_webhook"], buyback_message(ready))
     with get_engine().begin() as conn:
         conn.execute(update(positions).where(positions.c.id.in_([c["id"] for c in ready])).values(buyback_alerted_at=_now()))
     log.info("Sent buy-back alert for %d call(s)", len(ready))

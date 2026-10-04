@@ -108,9 +108,10 @@ def test_below_the_target_keep_holding():
 
 
 def test_manage_reports_the_action(client, nvda):
-    expiry = (date.today() + timedelta(days=25)).isoformat()
-    client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=1, entry_price=20.0,
-                                        premium_total=2000, allocation_type="Income"))
+    from core.market_hours import market_today     # the app counts days in New York time
+    expiry = (date.fromisoformat(market_today()) + timedelta(days=25)).isoformat()
+    client.post("/positions", json=dict(ticker="NVDA", expiry=expiry, strike=125, contracts=1, entry_price=25.0,
+                                        premium_total=2500, allocation_type="Income"))
     e = client.get("/manage").json()["positions"][0]
     assert e["action"] == "buy_back" and e["should_buy_back"] is True
     assert e["stock_price"] == 100.0 and e["days_left"] == 25

@@ -46,6 +46,8 @@ class OpenCoveredCall:
     days_left: int | None = None    # calendar days until expiry
     stock_price: float | None = None
     cost_to_close: float = 0.0      # ask × shares + commission, in dollars
+    target_pct: float = 0.0         # the buy-back target applied (lower before an event)
+    event: dict | None = None       # {"kind": "earnings" | "fed", "date"} before expiry, if any
 
 
 @dataclass
@@ -60,3 +62,4 @@ class ScanResult:
     events: dict = field(default_factory=dict)   # upcoming earnings_date / ex_dividend_date
     fee_per_contract: float = 0.0   # commission per contract used for the estimates
     premium_check: dict | None = None   # rich / normal / thin (see volatility.py)
+    plan_per_contract: float = 0.0      # the picks' blended monthly income per contract

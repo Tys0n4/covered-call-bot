@@ -9,7 +9,8 @@ from core.quotes import select_quote, QuoteMode
 from core.models import OpenCoveredCall
 from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.fees import typical_fee_per_contract
-from core.market_data import get_current_price
+from core.market_data import get_current_price, get_events
+from core.events import fed_meetings_between
 from core.market_hours import market_today
 
 log = logging.getLogger(__name__)
@@ -68,13 +69,16 @@ def evaluate_position(
     stock_price: float | None = None,
     fee_per_contract: float = 0.0,
     today: str | None = None,
+    event: dict | None = None,
 ) -> OpenCoveredCall:
     """
     Recommend an action for one open call:
-      buy_back   — you've kept at least your target share of the premium
+      buy_back   — you've kept at least your target share of the premium; when
+                   earnings or a Fed meeting comes before expiry (event), the
+                   lower event target applies, to avoid holding through the jump
       let_expire — past the target, but it expires within a week with the stock
-                   well below the strike: buying back would mostly pay the spread
-                   and commission for very little risk removed
+                   well below the strike and no event in between: buying back would
+                   mostly pay the spread and commission for very little risk removed
       hold       — not at the target yet (or no price to judge by)
     """
     entry_price = float(position["entry_price"])
@@ -82,14 +86,19 @@ def evaluate_position(
     strike = float(position["strike"])
     days_left = (date.fromisoformat(position["expiry"]) - date.fromisoformat(today or market_today())).days
 
+    target = config.profit_capture_target_pct
+    if event:
+        target = min(target, config.event_buyback_pct)
+
     profit_capture = 0.0
     action = "hold"
     if current_option_price > 0:
         # (With no price, don't treat the call as worth $0 = 100% kept.)
         profit_capture = calculate_profit_capture(entry_price, current_option_price)
-        if profit_capture >= config.profit_capture_target_pct:
+        if profit_capture >= target:
             far_below = bool(stock_price) and strike >= stock_price * (1 + config.let_expire_cushion)
-            action = "let_expire" if days_left <= config.let_expire_days and far_below else "buy_back"
+            quiet = event is None
+            action = "let_expire" if quiet and days_left <= config.let_expire_days and far_below else "buy_back"
 
     return OpenCoveredCall(
         ticker=position["ticker"],
@@ -104,7 +113,20 @@ def evaluate_position(
         days_left=days_left,
         stock_price=stock_price,
         cost_to_close=round(current_option_price * contracts * 100 + fee_per_contract * contracts, 2),
+        target_pct=target,
+        event=event,
     )
+
+
+def next_event(ticker: str, expiry: str, today: str | None = None) -> dict | None:
+    """The first earnings or Fed decision from today until expiry: {"kind", "date"}, or None."""
+    today = today or market_today()
+    found = []
+    earnings = get_events(ticker).get("earnings_date")
+    if earnings and today <= earnings <= expiry:
+        found.append({"kind": "earnings", "date": earnings})
+    found += [{"kind": "fed", "date": d} for d in fed_meetings_between(today, expiry)]
+    return min(found, key=lambda e: e["date"]) if found else None
 
 
 def evaluate_positions(
@@ -132,6 +154,7 @@ def evaluate_positions(
         if pos["ticker"] not in stock_prices:
             stock_prices[pos["ticker"]] = get_current_price(pos["ticker"])
         results.append(evaluate_position(pos, current_px, config=config,
-                                         stock_price=stock_prices[pos["ticker"]], fee_per_contract=fee))
+                                         stock_price=stock_prices[pos["ticker"]], fee_per_contract=fee,
+                                         event=next_event(pos["ticker"], pos["expiry"])))
 
     return results

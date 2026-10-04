@@ -1,7 +1,7 @@
 # scanner.py
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 
@@ -14,7 +14,8 @@ from core.calculations import add_option_metrics
 from core.greeks import add_estimated_delta
 from core.fees import typical_fee_per_contract
 from core.volatility import premium_check
-from core.scoring import score_options, pick_best_options
+from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, score_options
+from core.events import fed_meetings_between, related_earnings
 from core.market_hours import is_market_open
 
 
@@ -47,12 +48,21 @@ def _fmt_day(iso: str) -> str:
 
 
 def _add_event_flags(df: pd.DataFrame, events: dict) -> pd.DataFrame:
-    """Mark options whose expiry is on/after the next earnings or ex-dividend date."""
+    """
+    Mark options whose expiry is on/after the next earnings or ex-dividend date,
+    a Fed decision, or earnings from the industry's leaders / your stocks in it.
+    spans_event = anything that can make the stock jump (not ex-dividend).
+    """
     df = df.copy()
     earnings, ex_div = events.get("earnings_date"), events.get("ex_dividend_date")
+    fed = events.get("fed_dates") or []
+    industry = events.get("industry_earnings") or []
     expiry = df["expiry"].astype(str)
     df["spans_earnings"] = (expiry >= earnings) if earnings else False
     df["spans_ex_dividend"] = (expiry >= ex_div) if ex_div else False
+    df["spans_fed"] = (expiry >= fed[0]) if fed else False
+    df["spans_industry"] = (expiry >= industry[0]["date"]) if industry else False
+    df["spans_event"] = df["spans_earnings"] | df["spans_fed"] | df["spans_industry"]
     return df
 
 
@@ -64,6 +74,19 @@ def _event_warnings(ticker: str, picks, events: dict) -> list[str]:
             f"{ticker} reports earnings on {_fmt_day(events['earnings_date'])}, before your pick's expiry. "
             "The stock can jump on earnings, which raises the chance your shares are called away. "
             "Turn on \"Skip expiries that span earnings\" to avoid it."
+        )
+    if any(bool(p.get("spans_fed")) for p in picks):
+        out.append(
+            f"The Fed announces its rate decision on {_fmt_day(events['fed_dates'][0])}, before your pick's "
+            "expiry. Rate news can move the whole market, so the picks stay near the safe end of your range."
+        )
+    if any(bool(p.get("spans_industry")) for p in picks):
+        first = events["industry_earnings"][0]
+        names = ", ".join(e["ticker"] for e in events["industry_earnings"][:3])
+        out.append(
+            f"Others in {ticker}'s industry report earnings before your pick's expiry ({names}; first on "
+            f"{_fmt_day(first['date'])}). Their results often move the whole industry, so the picks stay "
+            "near the safe end of your range."
         )
     if any(bool(p.get("spans_ex_dividend")) for p in picks):
         out.append(
@@ -77,7 +100,14 @@ def _event_warnings(ticker: str, picks, events: dict) -> list[str]:
 def scan_covered_calls(
     position: PortfolioPosition,
     config: ScannerConfig = DEFAULT_CONFIG,
+    *,
+    holdings: list[str] | None = None,
+    goal_pace: float = 0.0,
 ) -> ScanResult:
+    """
+    holdings: your tickers (to flag earnings from your stocks in the same industry).
+    goal_pace: monthly income per contract your goal needs (0 = no goal).
+    """
     warnings: list[str] = []
 
     current_price = get_current_price(position.ticker)
@@ -127,7 +157,13 @@ def scan_covered_calls(
         use_last_price=not quotes_live,
     )
 
-    events = get_events(position.ticker)
+    events = dict(get_events(position.ticker))
+    today = date.today().isoformat()
+    last_expiry = str(raw_calls["expiry"].max())
+    events["fed_dates"] = fed_meetings_between(today, last_expiry)
+    events["industry_earnings"] = [
+        e for e in related_earnings(position.ticker, holdings or [], today) if e["date"] <= last_expiry
+    ]
     check = premium_check(position.ticker, raw_calls, current_price)
     if not filtered.empty:
         filtered = _add_event_flags(filtered, events)
@@ -176,9 +212,29 @@ def scan_covered_calls(
             "so the balanced pick may be less accurate."
         )
 
-    scored = score_options(enriched, config=config)
+    scored = add_monthly_income(score_options(enriched, config=config))
     scored["below_cost_basis"] = (position.avg_cost > 0) & (scored["strike"] < position.avg_cost)
-    income_pick, balanced_pick = pick_best_options(scored)
+
+    # Your delta range is the main risk rule: only those options are candidates
+    in_range = in_delta_range(scored, config)
+    if in_range.empty:
+        return ScanResult(
+            position=position, current_price=current_price, candidates=pd.DataFrame(),
+            income_pick=None, balanced_pick=None, quotes_live=quotes_live, events=events,
+            warnings=warnings + [
+                f"None of the {len(scored)} options in your expiry window has a "
+                f"{config.delta_min:.0%}–{config.delta_max:.0%} chance of being called. "
+                "Widen the range or the expiry window on the Strategy page."
+            ],
+            fee_per_contract=fee, premium_check=check,
+        )
+    income_pick, balanced_pick, plan_per_contract = pick_for_strategy(in_range, config, goal_pace)
+    if income_pick is None:
+        warnings.append(
+            f"Every option in your range expires after earnings or a Fed meeting, and none is near the safe "
+            f"end ({config.delta_min:.0%}). Try a shorter expiry window, or wait until after the event."
+        )
+    scored = in_range
 
     for label, pick in (("income", income_pick), ("balanced", balanced_pick)):
         w = _below_cost_warning(label, pick, position.avg_cost)
@@ -197,4 +253,5 @@ def scan_covered_calls(
         events=events,
         fee_per_contract=fee,
         premium_check=check,
+        plan_per_contract=plan_per_contract,
     )

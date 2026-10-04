@@ -14,6 +14,7 @@ import yfinance
 from core import cache
 from core import db
 from core import scanner
+from core import events
 
 # Fake stock prices; any other ticker "doesn't exist"
 PRICES = {"NVDA": 100.0, "AAPL": 200.0}
@@ -26,6 +27,9 @@ CLOSES: dict[tuple[str, str], float] = {}
 
 # Fake recent price history (oldest first) per ticker, for realized volatility; tests may set it
 HISTORY: dict[str, list[float]] = {}
+
+# Fake Yahoo info (e.g. {"industry": "Semiconductors"}) per ticker; tests may set it
+INFO: dict[str, dict] = {}
 
 
 def fake_expiries() -> tuple[str, ...]:
@@ -51,6 +55,10 @@ class FakeTicker:
     @property
     def fast_info(self):
         return {"last_price": PRICES.get(self.symbol)}
+
+    @property
+    def info(self):
+        return INFO.get(self.symbol, {})
 
     @property
     def calendar(self):
@@ -82,6 +90,9 @@ def fake_market(monkeypatch):
     EVENTS.clear()
     CLOSES.clear()
     HISTORY.clear()
+    INFO.clear()
+    # No real Fed calendar unless a test sets one, so results don't depend on today's date
+    monkeypatch.setattr(events, "FED_MEETINGS", ())
     monkeypatch.setattr(yfinance, "Ticker", FakeTicker)
     monkeypatch.setattr(scanner, "get_current_price", lambda t: PRICES.get(t))
     monkeypatch.setattr(scanner, "is_market_open", lambda: True)

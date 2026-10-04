@@ -6,6 +6,9 @@ Your strategy settings (edited on the Strategy page), stored in the database.
 - profit_capture_target_pct: say "Buy back now" once this % of the premium is kept
 - buyback_budget_pct:        part of each premium set aside for buying calls back
 - monthly_goal:              premium goal per month in dollars (0 = off)
+- delta_min / delta_max:     sell calls with this chance of being called (0.20–0.30)
+- min_dte / max_dte:         expiries this many days out (14–30)
+- event_buyback_pct:         buy back at this % kept when earnings or a Fed meeting comes before expiry
 
 Until you save something, the defaults from config.py are used.
 """
@@ -19,7 +22,11 @@ from sqlalchemy import insert, select, update
 from core.config import DEFAULT_CONFIG, ScannerConfig
 from core.db import get_engine, strategy
 
-FIELDS = ("income_weight", "profit_capture_target_pct", "buyback_budget_pct", "monthly_goal")
+FIELDS = (
+    "income_weight", "profit_capture_target_pct", "buyback_budget_pct", "monthly_goal",
+    "delta_min", "delta_max", "min_dte", "max_dte", "event_buyback_pct",
+)
+INT_FIELDS = ("min_dte", "max_dte")
 
 
 def default_strategy() -> dict:
@@ -28,21 +35,31 @@ def default_strategy() -> dict:
         "profit_capture_target_pct": DEFAULT_CONFIG.profit_capture_target_pct,
         "buyback_budget_pct":        DEFAULT_CONFIG.buyback_budget_pct,
         "monthly_goal":              0.0,
+        "delta_min":                 DEFAULT_CONFIG.delta_min,
+        "delta_max":                 DEFAULT_CONFIG.delta_max,
+        "min_dte":                   DEFAULT_CONFIG.min_dte,
+        "max_dte":                   DEFAULT_CONFIG.max_dte,
+        "event_buyback_pct":         DEFAULT_CONFIG.event_buyback_pct,
     }
 
 
+def _clean(values: dict) -> dict:
+    return {k: (int(round(v)) if k in INT_FIELDS else float(v)) for k, v in values.items()}
+
+
 def load_strategy() -> dict:
-    """Saved strategy, or the defaults if nothing has been saved yet."""
+    """Saved strategy; anything not saved yet (or added after you saved) uses the default."""
     with get_engine().connect() as conn:
         row = conn.execute(select(strategy).where(strategy.c.id == 1)).mappings().first()
-    if row is None:
-        return default_strategy()
-    return {k: float(row[k]) for k in FIELDS}
+    out = default_strategy()
+    if row is not None:
+        out.update({k: row[k] for k in FIELDS if row[k] is not None})
+    return _clean(out)
 
 
 def save_strategy(values: dict) -> dict:
-    """Save the strategy (all four fields) and return what was stored."""
-    row = {k: float(values[k]) for k in FIELDS}
+    """Save the strategy; fields left out keep their saved (or default) value. Returns what's stored."""
+    row = _clean({**load_strategy(), **{k: v for k, v in values.items() if k in FIELDS and v is not None}})
     with get_engine().begin() as conn:
         if conn.execute(update(strategy).where(strategy.c.id == 1).values(**row)).rowcount == 0:
             conn.execute(insert(strategy).values(id=1, **row))
@@ -57,6 +74,11 @@ def effective_config(base: ScannerConfig = DEFAULT_CONFIG) -> ScannerConfig:
         income_weight=s["income_weight"],
         profit_capture_target_pct=s["profit_capture_target_pct"],
         buyback_budget_pct=s["buyback_budget_pct"],
+        delta_min=s["delta_min"],
+        delta_max=s["delta_max"],
+        min_dte=s["min_dte"],
+        max_dte=s["max_dte"],
+        event_buyback_pct=s["event_buyback_pct"],
     )
 
 

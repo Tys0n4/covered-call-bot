@@ -22,14 +22,15 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 ## Features
 
 - **Live options scanning** — options chains from Yahoo Finance (yfinance); stock price from Alpha Vantage with an automatic Yahoo fallback; NYSE holidays and early closes handled
-- **Candidate scoring** — ranks options by annualized yield, delta proximity, bid-ask spread quality, and volume
+- **Baseline strategy** — calls with a 20–30% chance of being called (delta 0.20–0.30), 14–30 days out, picked to reach your monthly goal with as little risk as possible; every part is editable on the Strategy page
+- **Candidate scoring** — ranks options by monthly income after fees, delta, bid-ask spread quality, and volume
 - **Smart allocation** — maintains a 70/30 income/balanced contract split per ticker, accounting for already-open positions
 - **Position management** — tracks open covered call positions and evaluates buyback opportunities based on profit capture %
 - **Buy-back alerts** — a Discord message when an open call reaches your buy-back target, checked every 15 minutes during market hours
 - **Real fills and fees** — record the price your broker actually filled and your commissions when you sell, buy back or roll
 - **Rolling** — buy back a call and sell a new one on the same shares in one step
 - **Assignment tracking** — record shares called away (early or at expiry); calls that expired in the money are flagged for review
-- **Earnings and ex-dividend warnings** — options whose expiry spans the next earnings or ex-dividend date are flagged, with an optional filter to skip earnings
+- **Event awareness** — expiries that span earnings, a Fed rate decision, or earnings from the stock's industry leaders and your other stocks in the same industry are flagged, and picks lean to the safe end of your range; ex-dividend dates are flagged too
 - **Performance** — realized results by month, net after buybacks and fees, gains on shares called away, and yearly return on capital
 - **Multi-ticker support** — manage covered calls across multiple stock positions independently
 - **REST API** — FastAPI backend with auto-generated interactive docs at `/docs`
@@ -95,6 +96,7 @@ covered-call-bot/
 │   │   ├── assignment.py     # Expired calls that were probably assigned
 │   │   ├── performance.py    # Realized results and return on capital
 │   │   ├── market_data.py    # Stock price, earnings/ex-dividend dates
+│   │   ├── events.py         # Fed meeting dates, industry leaders, related earnings
 │   │   ├── options_data.py   # Option chains from Yahoo
 │   │   ├── market_hours.py   # NYSE hours, holidays, early closes
 │   │   ├── db.py             # Database tables (Postgres, or SQLite locally)
@@ -181,20 +183,25 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ### Scanning
 
-The scanner fetches the full options chain for a ticker within a configurable DTE (days to expiry) window. Each candidate is filtered by:
+The scanner fetches the options chain for a ticker within your expiry window (14–30 days by default). Each candidate is filtered by:
 
-- Minimum strike % above current price (default and lowest allowed: 15% OTM)
+- Your delta range: the chance of being called, 20%–30% by default. This is the main risk rule.
 - Minimum premium, volume, and open interest
+- Optional minimum distance above the stock price (off by default; set it on the Scanner)
 - Maximum bid-ask spread (35% of the mid price)
 
 Each option is priced at what you can realistically get when selling: a quarter of the way from the bid to the ask, not the midpoint, so wide spreads cost you in the ranking. Your usual commission per contract is subtracted (learned from the fees you've recorded, $0.65 until then), and yields are on what's left. Options that pay less than the commission are dropped.
 
 Each scan also says whether premiums are **rich**, **normal** or **thin** right now: it compares the yearly move near-the-money options are priced for (implied volatility) with how much the stock actually moved over the last 20 trading days. Rich (implied at least 1.25× realized) is a good time to sell; thin (implied below realized) means you're paid less than the risk, and waiting may pay more.
 
-Surviving candidates are scored on two dimensions:
+From the options in your range the scanner picks two:
 
-- **Income score** — weighted by annualized yield and volume
-- **Balanced score** — weighted by delta proximity to a fixed 12% target, upside %, and annualized yield
+- **Balanced** — the best monthly income near the safe end of your range (within 3 points of your lowest delta).
+- **Income** — the lowest-delta option that, blended with the balanced pick at your income/balanced split, reaches your monthly goal. Your goal is spread across every contract your holdings can cover, so each contract has a monthly pace to hit. If no option in range reaches it, the best payer is picked and the Scanner says you're short. With no goal set, the best payer in range is picked.
+
+Monthly income is the net premium per contract ÷ days to expiry × 30.4.
+
+**Events.** When earnings, a Fed rate decision (FOMC dates in `backend/core/events.py`), or earnings from the industry's largest companies or your other stocks in the same industry fall before an option's expiry, it's flagged and both picks stay within 3 points of your lowest delta. Industry comes from Yahoo Finance; the leaders list is in `backend/core/events.py`. Add each year's Fed dates there when the Fed publishes them.
 
 ### Allocation
 
@@ -204,8 +211,8 @@ The planner maintains a **70/30 income/balanced split** across the total availab
 
 The management module fetches the current ask price for each open position and calculates profit captured vs the original entry price. Each call gets one of three recommendations:
 
-- **Buy back now**: you've kept at least your target share of the premium (80% by default, set on the Strategy page).
-- **Let it expire**: past the target, but it expires within a week with the stock at least 5% below the strike. Buying back would mostly pay the spread and commission for very little risk removed.
+- **Buy back now**: you've kept at least your target share of the premium (85% by default). If earnings or a Fed decision comes before the call expires, the earlier event target applies (65% by default). Both are set on the Strategy page.
+- **Let it expire**: past the target, but it expires within a week with the stock at least 5% below the strike and no event before expiry. Buying back would mostly pay the spread and commission for very little risk removed.
 - **Keep holding**: not at the target yet.
 
 Buyback costs include your usual commission. Discord alerts are only sent for "Buy back now".
@@ -234,21 +241,23 @@ The page opens with the honest bottom line: what selling calls added **compared 
 
 ## Configuration
 
-Scanner defaults live in `backend/core/config.py`; your split, buyback target, reserve and monthly goal are edited on the Strategy page:
+Defaults live in `backend/core/config.py`. Your delta range, expiry window, split, buy-back targets, reserve and monthly goal are edited on the Strategy page and override them:
 
 ```python
 @dataclass(frozen=True)
 class ScannerConfig:
-    min_dte: int = 20
-    max_dte: int = 38
-    min_strike_pct_above_current: float = 0.15
+    min_dte: int = 14
+    max_dte: int = 30
+    min_strike_pct_above_current: float = 0.0   # optional, off by default
     min_premium: float = 0.05
     min_volume: int = 10
     min_open_interest: int = 50
-    target_delta: float = 0.12
+    delta_min: float = 0.20
+    delta_max: float = 0.30
     income_weight: float = 0.70
     buyback_budget_pct: float = 0.15
-    profit_capture_target_pct: float = 80.0
+    profit_capture_target_pct: float = 85.0
+    event_buyback_pct: float = 65.0              # before earnings or a Fed decision
 ```
 
 ---
