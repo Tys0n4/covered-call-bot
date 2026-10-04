@@ -105,6 +105,14 @@ def _money(v: float) -> str:
     return f"${v:,.2f}"
 
 
+def _limit_line(c: dict) -> str:
+    """The limit price to buy back at: the target at the closest cent."""
+    if not c.get("buyback_price"):
+        return ""
+    return (f"Buy back at **{_money(c['buyback_price'])}**/share or less, the closest cent to your target "
+            f"({c['buyback_kept_pct']:.1f}% kept).\n")
+
+
 def _plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
@@ -126,6 +134,7 @@ def buyback_message(ready: list[dict]) -> dict:
             "color": GREEN,
             "description": (
                 f"You've kept **{c['profit_capture_pct']:.0f}%** of the premium (your target is {c['target_pct']:.0f}%).\n"
+                + _limit_line(c)
                 + _event_line(c.get("event"))
                 + f"Buying back {_plural(c['contracts'], 'contract')} costs about **{_money(c['cost_to_close'])}**."
             ),
@@ -174,7 +183,8 @@ def check_and_alert(*, force: bool = False) -> dict:
 
     ready = [
         {**pos, "profit_capture_pct": r.profit_capture_pct, "current_price": r.current_option_price,
-         "cost_to_close": r.cost_to_close, "target_pct": r.target_pct, "event": r.event}
+         "cost_to_close": r.cost_to_close, "target_pct": r.target_pct, "event": r.event,
+         "buyback_price": r.buyback_price, "buyback_kept_pct": r.buyback_kept_pct}
         for pos, r in zip(open_positions, results, strict=True)
         if r.should_buy_back and r.current_option_price > 0 and not pos.get("buyback_alerted_at")
     ]

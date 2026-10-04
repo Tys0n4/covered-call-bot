@@ -7,7 +7,7 @@ import PageHeader from '../components/PageHeader'
 import { useToast } from '../context/ToastContext'
 import InfoTip from '../components/InfoTip'
 import AlertsSection from '../components/AlertsSection'
-import { DEFAULT_STRATEGY, splitContracts } from '../lib/strategy'
+import { DEFAULT_STRATEGY, buybackPrice, splitContracts } from '../lib/strategy'
 import { TERMS } from '../lib/terms'
 import { money, plural } from '../lib/format'
 
@@ -215,14 +215,16 @@ export default function Strategy() {
           </Section>
 
           {/* 2. Buyback target */}
-          <Section title="When to buy back" tip={TERMS.profit} hint="Positions shows “Buy back now” once you've kept this much of a call's premium.">
+          <Section title="When to buy back" tip={TERMS.profit} hint="Positions shows “Buy back now” once a call's price falls to where you'd keep this much of its premium.">
             <div style={{ fontSize: 15, marginBottom: 10 }}>
               Buy back at <strong style={{ color: 'var(--green)' }}>{draft.profit_capture_target_pct}%</strong> of premium kept
             </div>
             <Slider label="Buyback target" value={draft.profit_capture_target_pct} min={50} max={95} step={5}
               onChange={v => setDraft(d => ({ ...d, profit_capture_target_pct: v, event_buyback_pct: Math.min(d.event_buyback_pct, v) }))} />
             <div className="hint" style={{ marginTop: 10 }}>
-              Example: sold for $500 → buy back once it costs {money(500 * (1 - draft.profit_capture_target_pct / 100), 0)} or less.
+              Example: sold at $0.34 a share → buy back at {money(buybackPrice(0.34, draft.profit_capture_target_pct))} or less.
+              Options trade in whole cents, so this is the closest cent to {draft.profit_capture_target_pct}%
+              ({((1 - buybackPrice(0.34, draft.profit_capture_target_pct) / 0.34) * 100).toFixed(1)}% kept).
             </div>
             <div style={{ fontSize: 15, margin: '18px 0 10px' }}>
               Before earnings or a Fed meeting: <strong style={{ color: 'var(--green)' }}>{draft.event_buyback_pct}%</strong>

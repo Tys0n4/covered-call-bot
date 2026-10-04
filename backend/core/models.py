@@ -47,6 +47,8 @@ class OpenCoveredCall:
     stock_price: float | None = None
     cost_to_close: float = 0.0      # ask × shares + commission, in dollars
     target_pct: float = 0.0         # the buy-back target applied (lower before an event)
+    buyback_price: float = 0.0      # buy back at this price per share or less: the target at the closest cent
+    buyback_kept_pct: float = 0.0   # share of premium kept at buyback_price
     event: dict | None = None       # {"kind": "earnings" | "fed", "date"} before expiry, if any
 
 

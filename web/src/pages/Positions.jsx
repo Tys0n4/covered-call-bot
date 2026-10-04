@@ -71,6 +71,16 @@ function StatusPanel({ evaluation, checking, failed }) {
       <div className="progress-bar">
         <div className="progress-fill" style={{ width: `${kept}%`, background: buy || expire ? 'linear-gradient(90deg, #1fc99a, #34edb3)' : 'linear-gradient(90deg, var(--accent), var(--accent-light))' }} />
       </div>
+      {evaluation.buyback_price > 0 && (
+        <div className="buyback-line">
+          <span>
+            Buy back at <strong className="mono">{money(evaluation.buyback_price)}</strong> or less
+            <span className="dim"> ({evaluation.buyback_kept_pct.toFixed(1)}% kept)</span>
+            <InfoTip text={TERMS.buybackPrice} size={12} />
+          </span>
+          <span className="dim">Now <strong className="mono">{money(evaluation.current_option_price)}</strong></span>
+        </div>
+      )}
       <div className="hint" style={{ marginTop: 8 }}>
         {buy && ev
           ? <>{evText} comes before this call expires, so the earlier {evaluation.target_pct}% target applies. Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong> with fees and avoids holding through the jump.</>

@@ -211,7 +211,7 @@ The planner maintains a **70/30 income/balanced split** across the total availab
 
 The management module fetches the current ask price for each open position and calculates profit captured vs the original entry price. Each call gets one of three recommendations:
 
-- **Buy back now**: you've kept at least your target share of the premium (85% by default). If earnings or a Fed decision comes before the call expires, the earlier event target applies (65% by default). Both are set on the Strategy page.
+- **Buy back now**: the call's ask is at or below your **buy-back price**. That's your target share of the premium kept (85% by default) turned into a price per share: what you sold for × (1 − target), rounded to the closest cent, since options trade in whole cents. Sold at $0.34: 85% kept is $0.051, so the buy-back price is $0.05 (85.3% kept). Sold at $0.38: $0.057 rounds to $0.06 (84.2% kept), which is closer than $0.05. Half a cent rounds down, and it's never below $0.01. If earnings or a Fed decision comes before the call expires, the earlier event target applies (65% by default). Both targets are set on the Strategy page; Positions and the Discord alerts show the price to set as a limit order.
 - **Let it expire**: past the target, but it expires within a week with the stock at least 5% below the strike and no event before expiry. Buying back would mostly pay the spread and commission for very little risk removed.
 - **Keep holding**: not at the target yet.
 
