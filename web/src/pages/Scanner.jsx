@@ -374,7 +374,7 @@ export default function Scanner() {
                       <strong>Trading just opened, but option prices are about 15 minutes behind, so these are still the last session's closing prices.</strong>{' '}
                       Scan again after {liveAt} your time to see today's prices and save a trade.
                     </> : <>
-                      <strong>The market is closed, so these are last traded prices, not live quotes.</strong>{' '}
+                      <strong>The market is closed, so these are the last session's closing prices, not live quotes.</strong>{' '}
                       Use them to plan. Prices will change when trading starts{nextOpen ? ` (${nextOpen} your time)` : ''}.
                       Scan again then to save a trade.
                     </>}
@@ -523,7 +523,7 @@ export default function Scanner() {
                     Try a wider range or expiry window on the <Link to="/strategy" style={{ color: 'var(--accent-light)' }}>Strategy</Link> page,
                     or under <strong style={{ color: 'var(--text-dim)' }}>Adjust filters</strong> a lower minimum premium, volume or open interest
                     {config.min_strike_pct > 0 ? `, or a smaller distance above price (now ${Math.round(config.min_strike_pct * 100)}%)` : ''}.
-                    {lastPrices && <><br />The market is closed, so options are priced at their last trade. Ones that haven't traded recently have no price and are skipped.</>}
+                    {lastPrices && <><br />Options are priced at the last session's closing quote, or their last trade when there isn't one. Ones that haven't traded recently have no price and are skipped.</>}
                   </div>
                 </div>
               )}

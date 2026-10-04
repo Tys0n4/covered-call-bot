@@ -136,3 +136,13 @@ def test_closed_market_scan_works_when_no_option_has_a_last_trade_time(client, n
     r = client.post("/scan", json={"ticker": "NVDA"})
     assert r.status_code == 200, r.text           # used to fail comparing an all-empty date column
     assert r.json()["candidates"]
+
+
+def test_options_say_how_they_are_priced_when_not_live(client, nvda, monkeypatch):
+    monkeypatch.setattr(scanner, "delayed_quotes_live", lambda: False)
+    CBOE["NVDA"] = cboe_payload(days=(18, 25), delta_for=_delta)        # Cboe: closing bid/ask
+    assert {c["price_basis"] for c in client.post("/scan", json={"ticker": "NVDA"}).json()["candidates"]} == {"closing"}
+    CBOE.clear()
+    cache.clear()                                                        # Yahoo: last trades
+    bases = {c["price_basis"] for c in client.post("/scan", json={"ticker": "NVDA"}).json()["candidates"]}
+    assert bases == {"last_trade"}
