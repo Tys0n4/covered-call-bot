@@ -4,7 +4,7 @@ Single source of truth for how option premiums are selected from raw market data
 
 Used by:
   - filters.py   (entry premium at scan time)
-  - buyback.py   (current mark for buyback decisions)
+  - buyback.py   (what buying back costs now: mid_or_ask)
 
 QuoteResult fields
 ------------------
@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-QuoteMode = Literal["mid_or_last", "ask", "bid"]
+QuoteMode = Literal["mid_or_last", "mid_or_ask", "ask", "bid"]
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,12 @@ def select_quote(
         STALE → lastPrice when bid/ask unusable but last > 0
         BAD   → 0.0
 
-    mode='ask'  (conservative: used for buyback cost estimates)
+    mode='mid_or_ask'  (used for buy-backs: where buy orders usually fill)
+        midpoint when bid > 0, ask > 0, ask >= bid
+        ask when there's no bid (a near-worthless call: no midpoint fill to count on)
+        else lastPrice, else 0.0
+
+    mode='ask'  (conservative: what buying right now surely costs)
         ask if > 0, else lastPrice, else 0.0
 
     mode='bid'  (aggressive: least-likely-to-fill optimistic price)
@@ -54,6 +59,11 @@ def select_quote(
     b = float(bid or 0.0)
     a = float(ask or 0.0)
     last = float(last_price or 0.0)
+
+    if mode == "mid_or_ask":
+        if b > 0 and a > 0 and a >= b:
+            return QuoteResult(price=round((b + a) / 2.0, 4), source="MID", quality="LIVE", warning="")
+        mode = "ask"
 
     if mode == "ask":
         if a > 0:
