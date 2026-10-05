@@ -8,7 +8,7 @@ import {
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import {
-  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck, Copy, ArrowUpRight,
+  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck, Copy, ArrowUpRight, ChevronDown,
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
@@ -173,7 +173,7 @@ function StatusPanel({ p, evaluation, checking, failed, avgCost }) {
   )
 }
 
-function PositionCard({ p, showTicker, evaluation, checking, failed, avgCost, onClose, onRoll, onEdit, onDelete }) {
+function PositionCard({ p, showTicker, evaluation, checking, failed, avgCost, onClose, onRoll, onEdit, onDelete, onCollapse }) {
   const days = daysUntil(p.expiry)
   const buy = evaluation?.should_buy_back
   const against = againstYou(p, evaluation, avgCost)
@@ -187,6 +187,12 @@ function PositionCard({ p, showTicker, evaluation, checking, failed, avgCost, on
             <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
             {p.rolled_from && <span className="badge badge-blue">Rolled</span>}
             <span className="hint">Opened {fmtDate(p.opened_at)}</span>
+            {onCollapse && (
+              <button type="button" className="menu-btn" style={{ marginLeft: 'auto' }} onClick={onCollapse} aria-expanded="true"
+                aria-label={`Hide details for the ${money(p.strike)} ${p.ticker} call`}>
+                <ChevronDown size={18} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+            )}
           </div>
           <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>
             {money(p.strike)} call <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>
@@ -220,6 +226,60 @@ function PositionCard({ p, showTicker, evaluation, checking, failed, avgCost, on
   )
 }
 
+// One line for a call that needs nothing from you right now: how much of the
+// premium you've kept, against the buy-back target. The chevron opens the full card.
+function CompactCall({ p, showTicker, evaluation, checking, failed, onExpand }) {
+  const ev = evaluation
+  const priced = ev && ev.current_option_price > 0
+  const kept = priced ? Math.max(0, Math.min(ev.profit_capture_pct, 100)) : 0
+  const expire = ev?.action === 'let_expire'
+  return (
+    <div className="card compact-call">
+      <div className="compact-head">
+        <div className="compact-title">
+          {showTicker && <span className="ticker-tag">{p.ticker}</span>}
+          <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
+          <span className="compact-name">{money(p.strike)} call · {fmtDate(p.expiry)}</span>
+        </div>
+        <button type="button" className="menu-btn" onClick={onExpand} aria-expanded="false"
+          aria-label={`Show details for the ${money(p.strike)} ${p.ticker} call`}>
+          <ChevronDown size={18} strokeWidth={2} />
+        </button>
+      </div>
+      {priced ? (
+        <>
+          <div className="kept-bar">
+            <div className="progress-bar" style={{ height: 6 }}>
+              <div className="progress-fill" style={{ width: `${kept}%`, background: expire ? 'var(--green)' : 'var(--accent)' }} />
+            </div>
+            {ev.buyback_kept_pct > 0 && (
+              <span className="kept-mark" style={{ left: `${Math.min(ev.buyback_kept_pct, 100)}%`, background: ev.event ? 'var(--amber)' : 'var(--text)' }}
+                title={`Target: ${ev.buyback_kept_pct.toFixed(1)}% kept`} />
+            )}
+          </div>
+          <div className="compact-foot">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {expire
+                ? <span className="badge badge-blue"><Hourglass size={13} strokeWidth={2} /> Let it expire</span>
+                : <span className="badge badge-neutral">Keep holding</span>}
+              <span className="mono">{ev.profit_capture_pct.toFixed(0)}% kept</span>
+            </span>
+            {ev.buyback_price > 0 && (
+              <span className="hint">target <span className="mono">{money(ev.buyback_price)}</span> · now <span className="mono">{money(ev.current_option_price)}</span></span>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {checking && !ev
+            ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Checking the price…</>
+            : failed && !ev ? "Couldn't check prices." : 'No current price for this call. Open it for details.'}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Positions() {
   const { selected, tickers, selectTicker, refresh: refreshTickers } = useTicker()
   const toast = useToast()
@@ -238,6 +298,12 @@ export default function Positions() {
   const [editingPos, setEditingPos] = useState(null)   // Edit dialog
   const [adding, setAdding]       = useState(false)    // Add a call dialog
   const [confirm, setConfirm]     = useState(null)     // { title, body, confirmLabel, danger, run }
+  const [expanded, setExpanded]   = useState(() => new Set())  // compact calls opened to their full card
+  const toggleExpanded = id => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
 
   // Load every trade (all stocks, incl. ones you've removed); filter on screen
   const fetchKey = String(reloadKey)
@@ -334,9 +400,21 @@ export default function Positions() {
     try { await confirm.run() } catch (e) { throw new Error(apiError(e, 'Could not save that. Is the API running?'), { cause: e }) }
   }
 
-  const sortedOpen = open.slice().sort((a, b) =>
-    (evals?.[b.id]?.should_buy_back ? 1 : 0) - (evals?.[a.id]?.should_buy_back ? 1 : 0)
-    || a.expiry.localeCompare(b.expiry) || a.ticker.localeCompare(b.ticker))
+  // Ready to buy back and going against you get the full card (there's something
+  // to do); the rest are compact until opened. Soonest expiry first in each group.
+  const avgCostOf = p => tickers.find(t => t.ticker === p.ticker)?.avg_cost
+  const groupOf = p => {
+    const e = evals?.[p.id]
+    if (!e) return 'hold'
+    if (againstYou(p, e, avgCostOf(p))) return 'against'
+    return e.should_buy_back ? 'ready' : 'hold'
+  }
+  const byExpiry = (a, b) => a.expiry.localeCompare(b.expiry) || a.ticker.localeCompare(b.ticker)
+  const groups = [
+    { key: 'ready',   title: 'Ready to buy back', tone: 'var(--green)' },
+    { key: 'against', title: 'Going against you', tone: 'var(--amber)' },
+    { key: 'hold',    title: 'Holding',           tone: 'var(--text-dim)' },
+  ].map(g => ({ ...g, calls: open.filter(p => groupOf(p) === g.key).sort(byExpiry) })).filter(g => g.calls.length > 0)
 
   return (
     <div className="fade-up">
@@ -411,21 +489,27 @@ export default function Positions() {
           </EmptyState>
         ) : (
           <>
-            {evals && (
-              <div className={`callout ${readyCount > 0 ? 'callout-green' : 'callout-amber'}`} style={{ marginBottom: 16 }}>
-                {readyCount > 0
-                  ? <><CheckCircle2 size={18} strokeWidth={1.75} /> {readyCount} of {plural(open.length, 'call')} {readyCount === 1 ? 'is' : 'are'} ready to buy back.</>
-                  : expireCount > 0
+            {evals && readyCount === 0 && (
+              <div className="callout callout-amber" style={{ marginBottom: 16 }}>
+                {expireCount > 0
                     ? <><Clock3 size={18} strokeWidth={1.75} /> Nothing to buy back. {expireCount === open.length ? (expireCount === 1 ? 'It' : 'They') : plural(expireCount, 'call')} can be left to expire.</>
                     : <><Clock3 size={18} strokeWidth={1.75} /> Nothing to do right now. Keep holding all {plural(open.length, 'call')}.</>}
               </div>
             )}
             {evals && <PriceStamp meta={prices.meta} style={{ marginTop: -6, marginBottom: 14 }} />}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {sortedOpen.map(p => (
-                <PositionCard key={p.id} p={p} showTicker={scope === 'all'} evaluation={evals?.[p.id]} checking={checking} failed={prices.failed}
-                  avgCost={tickers.find(t => t.ticker === p.ticker)?.avg_cost}
-                  onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              {groups.map(g => (
+                <section key={g.key} aria-label={g.title} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {evals && <h2 className="group-title" style={{ color: g.tone }}>{g.title} · {g.calls.length}</h2>}
+                  {g.calls.map(p => (g.key !== 'hold' || expanded.has(p.id)) ? (
+                    <PositionCard key={p.id} p={p} showTicker={scope === 'all'} evaluation={evals?.[p.id]} checking={checking} failed={prices.failed}
+                      avgCost={avgCostOf(p)} onCollapse={g.key === 'hold' ? () => toggleExpanded(p.id) : undefined}
+                      onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
+                  ) : (
+                    <CompactCall key={p.id} p={p} showTicker={scope === 'all'} evaluation={evals?.[p.id]} checking={checking} failed={prices.failed}
+                      onExpand={() => toggleExpanded(p.id)} />
+                  ))}
+                </section>
               ))}
             </div>
           </>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { BellRing, Send, Trash2 } from 'lucide-react'
 import { apiError, getAlerts, saveAlerts, testAlert } from '../api/client'
 import { useToast } from '../context/ToastContext'
+import Collapsible from './Collapsible'
 
 const WEBHOOK_RE = /^https:\/\/((canary|ptb)\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/
 
@@ -56,7 +57,7 @@ export default function AlertsSection() {
         <BellRing size={17} strokeWidth={2} color="var(--accent-light)" /> Buy-back alerts
       </div>
       <div className="hint" style={{ marginBottom: 18 }}>
-        Get a Discord message when an open call reaches your buy-back target, so you don't have to keep checking. Prices are checked every 15 minutes while the market is open.
+        Get a Discord message when a call is ready to buy back, so you don't have to keep checking. Prices are checked every 15 minutes while the market is open.
       </div>
 
       {loadError ? <div className="hint" style={{ color: 'var(--red)' }}>{loadError}</div> : !state ? (
@@ -88,19 +89,23 @@ export default function AlertsSection() {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <input id="discord-webhook" className="input" style={{ flex: '1 1 320px' }} type="url" autoComplete="off" spellCheck={false}
                   placeholder="https://discord.com/api/webhooks/…" value={url}
-                  aria-invalid={trimmed !== '' && !urlOk} aria-describedby="webhook-help"
+                  aria-invalid={trimmed !== '' && !urlOk} aria-describedby={trimmed !== '' && !urlOk ? 'webhook-error' : undefined}
                   onChange={e => setUrl(e.target.value)} />
                 <button className="btn-primary" onClick={saveUrl} disabled={!urlOk || busy !== null}>
                   {busy === 'save' ? <><span className="spinner" /> Connecting…</> : 'Connect'}
                 </button>
                 {editing && <button className="btn-secondary" onClick={() => { setEditing(false); setUrl('') }} disabled={busy !== null}>Cancel</button>}
               </div>
-              {trimmed !== '' && !urlOk && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Paste the whole webhook URL. It starts with https://discord.com/api/webhooks/</div>}
-              <ol id="webhook-help" className="hint webhook-steps">
-                <li>In Discord, open the channel you want alerts in and click ⚙ <strong>Edit Channel</strong>.</li>
-                <li>Go to <strong>Integrations → Webhooks → New Webhook</strong>, then <strong>Copy Webhook URL</strong>.</li>
-                <li>Paste it here and click Connect. You'll get a test message right away.</li>
-              </ol>
+              {trimmed !== '' && !urlOk && <div id="webhook-error" style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Paste the whole webhook URL. It starts with https://discord.com/api/webhooks/</div>}
+              <div style={{ marginTop: 10 }}>
+                <Collapsible label="How do I get this URL?" openLabel="Hide the steps">
+                  <ol className="hint webhook-steps" style={{ marginTop: 0 }}>
+                    <li>In Discord, open the channel you want alerts in and click ⚙ <strong>Edit Channel</strong>.</li>
+                    <li>Go to <strong>Integrations → Webhooks → New Webhook</strong>, then <strong>Copy Webhook URL</strong>.</li>
+                    <li>Paste it here and click Connect. You'll get a test message right away.</li>
+                  </ol>
+                </Collapsible>
+              </div>
             </>
           )}
 

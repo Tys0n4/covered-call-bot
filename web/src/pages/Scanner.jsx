@@ -3,10 +3,9 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { runScan, savePositions, apiError } from '../api/client'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
-import RangeMeter from '../components/RangeMeter'
 import { SOURCE_LABEL } from '../lib/source'
 import { useTicker } from '../context/TickerContext'
-import { RotateCcw, ScanLine, AlertTriangle, TrendingUp, Scale, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
+import { RotateCcw, ScanLine, AlertTriangle, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import Collapsible from '../components/Collapsible'
@@ -16,7 +15,7 @@ import EmptyState, { AddStockLink } from '../components/EmptyState'
 import OptionsTable, { EventBadges } from '../components/OptionsTable'
 import PremiumCheck, { GoalCheck } from '../components/PremiumCheck'
 import { TERMS } from '../lib/terms'
-import { fmtDate, money, pct, plural } from '../lib/format'
+import { fmtDate, money, plural } from '../lib/format'
 import { moneyValue, splitFees } from '../lib/pnl'
 
 // The expiry window and delta range come from your strategy (Strategy page)
@@ -113,51 +112,8 @@ function Field({ field, text, error, onChange }) {
   )
 }
 
-function Fact({ label, tip, value, color }) {
-  return (
-    <div>
-      <div className="fact-label">{label} <InfoTip text={tip} size={12} /></div>
-      <div className="fact-value" style={color ? { color } : undefined}>{value}</div>
-    </div>
-  )
-}
-
 function BelowCostBadge() {
   return <span className="badge badge-amber" title={TERMS.belowCost}>Below your cost</span>
-}
-
-function PickCard({ title, subtitle, icon: Icon, pick, accent, notInPlan, avgCost, range }) {
-  if (!pick) return null
-  return (
-    <div className="card" style={{ flex: 1, borderColor: notInPlan ? 'var(--border)' : `${accent}33` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: notInPlan ? 'var(--text-muted)' : accent, fontWeight: 700, fontSize: 15 }}>
-        <Icon size={16} strokeWidth={2} /> {title}
-        {notInPlan && <span className="badge" style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.06)', color: 'var(--text-dim)', border: '1px solid var(--border)' }}>Not in your plan</span>}
-      </div>
-      <div className="hint" style={{ marginBottom: 16 }}>{notInPlan || subtitle}</div>
-      <div style={notInPlan ? { opacity: 0.55 } : undefined}>
-      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: pick.below_cost_basis ? 8 : 16 }}>
-        {money(pick.strike)} strike <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>· expires {fmtDate(pick.expiry)}</span>
-      </div>
-      {(pick.spans_earnings || pick.spans_ex_dividend) && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}><EventBadges option={pick} /></div>
-      )}
-      {pick.below_cost_basis && (
-        <div className="hint" style={{ color: 'var(--amber)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <BelowCostBadge /> {money(avgCost - pick.strike)}/share loss on your shares if they're called away.
-        </div>
-      )}
-      <div className="facts" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        <Fact label="You collect (1 contract)" tip={TERMS.premium} value={money(pick.net_per_contract ?? pick.premium_per_contract)} color="var(--green)" />
-        <Fact label="Yearly return"            tip={TERMS.yield}   value={pct(pick.annualized_yield_pct)} />
-        <Fact label="Room to rise"             tip={TERMS.upside}  value={pct(pick.upside_to_strike_pct)} />
-      </div>
-      <div style={{ marginTop: 18 }}>
-        <RangeMeter delta={pick.delta} min={range?.min} max={range?.max} color={accent} />
-      </div>
-      </div>
-    </div>
-  )
 }
 
 function HowItWorks() {
@@ -248,8 +204,10 @@ export default function Scanner() {
   }
 
   const rules = strategy ? `Calls with a ${Math.round(strategy.delta_min * 100)}–${Math.round(strategy.delta_max * 100)}% chance of being called, expiring in ${strategy.min_dte}–${strategy.max_dte} days` : 'Calls in your strategy'
+  // Only filters you've changed from the defaults are spelled out
   const filterSummary = filtersValid
-    ? `${rules}, paying at least ${money(config.min_premium)} per share` +
+    ? rules +
+      (config.min_premium !== DEFAULT_CONFIG.min_premium ? `, paying at least ${money(config.min_premium)} per share` : '') +
       (config.min_strike_pct > 0 ? `, with strikes at least ${Math.round(config.min_strike_pct * 100)}% above today's price.` : '.') +
       (config.exclude_below_cost ? ' Strikes below your average cost are skipped.' : '') +
       (config.avoid_earnings ? ' Expiries that span earnings are skipped.' : '')
@@ -262,16 +220,15 @@ export default function Scanner() {
   const liveAt = lastPrices && result?.quotes_live_at
     ? new Date(result.quotes_live_at).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
     : null
-  const scanRange = result ? { min: result.delta_min, max: result.delta_max } : null
   const optionFor = p => result?.candidates.find(c => c.expiry === p.expiry && c.strike === p.strike) || {}
   const nextOpen = result?.next_market_open
     ? new Date(result.next_market_open).toLocaleString('en-CA', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
     : null
-  // Which side of your split this stock actually uses (from your Strategy split)
-  const summary = result?.allocation_summary || {}
-  const splitTarget = summary.total_contracts > 0
-    ? { income: summary.target_income, balanced: summary.target_balanced }
-    : { income: null, balanced: null }
+  const fillTotal = planned.reduce((s, p, i) => s + (fillValues[i] || 0) * p.contracts * 100, 0) - (moneyValue(feesText) || 0)
+  // You typed a different price or fee than suggested (the boxes start at the suggested ones, to the cent)
+  const fillsEdited = result && (
+    planned.some((p, i) => fillValues[i] !== Number(p.entry_price.toFixed(2)))
+    || (moneyValue(feesText) || 0) !== Number((result.estimated_fees > 0 ? result.estimated_fees : 0).toFixed(2)))
 
   return (
     <div className="fade-up">
@@ -295,9 +252,8 @@ export default function Scanner() {
           <div className="card" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px 24px', flexWrap: 'wrap' }}>
               <div>
-                <div className="section-title">What we'll look for</div>
-                <div className="section-sub" style={{ maxWidth: 680, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}{' '}
-                  <Link to="/strategy" style={{ color: 'var(--accent-light)', whiteSpace: 'nowrap' }}>Edit strategy</Link></div>
+                <div className="section-sub" style={{ maxWidth: 680, marginTop: 0, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}{' '}
+                  <Link to="/strategy" style={{ color: 'var(--accent-light)', whiteSpace: 'nowrap' }}>Change</Link></div>
               </div>
               <button className="btn-primary" onClick={handleScan} disabled={loading || !filtersValid} style={{ padding: '13px 28px', fontSize: 15, flexShrink: 0 }}>
                 {loading ? <><span className="spinner" /> Scanning…</> : <><ScanLine size={17} strokeWidth={2} /> Scan {selected}</>}
@@ -348,8 +304,7 @@ export default function Scanner() {
             <>
               <div style={{ fontSize: 15, color: 'var(--text-dim)', marginBottom: 20 }}>
                 <strong style={{ color: 'var(--text)' }}>{result.ticker}</strong> {lastPrices ? 'last traded at' : 'is trading at'}{' '}
-                <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.{' '}
-                {plural(result.candidates.length, 'option')} matched your filters.
+                <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.
                 {SOURCE_LABEL[result.data_source] && (
                   <span className="hint" style={{ display: 'block', marginTop: 4 }}>
                     {result.price_source === 'cboe' && result.data_source === 'cboe' ? 'Stock and option prices' : 'Option prices'}: {SOURCE_LABEL[result.data_source]}
@@ -363,8 +318,7 @@ export default function Scanner() {
                   </span>
                 )}
               </div>
-              <GoalCheck check={result.goal_check} deltaMax={result.delta_max} />
-              <PremiumCheck check={result.premium_check} />
+              <PremiumCheck check={result.premium_check} ticker={result.ticker} />
 
               {lastPrices && (
                 <div className="callout callout-amber" style={{ marginBottom: 20 }}>
@@ -414,54 +368,58 @@ export default function Scanner() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                     {planned.map((p, i) => (
                       <div key={i} className="rec-leg">
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px 16px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px 16px' }}>
                           <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
-                          <span style={{ fontSize: 15 }}>
-                            Sell <strong>{plural(p.contracts, 'contract')}</strong> at the <strong>{money(p.strike)}</strong> strike, expiring <strong>{fmtDate(p.expiry)}</strong>
-                          </span>
-                          <span className="hint">({money(p.entry_price)} per share)</span>
+                          <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
+                        </div>
+                        <div style={{ fontSize: 15, fontWeight: 600 }}>
+                          {plural(p.contracts, 'contract')} · {money(p.strike)} strike · {fmtDate(p.expiry)}
+                        </div>
+                        <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          {optionFor(p).delta != null && <span>{Math.round(optionFor(p).delta * 100)}% chance of being called <InfoTip text={TERMS.delta} size={12} /></span>}
                           {p.below_cost_basis && <BelowCostBadge />}
                           <EventBadges option={optionFor(p)} />
                         </div>
-                        <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
-                        </div>
-                        <RangeMeter delta={optionFor(p).delta} min={scanRange.min} max={scanRange.max}
-                          color={p.allocation_type === 'Income' ? 'var(--accent)' : 'var(--violet)'} />
                       </div>
                     ))}
                   </div>
 
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                    <GoalCheck check={result.goal_check} deltaMax={result.delta_max} />
+                    <Collapsible label="How this is split" openLabel="Hide the split">
+                      <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)', justifyContent: 'start' }}>
+                        <div><div className="fact-label">Premium</div><div className="fact-value">{money(result.gross_premium)}</div></div>
+                        <div><div className="fact-label">Set aside for buyback <InfoTip text={TERMS.buyback} size={12} /></div><div className="fact-value">{money(result.buyback_budget)}</div></div>
+                        <div><div className="fact-label">You keep <InfoTip text={TERMS.keep} size={12} /></div><div className="fact-value" style={{ color: 'var(--green)' }}>{money(result.net_premium)}</div></div>
+                      </div>
+                      <div className="hint" style={{ marginTop: 8 }}>
+                        Part of the premium is set aside in case you buy the calls back early. Change how much on the <Link to="/strategy" style={{ color: 'var(--accent-light)' }}>Strategy</Link> page.
+                      </div>
+                    </Collapsible>
+                  </div>
+
                   {!saved && !lastPrices && (
                     <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 20 }}>
-                      <div className="fact-label" style={{ marginBottom: 10 }}>
-                        Your fills <InfoTip text={TERMS.fill} size={12} />
+                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
+                        Price you sold at <span className="hint">(per share)</span> <InfoTip text={TERMS.fill} size={12} />
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                         {planned.map((p, i) => (
-                          <MoneyInput key={i} id={`fill-${i}`} label={`${p.allocation_type} · ${money(p.strike)} (per share)`}
+                          <MoneyInput key={i} id={`fill-${i}`} label={`${p.allocation_type} · ${money(p.strike)}`}
                             value={fills[i] ?? ''} onChange={v => setFills(f => f.map((x, j) => (j === i ? v : x)))}
                             error={fillValues[i] == null || !(fillValues[i] > 0) ? 'Enter the price you sold at' : null} />
                         ))}
                         {showFees && <MoneyInput id="fill-fees" label="Fees (total)" value={feesText} onChange={setFees} />}
                       </div>
-                      {fillsValid && (
+                      {fillsValid && fillsEdited && (
                         <div className="hint" style={{ marginTop: 8 }}>
-                          At these fills you collect{' '}
-                          <strong style={{ color: 'var(--green)' }}>
-                            {money(planned.reduce((s, p, i) => s + fillValues[i] * p.contracts * 100, 0) - (moneyValue(feesText) || 0))}
-                          </strong>{showFees ? ' after fees' : ''}.
+                          At these prices you collect <strong style={{ color: 'var(--green)' }}>{money(fillTotal)}</strong>{showFees ? ' after fees' : ''}.
                         </div>
                       )}
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-                    <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)' }}>
-                      <Fact label="Premium"                tip={TERMS.premium} value={money(result.gross_premium)} />
-                      <Fact label="Set aside for buyback"  tip={TERMS.buyback} value={money(result.buyback_budget)} />
-                      <Fact label="You keep"               tip={TERMS.keep} value={money(result.net_premium)} color="var(--green)" />
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                     {saved ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontWeight: 600 }}>
@@ -479,7 +437,7 @@ export default function Scanner() {
                   <div className="hint" style={{ marginTop: 14 }}>
                     {lastPrices
                       ? `Saving is turned off until ${liveAt ? `prices catch up at ${liveAt}` : 'the market opens'}, so trades are never recorded at an out-of-date price.`
-                      : 'Saving records the trade here so you can track it. It does not place an order with your broker.'}
+                      : 'Saving records the trade here so you can track it. It doesn\'t place an order with your broker.'}
                   </div>
                 </div>
               )}
@@ -487,24 +445,11 @@ export default function Scanner() {
               {planned.length === 0 && result.candidates.length > 0 && (
                 <div className="callout callout-green" style={{ marginBottom: 24 }}>
                   <CheckCircle2 size={18} strokeWidth={1.75} />
-                  All of your {result.ticker} contracts are already working, so there is nothing new to sell. The best options are below for reference.
+                  All of your {result.ticker} contracts are already working, so there is nothing new to sell. Every option that matched is listed below for reference.
                 </div>
               )}
 
-              {/* 2. The two picks */}
-              {(result.income_pick || result.balanced_pick) && (
-                <>
-                  <div className="section-title" style={{ marginBottom: 12 }}>Top picks</div>
-                  <div className="pick-row" style={{ marginBottom: 24 }}>
-                    <PickCard title="Best for income" subtitle="Highest premium, closer to today's price." icon={TrendingUp} pick={result.income_pick} accent="#2fc8ee" range={scanRange}
-                      notInPlan={splitTarget.income === 0 ? "Your split puts all of this stock's contracts in balanced, so this is shown for reference only." : null} avgCost={result.avg_cost} />
-                    <PickCard title="Best balance" subtitle="Less premium, more room for the stock to grow." icon={Scale} pick={result.balanced_pick} accent="#a495ff" range={scanRange}
-                      notInPlan={splitTarget.balanced === 0 ? "Your split puts all of this stock's contracts in income, so this is shown for reference only." : null} avgCost={result.avg_cost} />
-                  </div>
-                </>
-              )}
-
-              {/* 3. Everything else, on request */}
+              {/* 2. Every option that matched, on request */}
               {result.candidates.length > 0 && (
                 <div className="card">
                   <Collapsible label={`See all ${plural(result.candidates.length, 'option')}`} openLabel="Hide the full list">

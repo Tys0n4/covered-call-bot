@@ -521,7 +521,6 @@ body { font-size: 15px; line-height: 1.5; }
 .grid-steps   { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
 .grid-3       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-4       { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.pick-row     { display: flex; gap: 16px; }
 /* position: relative keeps absolutely positioned bits (e.g. screen-reader labels) inside the scroll box */
 .table-scroll { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-scroll .data-table { min-width: 560px; }
@@ -556,7 +555,6 @@ body { font-size: 15px; line-height: 1.5; }
   .grid-2, .grid-split, .grid-steps, .grid-3 { grid-template-columns: 1fr; }
   .bottom-tab { font-size: 10px; }
   .grid-split { gap: 18px; }
-  .pick-row { flex-direction: column; }
   .save-bar { flex-wrap: wrap; bottom: 80px; }
 }
 
@@ -811,19 +809,24 @@ body { font-size: 15px; line-height: 1.5; }
 .coming-date { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); letter-spacing: 0.02em; }
 .coming-card.event .coming-date { color: var(--amber); }
 
-/* --- Scanner: chance of being called within your range -------------------- */
-.range-meter { display: flex; flex-direction: column; gap: 8px; max-width: 420px; width: 100%; }
-.range-meter-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--text-muted); }
-.range-meter-head > span:first-child { display: inline-flex; align-items: center; gap: 5px; }
-.range-meter-track { position: relative; height: 16px; margin: 0 8px; }
-.range-meter-track::before { content: ''; position: absolute; left: -8px; right: -8px; top: 5px; height: 6px; border-radius: 3px; background: var(--track); }
-.range-meter-fill { position: absolute; left: -8px; top: 5px; height: 6px; border-radius: 3px; min-width: 8px; }
-.range-meter-dot { position: absolute; top: 0; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--text); border: 3px solid; box-sizing: border-box; }
-.range-meter-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
-.rec-leg { display: flex; flex-direction: column; gap: 14px; background: var(--bg-card-2); border-radius: 14px; padding: 16px 18px; }
+/* --- Scanner: one call in the recommended trade ---------------------------- */
+.rec-leg { display: flex; flex-direction: column; gap: 6px; background: var(--bg-card-2); border-radius: 14px; padding: 16px 18px; }
 
 /* Positions: a call that's gone against you — the two choices side by side */
 .choice-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .choice-card { border: 1px solid var(--border-hover); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; }
 .choice-amount { font-size: 22px; font-weight: 500; line-height: 1.2; }
 .tone-red { background: var(--red-dim); color: var(--red); }
+
+/* Strategy: one trading rule in the summary card */
+.rule-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14.5px; }
+.rule-row strong { font-weight: 600; text-align: right; }
+
+/* Positions: a call that needs nothing from you right now, on one line */
+.compact-call { padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.compact-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.compact-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.compact-name { font-size: 15.5px; font-weight: 600; white-space: nowrap; }
+.compact-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px 12px; flex-wrap: wrap; font-size: 13.5px; }
+.badge-neutral { background: rgba(255,255,255,0.06); color: var(--text-dim); border: 1px solid var(--border); }
+.group-title { margin: 0; font-size: 15px; font-weight: 700; }
