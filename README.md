@@ -42,15 +42,17 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 *Demo portfolio with simulated market data.*
 
-**Dashboard** — your monthly goal as a ring next to the one thing to do next, anything else that needs you, a "Coming up" strip (expiries, Fed decisions, earnings for your stocks), then one row per stock.
+**Dashboard** — your monthly goal as a ring (with premium in open calls and contracts working) next to the one thing to do next, anything else that needs you, and "Coming up": the next three events, earnings and Fed decisions first, with the rest of the month (expiries too) behind "Show more". Then one row per stock, with Edit shares or cost in its ⋯ menu.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
-**Scanner** — a recommended trade split into income and balanced calls, each with where its chance of being called sits in your range, your actual fills, the two top picks, and warnings such as earnings before expiry.
+**Scanner** — one recommended trade: what you collect, the income and balanced calls with each one's chance of being called, whether it keeps you on pace for your monthly goal, and the price you actually sold at. A plain line says whether premiums are rich or thin right now, with the numbers behind it in the ⓘ; the buy-back reserve split and every option that matched are one tap away.
 
 ![Scanner](docs/screenshots/scanner.png)
 
-**Positions** — every open call across your stocks, with live prices checked automatically to show which are ready to buy back, and the buy-back limit price with a Copy button. Roll and Close sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone.
+**Positions** — every open call across your stocks, with prices checked automatically and grouped into **Ready to buy back**, **Going against you** and **Holding**. Calls that need something from you get the full card with the buy-back limit price and a Copy button; calls you're just holding are one line each (premium kept against the target) and open to the full card. Roll and Close sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone.
+
+**Strategy** — your monthly goal, your broker's commission and Discord alerts first. The trading rules (chance of being called, expiry window, buy-back targets, split, reserve) start on recommended settings and show as a one-card summary; **Change rules** opens the controls.
 
 ![Positions](docs/screenshots/positions.png)
 

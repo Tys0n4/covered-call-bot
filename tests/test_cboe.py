@@ -6,6 +6,7 @@ from conftest import CBOE, IMPLIED_VOL
 
 from core import cache, cboe, market_data, scanner
 from core.cboe import get_cboe_calls, get_cboe_price, parse_calls, parse_price
+from core.market_hours import market_today
 
 
 def _occ(root, expiry, strike, cp="C"):
@@ -16,8 +17,9 @@ def _occ(root, expiry, strike, cp="C"):
 def cboe_payload(root="NVDA", price=100.0, days=(25,), delta_for=lambda k: None, traded=None):
     """A Cboe-shaped payload: calls and puts for each expiry, plus another root (adjusted contracts)."""
     options = []
+    today = date.fromisoformat(market_today())          # New York's date, like the app's
     for d in days:
-        expiry = (date.today() + timedelta(days=d)).isoformat()
+        expiry = (today + timedelta(days=d)).isoformat()
         for k in range(90, 151):
             strike = float(k)
             mid = max(0.05, 6.0 - max(strike - price, 0) * 0.12)
@@ -34,7 +36,7 @@ def cboe_payload(root="NVDA", price=100.0, days=(25,), delta_for=lambda k: None,
 
 def test_parses_calls_only_for_the_stock_itself():
     df = parse_calls(cboe_payload(days=(25,)), "NVDA")
-    expiry = (date.today() + timedelta(days=25)).isoformat()
+    expiry = (date.fromisoformat(market_today()) + timedelta(days=25)).isoformat()
     assert set(df["expiry"]) == {expiry} and len(df) == 61          # 61 strikes; puts and NVDA1 skipped
     row = df[df["strike"] == 110.0].iloc[0]
     assert row["source"] == "cboe" and row["impliedVolatility"] == 0.31 and row["openInterest"] == 900

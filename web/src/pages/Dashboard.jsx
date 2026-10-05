@@ -4,8 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getPortfolio, getAllPositions, getAssignmentReview, getManagement, getPerformance, getStrategy, getUpcoming } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import { ScanLine, ArrowRight, ArrowUpRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, BadgeDollarSign, Landmark, Megaphone } from 'lucide-react'
-import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
+import { ScanLine, ArrowRight, ArrowUpRight, CheckCircle2, Pencil, Plus, AlertTriangle, Layers, CalendarClock, BadgeDollarSign, Landmark, Megaphone, Clock3, ChevronDown } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ActionMenu from '../components/ActionMenu'
@@ -55,16 +54,33 @@ function Attention({ icon: Icon, tone, children, action }) {
   )
 }
 
+// Premium in open calls and contracts working, under the goal
+function OpenNumbers({ openPremium, working, totalContracts }) {
+  return (
+    <div className="goal-numbers">
+      <div>
+        <div className="stat-label">Premium in open calls <InfoTip text="Premium from calls that are still open, after the fees you paid to sell them. Same as &quot;Still open&quot; on the Performance page." size={12} /></div>
+        <div className="mono goal-number" style={{ color: 'var(--green)' }}>{money(openPremium)}</div>
+      </div>
+      <div>
+        <div className="stat-label">Contracts working <InfoTip text="Contracts with an open call sold against them. Each contract covers 100 shares." size={12} /></div>
+        <div className="mono goal-number">{working}<span className="muted" style={{ fontSize: 15 }}> / {totalContracts}</span></div>
+      </div>
+    </div>
+  )
+}
+
 // Monthly goal as a ring: how much you've kept this month, and how much is left to go
-function GoalCard({ goal }) {
+function GoalCard({ goal, numbers }) {
   if (!goal) {
     return (
       <section className="card goal-card" aria-label="Monthly goal">
         <div className="goal-text">
           <div className="section-title">Set a monthly goal</div>
-          <div className="hint" style={{ fontSize: 14 }}>A goal shows your progress here and paces the Scanner's income picks.</div>
+          <div className="hint" style={{ fontSize: 14 }}>Optional. Shows your progress here and paces the Scanner's picks.</div>
           <Link to="/strategy" className="link-btn">Set a goal <ArrowRight size={14} /></Link>
         </div>
+        {numbers}
       </section>
     )
   }
@@ -94,6 +110,7 @@ function GoalCard({ goal }) {
         </div>
         <Link to="/performance" className="link-btn">See results <ArrowRight size={14} /></Link>
       </div>
+      {numbers}
     </section>
   )
 }
@@ -124,37 +141,57 @@ function NextStep({ item, footer }) {
   )
 }
 
-// "Coming up": expiries, Fed decisions and earnings over the next 30 days
-const shortDay = iso => {
+// "Coming up": expiries, Fed decisions and earnings over the next 30 days.
+// Three are shown, earnings and Fed decisions first (expiries are also on
+// Positions), in date order; the rest open with "Show more".
+const SHOWN = 3
+const dayParts = iso => {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
-  return `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${dt.toLocaleDateString('en-US', { weekday: 'short' })}`.toUpperCase()
+  return { month: dt.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(), day: d, weekday: dt.toLocaleDateString('en-US', { weekday: 'long' }) }
 }
 
-function ComingUp({ items, moreExpiries, note, warning }) {
+function ComingUp({ items, note, warning }) {
+  const [open, setOpen] = useState(false)
   if (!items.length && !warning) return null
+  const picked = new Set([...items.filter(i => i.event), ...items.filter(i => !i.event)].slice(0, SHOWN).map(i => i.key))
+  const shown = open ? items : items.filter(i => picked.has(i.key))
+  const more = items.length - SHOWN
   return (
-    <section aria-label="Coming up" style={{ marginBottom: 32 }}>
-      <div className="section-title" style={{ marginBottom: 12 }}>Coming up</div>
+    <section className="card coming-up" aria-label="Coming up" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 6 }}>
+        <div className="section-title" style={{ margin: 0 }}>Coming up</div>
+        <span className="hint">next 30 days</span>
+      </div>
       {warning && (
-        <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--amber)', fontSize: 13.5, marginBottom: items.length ? 12 : 0 }}>
+        <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--amber)', fontSize: 13.5, margin: '6px 0 8px' }}>
           <AlertTriangle size={15} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
           <span>{warning}</span>
         </div>
       )}
-      {items.length > 0 && <div className="coming-grid">
-        {items.map(it => (
-          <div key={it.key} className={`coming-card${it.event ? ' event' : ''}`}>
-            <div className="coming-date mono">{it.event && <it.icon size={13} strokeWidth={2} aria-hidden="true" />}{shortDay(it.date)}</div>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{it.title}</div>
-            <div className="hint">{it.sub}</div>
-          </div>
-        ))}
-      </div>}
-      {moreExpiries > 0 && (
-        <div className="hint" style={{ marginTop: 8 }}>
-          {moreExpiries} more {moreExpiries === 1 ? 'expiry' : 'expiries'} in the next 30 days on <Link to="/positions">Positions</Link>.
-        </div>
+      {items.length > 0 && (
+        <ul className="coming-list" id="coming-up-list">
+          {shown.map(it => {
+            const d = dayParts(it.date)
+            const Icon = it.icon
+            return (
+              <li key={it.key} className={`coming-row${it.event ? ' event' : ''}`}>
+                <span className="coming-chip" aria-label={`${d.weekday}, ${d.month} ${d.day}`}><span>{d.month}</span><strong className="mono">{d.day}</strong></span>
+                <Icon size={17} strokeWidth={2} aria-hidden="true" className="coming-icon" />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: 600, fontSize: 15 }}>{it.title}</span>
+                  <span className="hint">{it.sub}</span>
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {more > 0 && (
+        <button type="button" className="coming-more" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls="coming-up-list">
+          {open ? 'Show less' : `Show ${more} more`}
+          <ChevronDown size={16} strokeWidth={2} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+        </button>
       )}
       {note && <div className="hint" style={{ marginTop: 8 }}>{note}</div>}
     </section>
@@ -208,7 +245,6 @@ export default function Dashboard() {
   const [editing,      setEditing]      = useState(() => (params.get('add') === '1' ? 'new' : null))
   const [portfolio,    setPortfolio]    = useState([])
   const [positions,    setPositions]    = useState([])
-  const [allPositions, setAllPositions] = useState([])
   const [loading,      setLoading]      = useState(true)
   const [loadFailed,   setLoadFailed]   = useState(false)
   const [reloadKey,    setReloadKey]    = useState(0)
@@ -227,7 +263,6 @@ export default function Dashboard() {
         if (cancelled) return
         setPortfolio(portRes.data)
         setPositions(posRes.data.filter(p => p.status === 'OPEN'))
-        setAllPositions(posRes.data)
         setLoadFailed(false)
         applyPortfolio(portRes.data)
       })
@@ -257,17 +292,6 @@ export default function Dashboard() {
   const openPremium    = positions.reduce((s, p) => s + p.premium_total - (p.open_fees || 0), 0)
   const totalContracts = portfolio.reduce((s, t) => s + t.total_contracts, 0)
   const working        = portfolio.reduce((s, t) => s + t.open_total, 0)
-  const available      = portfolio.reduce((s, t) => s + t.available, 0)
-
-  // Running total of premium from every call you've sold, oldest first.
-  const chartData = useMemo(() => {
-    const sorted = [...allPositions].sort((a, b) => new Date(a.opened_at) - new Date(b.opened_at))
-    return sorted.reduce((points, p) => {
-      const prev = points.length ? points[points.length - 1].total : 0
-      points.push({ date: p.opened_at, total: Number((prev + p.premium_total - (p.open_fees || 0)).toFixed(2)) })
-      return points
-    }, [])
-  }, [allPositions])
 
   const go = (ticker, path) => { selectTicker(ticker); navigate(path) }
 
@@ -329,7 +353,7 @@ export default function Dashboard() {
       const k = `${p.expiry}|${p.ticker}|${p.strike}`
       byCall.set(k, { ...(byCall.get(k) || { date: p.expiry, ticker: p.ticker, strike: p.strike, contracts: 0 }), contracts: (byCall.get(k)?.contracts || 0) + p.contracts })
     })
-    byCall.forEach((c, k) => out.push({ key: `exp-${k}`, date: c.date, title: `${c.ticker} ${money(c.strike, 0)} call expires`, sub: plural(c.contracts, 'contract') }))
+    byCall.forEach((c, k) => out.push({ key: `exp-${k}`, date: c.date, icon: Clock3, title: `${c.ticker} ${money(c.strike, 0)} call expires`, sub: plural(c.contracts, 'contract') }))
     ;(upcoming?.fed || []).forEach(day => {
       const after = positions.filter(p => p.expiry >= day).length
       out.push({ key: `fed-${day}`, date: day, event: true, icon: Landmark, title: 'Fed rate decision',
@@ -340,12 +364,7 @@ export default function Dashboard() {
       out.push({ key: `earn-${e.ticker}-${e.date}`, date: e.date, event: true, icon: Megaphone, title: `${e.ticker} earnings`,
         sub: after ? `Before ${plural(after, `open ${e.ticker} call`)} ${after === 1 ? 'expires' : 'expire'}` : 'A stock you hold reports' })
     })
-    // Up to 8 cards: earnings and Fed decisions always make it, expiries fill the rest (soonest first)
-    const byDate = (a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)
-    const events = out.filter(i => i.event)
-    const expiries = out.filter(i => !i.event).sort(byDate)
-    const shown = expiries.slice(0, Math.max(0, 8 - events.length))
-    return { items: [...events, ...shown].sort(byDate), moreExpiries: expiries.length - shown.length }
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key))
   }, [positions, upcoming, eventPct])
   const unknownEarnings = upcoming?.earnings_unknown || []
   const earningsWarning = unknownEarnings.length
@@ -380,8 +399,6 @@ export default function Dashboard() {
       <PageHeader
         title="Dashboard"
         subtitle={`Where your covered calls stand today, ${new Date().toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' })}.`}
-        actions={!loading && !loadFailed && portfolio.length > 0 &&
-          <button className="btn-primary" onClick={() => navigate('/scanner')}><ScanLine size={16} strokeWidth={2} /> Find a trade</button>}
       />
 
       {loading ? (
@@ -393,12 +410,17 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="hero-grid">
-            <GoalCard goal={goal} />
-            <NextStep item={nextStep} footer={
-              readyIds === null && positions.length > 0
-                ? <span className="hint" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 12, height: 12 }} /> Checking which calls are ready to buy back…</span>
-                : readyIds && positions.length > 0 ? <PriceStamp meta={priceMeta} /> : null
-            } />
+            {(() => {
+              const goalCard = <GoalCard key="goal" goal={goal}
+                numbers={positions.length > 0 && <OpenNumbers openPremium={openPremium} working={working} totalContracts={totalContracts} />} />
+              const next = <NextStep key="next" item={nextStep} footer={
+                readyIds === null && positions.length > 0
+                  ? <span className="hint" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 12, height: 12 }} /> Checking which calls are ready to buy back…</span>
+                  : readyIds && positions.length > 0 ? <PriceStamp meta={priceMeta} /> : null
+              } />
+              // Just starting out (no goal, nothing sold): what to do comes first
+              return goal || positions.length > 0 ? [goalCard, next] : [next, goalCard]
+            })()}
           </div>
 
           {rest.length > 0 && (
@@ -414,57 +436,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Three numbers that matter */}
-          <div className="grid-stats" style={{ marginBottom: 32 }}>
-            <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-              <div className="stat-label">Premium from open calls <InfoTip text="Premium from calls that are still open, after the fees you paid to sell them. Same as &quot;Still open&quot; on the Performance page." size={12} /></div>
-              <div className="stat-num" style={{ fontSize: 32, color: 'var(--green)' }}>{money(openPremium)}</div>
-              {chartData.length >= 2 ? (
-                <>
-                  <div style={{ height: 56, marginTop: 10, marginLeft: -8, marginRight: -8 }}>
-                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 300, height: 56 }}>
-                      <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
-                        <defs>
-                          <linearGradient id="premiumFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#6ae4ff" stopOpacity={0.22} />
-                            <stop offset="100%" stopColor="#6ae4ff" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <XAxis dataKey="date" hide />
-                        <YAxis hide domain={['dataMin', 'dataMax']} />
-                        <Tooltip
-                          contentStyle={{ background: '#202a3e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, fontSize: 12 }}
-                          labelStyle={{ color: '#cdd0d6' }}
-                          itemStyle={{ color: '#ffffff' }}
-                          labelFormatter={fmtDate}
-                          formatter={(v) => [money(v), 'Total collected']}
-                        />
-                        <Area type="monotone" dataKey="total" stroke="#6ae4ff" strokeWidth={1.75} fill="url(#premiumFill)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="hint">
-                    {money(chartData[chartData.length - 1].total)} collected from {plural(chartData.length, 'call')} all time ·{' '}
-                    <Link to="/performance" style={{ color: 'var(--accent-light)' }}>net results</Link>
-                  </div>
-                </>
-              ) : (
-                <div className="hint" style={{ marginTop: 'auto', paddingTop: 12 }}>A trend line appears once you've sold 2 or more calls.</div>
-              )}
-            </div>
-            <div className="card">
-              <div className="stat-label">Contracts working <InfoTip text="Contracts with an open call sold against them. Each contract covers 100 shares." size={12} /></div>
-              <div className="stat-num" style={{ fontSize: 32 }}>{working}<span className="muted" style={{ fontSize: 20 }}> / {totalContracts}</span></div>
-              <div className="hint" style={{ marginTop: 6 }}>across {plural(portfolio.length, 'stock')}</div>
-            </div>
-            <div className="card">
-              <div className="stat-label">Ready to sell <InfoTip text={TERMS.available} size={12} /></div>
-              <div className="stat-num" style={{ fontSize: 32, color: available > 0 ? 'var(--accent)' : 'var(--text)' }}>{available}</div>
-              <div className="hint" style={{ marginTop: 6 }}>{available > 0 ? 'Scan to put these to work.' : 'Everything is covered.'}</div>
-            </div>
-          </div>
-
-          <ComingUp items={comingUp.items} moreExpiries={comingUp.moreExpiries} note={fedNote} warning={earningsWarning} />
+          <ComingUp items={comingUp} note={fedNote} warning={earningsWarning} />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="section-title" style={{ margin: 0 }}>Your stocks</div>

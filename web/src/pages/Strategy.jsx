@@ -1,7 +1,7 @@
 // src/pages/Strategy.jsx — your covered call strategy, saved to the database
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, RotateCcw, Download } from 'lucide-react'
+import { AlertTriangle, RotateCcw, Download, SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformance, apiError } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import { useToast } from '../context/ToastContext'
@@ -63,6 +63,19 @@ const goalToText = g => (g > 0 ? String(Math.round(g)) : '')
 // 0.65 -> '0.65', 0 -> '0'
 const commToText = c => (c > 0 ? String(Number(c.toFixed(2))) : '0')
 
+// The trading rules (everything but the goal and commission), for the summary card
+const RULE_KEYS = ['delta_min', 'delta_max', 'min_dte', 'max_dte', 'profit_capture_target_pct', 'event_buyback_pct', 'income_weight', 'buyback_budget_pct']
+const usesDefaults = d => RULE_KEYS.every(k => Math.abs(d[k] - DEFAULT_STRATEGY[k]) < 1e-9)
+
+function RuleRow({ name, value }) {
+  return (
+    <div className="rule-row">
+      <span className="muted">{name}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
 export default function Strategy() {
   const toast = useToast()
   const [saved, setSaved]       = useState(null)    // what the server has
@@ -76,6 +89,7 @@ export default function Strategy() {
   const [holdings, setHoldings] = useState([])
   const [exporting, setExporting] = useState(false)
   const [perf, setPerf]         = useState(null)    // /performance summary + months
+  const [rulesOpen, setRulesOpen] = useState(false) // the trading-rule controls, behind "Change rules"
 
   useEffect(() => {
     getStrategy()
@@ -156,104 +170,13 @@ export default function Strategy() {
     <div className="fade-up">
       <PageHeader
         title="Strategy"
-        subtitle="How the app splits your trades and when it tells you to buy back. Changes apply to every stock."
-        actions={
-          <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }}
-            onClick={() => setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal, commission_per_contract: d.commission_per_contract }))}>
-            <RotateCcw size={13} strokeWidth={1.75} /> Reset rules to defaults
-          </button>
-        }
+        subtitle="Your goal, broker and alerts. The trading rules start on recommended settings and apply to every stock."
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* 0. Which calls to sell */}
-        <Section title="Which calls to sell" tip={TERMS.delta} hint="The Scanner only considers calls in this range. Balanced picks sit near the low end; income picks go only as high as your monthly goal needs.">
-          <div className="sell-rules">
-            <div>
-              <div className="label" id="delta-label">Chance of being called (delta)</div>
-              <div className="range-pair" role="group" aria-labelledby="delta-label">
-                <NumberBox id="delta-min" value={dMin} suffix="%" invalid={deltaErr} onChange={v => set('delta_min', v / 100)} />
-                <span className="muted">to</span>
-                <NumberBox id="delta-max" value={dMax} suffix="%" invalid={deltaErr} onChange={v => set('delta_max', v / 100)} />
-              </div>
-              {deltaErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use a range between 5% and 60%, low to high.</div>}
-            </div>
-            <div>
-              <div className="label" id="dte-label">Expiring in</div>
-              <div className="range-pair" role="group" aria-labelledby="dte-label">
-                <NumberBox id="dte-min" value={draft.min_dte} invalid={dteErr} onChange={v => set('min_dte', v)} />
-                <span className="muted">to</span>
-                <NumberBox id="dte-max" value={draft.max_dte} invalid={dteErr} onChange={v => set('max_dte', v)} />
-                <span className="muted">days</span>
-              </div>
-              {dteErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use 1 to 120 days, shortest first.</div>}
-            </div>
-          </div>
-          <div className="hint" style={{ marginTop: 12 }}>
-            When earnings, a Fed meeting, or earnings from big companies in the same industry come before expiry, picks stay near {dMin}%.
-          </div>
-        </Section>
-
         <div className="grid-2">
-          {/* 1. Split */}
-          <Section title="Income vs. balanced split" tip={`${TERMS.income} ${TERMS.balanced}`} hint="How your contracts are divided when the app recommends a trade.">
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 10 }}>
-              <span><strong style={{ color: 'var(--accent-light)' }}>{incomePct}%</strong> income</span>
-              <span><strong style={{ color: 'var(--violet)' }}>{100 - incomePct}%</strong> balanced</span>
-            </div>
-            <Slider label="Income share" value={incomePct} min={0} max={100} step={10} onChange={v => set('income_weight', v / 100)} />
-            {holdings.length > 0 ? (
-              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {holdings.map(h => {
-                  const [inc, bal] = splitContracts(h.total_contracts, draft.income_weight)
-                  return (
-                    <div key={h.ticker} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14, background: 'rgba(0,0,0,0.18)', borderRadius: 8, padding: '8px 12px' }}>
-                      <span><strong className="mono">{h.ticker}</strong> <span className="muted">({plural(h.total_contracts, 'contract')})</span></span>
-                      <span><strong style={{ color: 'var(--accent-light)' }}>{inc}</strong> income · <strong style={{ color: 'var(--violet)' }}>{bal}</strong> balanced</span>
-                    </div>
-                  )
-                })}
-                <div className="hint">Each stock is split on its own. Calls already open stay as they are; new trades fill the gap.</div>
-              </div>
-            ) : (
-              <div className="hint" style={{ marginTop: 10 }}>Add a stock on the Dashboard to see how its contracts would be split.</div>
-            )}
-          </Section>
-
-          {/* 2. Buyback target */}
-          <Section title="When to buy back" tip={TERMS.profit} hint="Positions shows “Buy back now” once a call's price falls to where you'd keep this much of its premium.">
-            <div style={{ fontSize: 15, marginBottom: 10 }}>
-              Buy back at <strong style={{ color: 'var(--green)' }}>{draft.profit_capture_target_pct}%</strong> of premium kept
-            </div>
-            <Slider label="Buyback target" value={draft.profit_capture_target_pct} min={50} max={95} step={5}
-              onChange={v => setDraft(d => ({ ...d, profit_capture_target_pct: v, event_buyback_pct: Math.min(d.event_buyback_pct, v) }))} />
-            <div className="hint" style={{ marginTop: 10 }}>
-              Example: sold at $0.34 a share → buy back at {money(buybackPrice(0.34, draft.profit_capture_target_pct))} or less.
-              Options trade in whole cents, so this is the closest cent to {draft.profit_capture_target_pct}%
-              ({((1 - buybackPrice(0.34, draft.profit_capture_target_pct) / 0.34) * 100).toFixed(1)}% kept).
-            </div>
-            <div style={{ fontSize: 15, margin: '18px 0 10px' }}>
-              Before earnings or a Fed meeting: <strong style={{ color: 'var(--green)' }}>{draft.event_buyback_pct}%</strong>
-            </div>
-            <Slider label="Buyback target before earnings or a Fed meeting" value={draft.event_buyback_pct} min={30} max={draft.profit_capture_target_pct} step={5} onChange={v => set('event_buyback_pct', v)} />
-            <div className="hint" style={{ marginTop: 10 }}>
-              Buying back a little earlier avoids holding through the jump these events can cause.
-            </div>
-          </Section>
-
-          {/* 3. Buyback reserve */}
-          <Section title="Buyback reserve" tip={TERMS.buyback} hint="Part of each premium you set aside for buying calls back early.">
-            <div style={{ fontSize: 15, marginBottom: 10 }}>
-              Set aside <strong>{reservePct}%</strong> of each premium
-            </div>
-            <Slider label="Buyback reserve" value={reservePct} min={0} max={50} step={5} onChange={v => set('buyback_budget_pct', v / 100)} />
-            <div className="hint" style={{ marginTop: 10 }}>
-              Example: on a $500 premium you keep {money(500 * (1 - reservePct / 100), 0)} and reserve {money(500 * reservePct / 100, 0)}.
-            </div>
-          </Section>
-
-          {/* 4. Monthly goal */}
-          <Section title="Monthly income goal" hint="A target for the premium you keep each month, after buybacks and fees. Leave at 0 to turn it off.">
+          {/* 1. Monthly goal */}
+          <Section title="Monthly income goal" hint="Optional. Shows your progress and paces the Scanner's picks. Leave at 0 to turn it off.">
             <label className="label" htmlFor="goal">Premium you'd like to keep each month</label>
             <div style={{ position: 'relative', maxWidth: 220, marginBottom: 16 }}>
               <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
@@ -294,33 +217,148 @@ export default function Strategy() {
               </>
             )}
           </Section>
+          {/* 2. Commission */}
+          <Section title="Your broker's commission" hint="Most brokers charge nothing for options. Leave it at $0 if yours doesn't, and the fee boxes stay hidden.">
+            <label className="label" htmlFor="commission">Commission per contract</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ position: 'relative', display: 'inline-block' }}>
+                <span aria-hidden="true" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
+                <input id="commission" className="input mono" type="text" inputMode="decimal" autoComplete="off" maxLength={5}
+                  value={commText} aria-invalid={commErr}
+                  onChange={e => {
+                    // dollars and cents only: "0.65", ".5", "1"
+                    const text = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^0+(?=\d)/, '')
+                    setCommText(text)
+                    set('commission_per_contract', text === '' || text === '.' ? 0 : Number(text))
+                  }}
+                  style={{ width: 120, paddingLeft: 28, ...(commErr ? { borderColor: 'var(--red)' } : {}) }} />
+              </span>
+              <span className="muted">per contract</span>
+            </div>
+            {commErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use $0 to $10.</div>}
+          </Section>
         </div>
 
-        {/* 5. Commission */}
-        <Section title="Your broker's commission" hint="What your broker charges per option contract, each time you sell or buy one back. Many brokers charge nothing for options; leave it at $0 and the fee boxes stay hidden.">
-          <label className="label" htmlFor="commission">Commission per contract</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ position: 'relative', display: 'inline-block' }}>
-              <span aria-hidden="true" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
-              <input id="commission" className="input mono" type="text" inputMode="decimal" autoComplete="off" maxLength={5}
-                value={commText} aria-invalid={commErr}
-                onChange={e => {
-                  // dollars and cents only: "0.65", ".5", "1"
-                  const text = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^0+(?=\d)/, '')
-                  setCommText(text)
-                  set('commission_per_contract', text === '' || text === '.' ? 0 : Number(text))
-                }}
-                style={{ width: 120, paddingLeft: 28, ...(commErr ? { borderColor: 'var(--red)' } : {}) }} />
-            </span>
-            <span className="muted">per contract</span>
-          </div>
-          {commErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use $0 to $10.</div>}
-        </Section>
-
-        {/* 6. Alerts */}
+        {/* 3. Alerts */}
         <AlertsSection />
 
-        {/* 7. Data */}
+        {/* 4. Trading rules: a summary, the controls on request */}
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <div className="section-title">Trading rules</div>
+            <span className={`badge ${usesDefaults(draft) ? 'badge-green' : 'badge-accent'}`}>{usesDefaults(draft) ? 'Recommended' : 'Your rules'}</span>
+          </div>
+          <RuleRow name="Chance of being called" value={`${dMin}–${dMax}%`} />
+          <RuleRow name="Expiring in" value={`${draft.min_dte}–${draft.max_dte} days`} />
+          <RuleRow name="Buy back at" value={`${draft.profit_capture_target_pct}% kept · ${draft.event_buyback_pct}% before events`} />
+          <RuleRow name="Income / balanced" value={`${incomePct} / ${100 - incomePct}`} />
+          <RuleRow name="Set aside to buy back" value={`${reservePct}% of each premium`} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 14 }}>
+            <button type="button" className="btn-secondary" onClick={() => setRulesOpen(o => !o)} aria-expanded={rulesOpen} aria-controls="rule-controls">
+              {rulesOpen ? <ChevronDown size={15} style={{ transform: 'rotate(180deg)' }} /> : <SlidersHorizontal size={15} />} {rulesOpen ? 'Hide rules' : 'Change rules'}
+            </button>
+            {!usesDefaults(draft) && (
+              <button type="button" className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }}
+                onClick={() => setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal, commission_per_contract: d.commission_per_contract }))}>
+                <RotateCcw size={13} strokeWidth={1.75} /> Back to recommended
+              </button>
+            )}
+          </div>
+        </div>
+
+        {(rulesOpen || deltaErr || dteErr) && (
+          <div id="rule-controls" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Which calls to sell */}
+            <Section title="Which calls to sell" tip={TERMS.delta} hint="The Scanner only considers calls in this range. Balanced picks sit near the low end; income picks go only as high as your monthly goal needs.">
+              <div className="sell-rules">
+                <div>
+                  <div className="label" id="delta-label">Chance of being called (delta)</div>
+                  <div className="range-pair" role="group" aria-labelledby="delta-label">
+                    <NumberBox id="delta-min" value={dMin} suffix="%" invalid={deltaErr} onChange={v => set('delta_min', v / 100)} />
+                    <span className="muted">to</span>
+                    <NumberBox id="delta-max" value={dMax} suffix="%" invalid={deltaErr} onChange={v => set('delta_max', v / 100)} />
+                  </div>
+                  {deltaErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use a range between 5% and 60%, low to high.</div>}
+                </div>
+                <div>
+                  <div className="label" id="dte-label">Expiring in</div>
+                  <div className="range-pair" role="group" aria-labelledby="dte-label">
+                    <NumberBox id="dte-min" value={draft.min_dte} invalid={dteErr} onChange={v => set('min_dte', v)} />
+                    <span className="muted">to</span>
+                    <NumberBox id="dte-max" value={draft.max_dte} invalid={dteErr} onChange={v => set('max_dte', v)} />
+                    <span className="muted">days</span>
+                  </div>
+                  {dteErr && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Use 1 to 120 days, shortest first.</div>}
+                </div>
+              </div>
+              <div className="hint" style={{ marginTop: 12 }}>
+                When earnings, a Fed meeting, or earnings from big companies in the same industry come before expiry, picks stay near {dMin}%.
+              </div>
+            </Section>
+
+            <div className="grid-2">
+              {/* Split */}
+              <Section title="Income vs. balanced split" tip={`${TERMS.income} ${TERMS.balanced}`} hint="How your contracts are divided when the app recommends a trade.">
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 10 }}>
+                  <span><strong style={{ color: 'var(--accent-light)' }}>{incomePct}%</strong> income</span>
+                  <span><strong style={{ color: 'var(--violet)' }}>{100 - incomePct}%</strong> balanced</span>
+                </div>
+                <Slider label="Income share" value={incomePct} min={0} max={100} step={10} onChange={v => set('income_weight', v / 100)} />
+                {holdings.length > 0 ? (
+                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {holdings.map(h => {
+                      const [inc, bal] = splitContracts(h.total_contracts, draft.income_weight)
+                      return (
+                        <div key={h.ticker} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14, background: 'rgba(0,0,0,0.18)', borderRadius: 8, padding: '8px 12px' }}>
+                          <span><strong className="mono">{h.ticker}</strong> <span className="muted">({plural(h.total_contracts, 'contract')})</span></span>
+                          <span><strong style={{ color: 'var(--accent-light)' }}>{inc}</strong> income · <strong style={{ color: 'var(--violet)' }}>{bal}</strong> balanced</span>
+                        </div>
+                      )
+                    })}
+                    <div className="hint">Each stock is split on its own. Calls already open stay as they are; new trades fill the gap.</div>
+                  </div>
+                ) : (
+                  <div className="hint" style={{ marginTop: 10 }}>Add a stock on the Dashboard to see how its contracts would be split.</div>
+                )}
+              </Section>
+
+              {/* Buyback target */}
+              <Section title="When to buy back" tip={TERMS.profit} hint="Positions shows “Buy back now” once a call's price falls to where you'd keep this much of its premium.">
+                <div style={{ fontSize: 15, marginBottom: 10 }}>
+                  Buy back at <strong style={{ color: 'var(--green)' }}>{draft.profit_capture_target_pct}%</strong> of premium kept
+                </div>
+                <Slider label="Buyback target" value={draft.profit_capture_target_pct} min={50} max={95} step={5}
+                  onChange={v => setDraft(d => ({ ...d, profit_capture_target_pct: v, event_buyback_pct: Math.min(d.event_buyback_pct, v) }))} />
+                <div className="hint" style={{ marginTop: 10 }}>
+                  Example: sold at $0.34 a share → buy back at {money(buybackPrice(0.34, draft.profit_capture_target_pct))} or less.
+                  Options trade in whole cents, so this is the closest cent to {draft.profit_capture_target_pct}%
+                  ({((1 - buybackPrice(0.34, draft.profit_capture_target_pct) / 0.34) * 100).toFixed(1)}% kept).
+                </div>
+                <div style={{ fontSize: 15, margin: '18px 0 10px' }}>
+                  Before earnings or a Fed meeting: <strong style={{ color: 'var(--green)' }}>{draft.event_buyback_pct}%</strong>
+                </div>
+                <Slider label="Buyback target before earnings or a Fed meeting" value={draft.event_buyback_pct} min={30} max={draft.profit_capture_target_pct} step={5} onChange={v => set('event_buyback_pct', v)} />
+                <div className="hint" style={{ marginTop: 10 }}>
+                  Buying back a little earlier avoids holding through the jump these events can cause.
+                </div>
+              </Section>
+
+              {/* Buyback reserve */}
+              <Section title="Buyback reserve" tip={TERMS.buyback} hint="Part of each premium you set aside for buying calls back early.">
+                <div style={{ fontSize: 15, marginBottom: 10 }}>
+                  Set aside <strong>{reservePct}%</strong> of each premium
+                </div>
+                <Slider label="Buyback reserve" value={reservePct} min={0} max={50} step={5} onChange={v => set('buyback_budget_pct', v / 100)} />
+                <div className="hint" style={{ marginTop: 10 }}>
+                  Example: on a $500 premium you keep {money(500 * (1 - reservePct / 100), 0)} and reserve {money(500 * reservePct / 100, 0)}.
+                </div>
+              </Section>
+
+            </div>
+          </div>
+        )}
+
+        {/* 5. Data */}
         <Section title="Your data" hint="Download a copy of everything saved in the app, as spreadsheet-friendly CSV files.">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button className="btn-secondary" onClick={exportHoldings} disabled={exporting}><Download size={15} /> Holdings ({plural(holdings.length, 'stock')})</button>
