@@ -42,7 +42,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 *Demo portfolio with simulated market data.*
 
-**Dashboard** — your monthly goal as a ring next to the one thing to do next, anything else that needs you, a "Coming up" strip (expiries, Fed decisions, earnings for your stocks), then one row per stock.
+**Dashboard** — your monthly goal as a ring (with premium in open calls and contracts working) next to the one thing to do next, anything else that needs you, and "Coming up": the next three events, earnings and Fed decisions first, with the rest of the month (expiries too) behind "Show more". Then one row per stock, with Edit shares or cost in its ⋯ menu.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 

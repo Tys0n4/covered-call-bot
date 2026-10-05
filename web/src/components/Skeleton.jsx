@@ -28,15 +28,23 @@ function StatCard({ big = false }) {
 export function DashboardSkeleton() {
   return (
     <Loading>
-      <div className="card" style={{ marginBottom: 20 }}>
-        <Bone w={140} h={16} />
-        {[0, 1].map(i => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>
-            <Bone w={32} h={32} r={10} /><Bone w="45%" /><span style={{ flex: 1 }} /><Bone w={70} />
+      <div className="hero-grid">
+        <StatCard big />
+        <div className="card">
+          <Bone w={80} h={12} />
+          <Bone w="70%" h={24} style={{ marginTop: 14 }} />
+          <Bone w="90%" style={{ marginTop: 12 }} />
+          <Bone w={160} h={42} r={12} style={{ marginTop: 18 }} />
+        </div>
+      </div>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <Bone w={110} h={16} />
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+            <Bone w={48} h={44} r={10} /><Bone w="50%" /><span style={{ flex: 1 }} />
           </div>
         ))}
       </div>
-      <div className="grid-stats" style={{ marginBottom: 32 }}><StatCard big /><StatCard /><StatCard /></div>
       <Bone w={110} h={16} style={{ marginBottom: 14 }} />
       <div className="card" style={{ padding: 0 }}>
         {[0, 1, 2].map(i => (
