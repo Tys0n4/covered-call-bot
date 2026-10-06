@@ -1,17 +1,14 @@
-# Buy-back alerts: wakes the API on a schedule and asks it to check open calls.
+# Buy-back alerts, run by hand: wakes the API and asks it to check open calls.
 # The API posts to Discord when a call reaches your buy-back target (set up on
-# the Strategy page). Free on GitHub; runs only from the default branch.
+# the Strategy page). The regular checks come from cron-job.org calling
+# POST /alerts/cron every 30 minutes (see the README): GitHub's free schedule
+# ran this only once in a whole trading day.
 #
 # Needs: repository secret APP_PASSWORD (same as on Railway), if the API has one.
 # Optional: repository variable API_URL, if the backend isn't at the default URL.
 name: Buy-back alerts
 
 on:
-  schedule:
-    # Every 15 minutes, Monday–Friday, 13:00–21:45 UTC. That covers US market
-    # hours in both daylight and standard time; the API skips the check (and
-    # sends nothing) whenever the market is closed, including holidays.
-    - cron: "*/15 13-21 * * 1-5"
   workflow_dispatch:          # "Run workflow" button on the Actions tab
 
 concurrency:
