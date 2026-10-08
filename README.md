@@ -239,9 +239,10 @@ When an open call reaches your buy-back target, the app can post a message to a 
 
 1. **Discord:** in the channel you want, open *Edit Channel → Integrations → Webhooks → New Webhook* and copy the webhook URL.
 2. **App:** paste it under *Buy-back alerts* on the Strategy page and click Connect. A test message is sent right away.
-3. **GitHub:** the scheduled workflow `.github/workflows/alerts.yml` wakes the API every 15 minutes on weekdays and calls `POST /alerts/check`, which does nothing while the market is closed. If the API has a password, add it as a repository secret named `APP_PASSWORD` (*Settings → Secrets and variables → Actions*). Set a repository variable `API_URL` only if your backend isn't at `https://covered-call-bot-production.up.railway.app`.
+3. **Railway:** add a variable `ALERTS_KEY` set to a long random string (for example the output of `python -c "import secrets; print(secrets.token_urlsafe(32))"`). It lets a scheduler run the check without your password, and can do nothing else.
+4. **[cron-job.org](https://cron-job.org)** (free): create a cron job that sends `POST https://covered-call-bot-production.up.railway.app/alerts/cron` with the header `X-Alerts-Key: <your ALERTS_KEY>`. Schedule: time zone *America/New_York*, Monday–Friday, hours 9–15, minutes 15 and 45 (every 30 minutes, 9:45 a.m. to 3:45 p.m.; the 9:15 call is skipped because prices are still the last session's). It answers right away and checks in the background.
 
-You can run a check by hand from the Actions tab (*Buy-back alerts → Run workflow*) or with `cd backend && python -m core.alerts`. GitHub pauses scheduled workflows after 60 days without commits to the repository; re-enable it from the Actions tab if that happens.
+GitHub's free scheduled workflows turned out too unreliable for this (one run in a whole trading day), so `.github/workflows/alerts.yml` now only runs by hand: *Actions → Buy-back alerts → Run workflow* (needs the `APP_PASSWORD` repository secret). You can also run a check with `cd backend && python -m core.alerts`.
 
 ### Performance
 
@@ -309,7 +310,8 @@ needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`)
 | GET    | `/alerts`            | Buy-back alert settings (the webhook is never returned in full) |
 | PUT    | `/alerts`            | Save the Discord webhook, turn alerts on/off, or remove the webhook |
 | POST   | `/alerts/test`       | Send a test message to Discord                |
-| POST   | `/alerts/check`      | Alert any open call that just reached the target (used by the scheduled workflow) |
+| POST   | `/alerts/check`      | Alert any open call that just reached the target (the manual workflow) |
+| POST   | `/alerts/cron`       | The same check for cron-job.org: no login, needs the `X-Alerts-Key` header (= `ALERTS_KEY`); answers 202 and checks in the background |
 
 ---
 

@@ -38,6 +38,7 @@ app.include_router(settings.router,  dependencies=protected)
 app.include_router(performance.router, dependencies=protected)
 app.include_router(alerts.router,   dependencies=protected)
 app.include_router(upcoming.router, dependencies=protected)
+app.include_router(alerts.scheduler)          # its own key instead of the login (ALERTS_KEY)
 auth.warn_if_open()
 
 @app.get("/")

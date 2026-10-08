@@ -123,3 +123,28 @@ def test_no_alert_for_a_call_that_should_just_expire(client, nvda, discord):
     assert r.status_code == 201, r.text
     assert client.post("/alerts/check").json()["sent"] == 0
     assert discord.sent == []
+
+
+# --- An outside scheduler (cron-job.org) runs the check with its own key ---------------------
+
+def test_scheduler_endpoint_is_off_without_a_key(client, monkeypatch):
+    monkeypatch.delenv("ALERTS_KEY", raising=False)
+    assert client.post("/alerts/cron", headers={"X-Alerts-Key": "anything"}).status_code == 404
+
+
+def test_scheduler_endpoint_needs_the_right_key(client, monkeypatch):
+    monkeypatch.setenv("ALERTS_KEY", "s3cret-key-for-tests")
+    assert client.post("/alerts/cron").status_code == 401
+    assert client.post("/alerts/cron", headers={"X-Alerts-Key": "wrong"}).status_code == 401
+
+
+def test_scheduler_endpoint_runs_the_check_without_logging_in(client, nvda, discord, monkeypatch):
+    _turn_on(client)
+    _call(client, entry_price=25.0)                               # past the 85% target
+    monkeypatch.setenv("ALERTS_KEY", "s3cret-key-for-tests")
+    monkeypatch.setenv("APP_PASSWORD", "pw")                      # the rest of the API is locked
+    assert client.post("/alerts/check").status_code == 401
+    r = client.post("/alerts/cron", headers={"X-Alerts-Key": "s3cret-key-for-tests"})
+    assert r.status_code == 202 and r.json() == {"status": "started"}
+    assert len(discord.sent) == 1                                 # the check ran (in the background)
+    assert discord.sent[0][1]["embeds"][0]["title"] == "Buy back now: NVDA $125.00 call"

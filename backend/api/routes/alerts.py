@@ -1,11 +1,21 @@
 # api/routes/alerts.py
 # Buy-back alerts to Discord (Strategy page). See core/alerts.py.
-from fastapi import APIRouter, HTTPException
+import hmac
+import logging
+import os
+
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 
 from core.alerts import AlertError, check_and_alert, load_alert_settings, save_alert_settings, send_test
 from api.schemas import AlertSettingsIn, AlertSettingsOut, AlertCheckResult
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+
+# Not behind the login: for an outside scheduler (cron-job.org), which can't
+# log in. It needs the ALERTS_KEY setting instead, and can only run the check.
+scheduler = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
 def _out(s: dict) -> AlertSettingsOut:
@@ -54,3 +64,27 @@ def run_check(force: bool = False):
         return check_and_alert(force=force)
     except AlertError as e:
         raise HTTPException(status_code=502, detail=str(e)) from None
+
+
+def _scheduled_check() -> None:
+    try:
+        log.info("Scheduled alert check: %s", check_and_alert())
+    except Exception as e:                      # a bad webhook, Discord down, prices unavailable
+        log.warning("Scheduled alert check failed: %s", e)
+
+
+@scheduler.post("/cron", status_code=202)
+def run_scheduled_check(background: BackgroundTasks, x_alerts_key: str | None = Header(default=None)):
+    """
+    The same check as POST /alerts/check, for a scheduler that sends the
+    X-Alerts-Key header (equal to the ALERTS_KEY setting). Answers right away
+    and checks in the background, since free schedulers give up after ~30s.
+    Off (404) while ALERTS_KEY isn't set.
+    """
+    key = os.environ.get("ALERTS_KEY", "")
+    if not key:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not x_alerts_key or not hmac.compare_digest(x_alerts_key.encode(), key.encode()):
+        raise HTTPException(status_code=401, detail="Wrong or missing X-Alerts-Key")
+    background.add_task(_scheduled_check)
+    return {"status": "started"}
