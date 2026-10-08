@@ -16,17 +16,11 @@ It doesn't place trades: you place them at your broker, and CovCall tells you wh
 
 ## Features
 
-- **Live options scanning** — Cboe's delayed quotes (about 15 minutes behind), with Yahoo Finance as the fallback
-- **Baseline strategy** — calls with a 20–30% chance of being called, 14–30 days out, picked to reach your monthly goal with as little risk as possible; every part is editable
-- **Smart allocation** — a 70/30 income/balanced contract split per stock, counting calls already open
-- **Position management** — tells you when a call is ready to buy back, with the order to place at your broker
-- **Buy-back alerts** — an optional Discord message when a call reaches your target
-- **Real fills, rolls and assignments** — record what your broker actually filled, roll in one step, and track shares called away
+- **Live option prices** — Cboe's delayed quotes (about 15 minutes behind), with Yahoo Finance as the fallback
+- **Buy-back guidance** — tells you when a call is ready to buy back and the order to place at your broker, with an optional Discord alert
 - **Event awareness** — earnings, Fed decisions, industry earnings and ex-dividend dates before expiry are flagged, and picks lean to the safe end of your range
-- **Performance** — results by month after buybacks and fees, compared with just holding the shares
-- **Multi-ticker** — every stock you own, managed on its own
-- **REST API** — FastAPI backend with interactive docs at `/docs`
-- **Dark and light themes** — a top bar on desktop, five tabs on phones
+- **Real records** — what your broker actually filled, rolls in one step, and shares called away
+- **Honest results** — performance after buybacks and fees, compared with just holding the shares
 
 How each of these works, from the pick math to the buy-back rules, is in **[How it works](docs/how-it-works.md)**.
 
