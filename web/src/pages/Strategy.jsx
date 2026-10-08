@@ -247,7 +247,7 @@ export default function Strategy() {
           {rule('buyback', 'Buy back at', `${draft.profit_capture_target_pct}% kept`, false, <>
             <Range label="Buy back target, percent of premium kept" min={50} max={95} step={5} value={draft.profit_capture_target_pct}
               onChange={v => setDraft(d => ({ ...d, profit_capture_target_pct: v, event_buyback_pct: Math.min(d.event_buyback_pct, v) }))} />
-            <p className="mt-2 text-13 text-fg-2">Positions says “Buy back” once a call is cheap enough that you'd keep this much of its premium.</p>
+            <p className="mt-2 text-13 text-fg-2">Positions marks a call “Ready to buy back” once it’s cheap enough that you'd keep this much of its premium.</p>
             <p className="mt-1 text-13 text-muted">
               Example: sold at $0.34 a share → buy back at {money(example)} or less ({((1 - example / 0.34) * 100).toFixed(1)}% kept, the closest cent).
             </p>

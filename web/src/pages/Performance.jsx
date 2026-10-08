@@ -56,7 +56,12 @@ function MonthBars({ months, goal, selected, onSelect, thisMonth }) {
           </span>
         ))}
       </div>
-      {goal > 0 && <div className="mt-2 flex items-center gap-1.5 text-12 text-muted md:hidden"><span className="w-3.5 border-t-[1.5px] border-dashed border-pace" />{whole(goal)} goal</div>}
+      {(goal > 0 || months.some(m => m.month === thisMonth)) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-12 text-muted">
+          {goal > 0 && <span className="flex items-center gap-1.5 md:hidden"><span className="w-3.5 border-t-[1.5px] border-dashed border-pace" />{whole(goal)} goal</span>}
+          {months.some(m => m.month === thisMonth) && <span>* {monthName(thisMonth)} so far</span>}
+        </div>
+      )}
     </div>
   )
 }
@@ -81,7 +86,7 @@ function MonthDetail({ m, goal, thisMonth }) {
           <dt className="font-semibold">Kept{m.missing_costs > 0 ? '*' : ''}</dt>
           <dd className="text-17 font-semibold" style={{ color: m.option_net < 0 ? 'var(--loss)' : 'var(--accent)' }}>{money(m.option_net)}</dd>
         </div>
-        {m.share_gains ? <div className="flex justify-between gap-3 border-t border-line py-2.5"><dt className="text-fg-2">Gains on shares called away</dt><dd>{signedMoney(m.share_gains)}</dd></div> : null}
+        {m.share_gains ? <div className="flex justify-between gap-3 border-t border-line py-2.5"><dt className="text-fg-2">Profit on shares sold</dt><dd>{signedMoney(m.share_gains)}</dd></div> : null}
       </dl>
       {goal > 0 && (
         <p className="text-13 font-semibold" style={{ color: !partial && over >= 0 ? 'var(--accent)' : 'var(--text-2)' }}>
@@ -164,9 +169,9 @@ export default function Performance() {
             {v != null && (
               <p className="mt-2.5 max-w-[640px] text-15 text-fg-2">
                 Compared with just holding the same shares: {money(s.realized_all_time)} of premium kept
-                {s.upside_given_up > 0 && <>, minus {money(s.upside_given_up)} of gains you gave up when shares were called away</>}
+                {s.upside_given_up > 0 && <>, minus {money(s.upside_given_up)} the stock rose above your strikes, which went to the buyers when shares were called away</>}
                 {s.upside_given_up < 0 && <>, plus {money(-s.upside_given_up)} from shares called away above their market price</>}
-                {!s.upside_given_up && ', and no gains given up on shares called away'}.
+                {!s.upside_given_up && ', and nothing given up on shares called away'}.
                 {s.upside_unknown > 0 && <> {plural(s.upside_unknown, 'assignment')} without a stock price for that day {s.upside_unknown === 1 ? 'is' : 'are'} left out.</>}
               </p>
             )}
@@ -192,9 +197,9 @@ export default function Performance() {
               value={s.annualized_return_pct == null ? '—' : pct(s.annualized_return_pct)} sub="on what your shares cost" />
             <Stat className="border-b border-line py-4 pr-3 md:border-l md:px-5 md:py-5" label="Calls that made money"
               value={s.win_rate_pct == null ? '—' : pct(s.win_rate_pct, 0)} sub="after buybacks and fees" />
-            <Stat className="border-b border-l border-line py-4 pl-4 md:px-5 md:py-5" label="Gains on shares called away"
-              value={s.share_gains_all_time ? signedMoney(s.share_gains_all_time) : money(0)} sub="what you sold them for, over cost" />
-            <Stat className="border-b border-line py-4 pr-3 md:border-l md:px-5 md:py-5" label="Still open" value={money(s.open_premium)}
+            <Stat className="border-b border-l border-line py-4 pl-4 md:px-5 md:py-5" label="Profit on shares sold"
+              value={s.share_gains_all_time ? signedMoney(s.share_gains_all_time) : money(0)} sub="called away at the strike, over your cost" />
+            <Stat className="col-span-2 border-b border-line py-4 pr-3 md:col-span-1 md:border-l md:px-5 md:py-5" label="Still open" value={money(s.open_premium)}
               sub={<>{plural(s.open_calls, 'call')} · <Link to="/positions" className="link link-quiet">manage</Link></>} />
           </section>
 
@@ -205,7 +210,7 @@ export default function Performance() {
                 <thead>
                   <tr>
                     <th>Closed</th><th>Call</th><th>Result</th><th className="num">Days</th><th className="num">Kept</th>
-                    <th className="num">Return</th><th className="num">Per year</th>{anyShareGain && <th className="num">Share gain</th>}
+                    <th className="num">Return</th><th className="num">Per year</th>{anyShareGain && <th className="num">Share profit</th>}
                   </tr>
                 </thead>
                 <tbody>

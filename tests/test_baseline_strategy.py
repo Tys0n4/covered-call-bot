@@ -112,7 +112,9 @@ def test_fed_meeting_in_the_window_keeps_picks_at_the_safe_end(client, nvda, mon
     assert scan["fed_dates"] == [_days(10)]
     assert all(c["spans_fed"] for c in scan["candidates"])
     assert scan["income_pick"]["delta"] <= 0.23 and scan["balanced_pick"]["delta"] <= 0.23
-    assert any("rate decision" in w for w in scan["warnings"])
+    # The first sentence (all the app shows until you tap More) says why the picks still cross it
+    fed = next(w for w in scan["warnings"] if "rate decision" in w)
+    assert "before both picks expire, so they're kept near the safe end of your range." in fed.split(". ")[0] + "."
 
 
 def test_industry_leaders_and_your_stocks_earnings_are_flagged(client, nvda):

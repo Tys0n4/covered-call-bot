@@ -163,7 +163,7 @@ function StockRow({ t, positions, onScan, onPositions, onEdit }) {
       </div>
       {t.available > 0 ? (
         <button type="button" className="btn btn-primary btn-sm min-h-11 md:min-h-10" onClick={onScan}>
-          Sell {plural(t.available, 'call')}
+          Find {t.available === 1 ? 'a call' : 'calls'}
         </button>
       ) : (
         <div className="text-right">

@@ -19,6 +19,10 @@ export function resultLabel(p, rolledIds) {
   return 'Open'
 }
 
+// Share of the premium kept, as shown: rounded down, so a call at 64.6% never
+// reads as having reached a 65% target
+export const keptPct = v => Math.floor((Number(v) || 0) + 1e-9)
+
 // Split a total fee across trades by contract count, to the cent
 export function splitFees(total, contracts) {
   const cents = Math.round(n(total) * 100)
@@ -38,6 +42,15 @@ export function cleanMoney(raw) {
 
 // '' or '.' -> null, otherwise the number
 export const moneyValue = t => (t === '' || t === '.' ? null : Number(t))
+
+// A per-share option price as dollars for the whole trade (100 shares a contract), to the cent
+export const contractsTotal = (price, contracts) => Math.round(price * contracts * 100 * 100) / 100
+
+// Your usual commission for this many contracts, as the text a fee box starts with ('' when there's none)
+export function usualFees(strategy, contracts) {
+  const fee = (strategy?.commission_per_contract || 0) * (contracts || 0)
+  return fee > 0 ? fee.toFixed(2) : ''
+}
 
 // A call that's gone against you: it now costs more to buy back than you sold
 // it for. Returns null otherwise (or without a current price for the call and

@@ -1,44 +1,58 @@
-// src/components/dialogs/EditTradeModal.jsx — fix what was recorded for a trade (fill, fees, buyback cost)
+// src/components/dialogs/EditTradeModal.jsx — fix what was recorded for a trade (fill, fees, buyback price)
 import { useState } from 'react'
 import { apiError, editPosition } from '../../api/client'
 import Modal, { DialogHead } from './Modal'
 import { MoneyField, Spinner } from '../ui'
 import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { fmtDate, money, plural, strike } from '../../lib/format'
-import { moneyValue } from '../../lib/pnl'
+import { contractsTotal, moneyValue } from '../../lib/pnl'
 
 const toText = v => (v == null ? '' : String(Number(v).toFixed(2)))
+// A buyback total back to its price per share; up to 4 decimals, so a total that
+// isn't a whole cent a share (one that includes a commission, say) still adds up
+function perShareText(total, contracts) {
+  if (total == null) return ''
+  const price = total / (contracts * 100)
+  const exact = String(Number(price.toFixed(4)))
+  return (exact.split('.')[1] || '').length > 2 ? exact : price.toFixed(2)
+}
 
 export default function EditTradeModal({ position: p, onDone, onCancel }) {
   const boughtBack = p.status === 'CLOSED'
   // Fee boxes when your broker charges, or this trade already has fees recorded
   const showFees = chargesCommission(useStrategy()) || (p.open_fees || 0) > 0 || (p.close_fees || 0) > 0
-  const [fill, setFill]           = useState(toText(p.entry_price))
-  const [openFees, setOpenFees]   = useState(toText(p.open_fees))
-  const [cost, setCost]           = useState(toText(p.close_cost))
-  const [closeFees, setCloseFees] = useState(toText(p.close_fees))
+  const [start] = useState(() => ({
+    fill: toText(p.entry_price), openFees: toText(p.open_fees), buy: perShareText(p.close_cost, p.contracts), closeFees: toText(p.close_fees),
+  }))
+  const [fill, setFill]           = useState(start.fill)
+  const [openFees, setOpenFees]   = useState(start.openFees)
+  const [buy, setBuy]             = useState(start.buy)
+  const [closeFees, setCloseFees] = useState(start.closeFees)
   const [busy, setBusy]           = useState(false)
   const [error, setError]         = useState(null)
 
   const fillValue = moneyValue(fill)
   const fillError = fillValue == null || !(fillValue > 0) ? 'Enter the price it sold for' : null
+  const buyValue = moneyValue(buy)
+  // The saved total stays as it was unless you change the price
+  const cost = buy === start.buy ? p.close_cost : buyValue == null ? null : contractsTotal(buyValue, p.contracts)
+  const oddCents = buy === start.buy && p.close_cost != null && buy.includes('.') && buy.split('.')[1].length > 2
 
   // Send only what changed
   const changes = {}
-  const diff = (key, text, original) => {
-    const v = moneyValue(text)
-    if (v != null && v !== Number(original ?? NaN)) changes[key] = v
+  const diff = (key, text, initial, value = moneyValue(text)) => {
+    if (text !== initial && value != null) changes[key] = value
   }
-  diff('entry_price', fill, p.entry_price)
-  diff('open_fees', openFees, p.open_fees)
+  diff('entry_price', fill, start.fill)
+  diff('open_fees', openFees, start.openFees)
   if (boughtBack) {
-    diff('close_cost', cost, p.close_cost)
-    diff('close_fees', closeFees, p.close_fees)
+    diff('close_cost', buy, start.buy, cost)
+    diff('close_fees', closeFees, start.closeFees)
   }
   const dirty = Object.keys(changes).length > 0
 
   const premium = (fillValue || 0) * p.contracts * 100
-  const kept = premium - (moneyValue(openFees) || 0) - (boughtBack ? (moneyValue(cost) || 0) + (moneyValue(closeFees) || 0) : 0)
+  const kept = premium - (moneyValue(openFees) || 0) - (boughtBack ? (cost || 0) + (moneyValue(closeFees) || 0) : 0)
   const status = p.status === 'OPEN' ? 'open' : p.status === 'CLOSED' ? `bought back ${fmtDate(p.closed_at)}` : `${p.status.toLowerCase()} ${fmtDate(p.closed_at)}`
 
   const submit = async () => {
@@ -54,12 +68,12 @@ export default function EditTradeModal({ position: p, onDone, onCancel }) {
         sub={`${p.ticker} ${strike(p.strike)} call · ${status} · ${plural(p.contracts, 'contract')}`} />
 
       <div className={`mt-5 grid gap-x-3 gap-y-4 ${showFees || boughtBack ? 'grid-cols-2' : ''}`}>
-        <MoneyField id="edit-fill" label="Sold for (per share)" value={fill} onChange={setFill} error={fillError} />
-        {showFees && <MoneyField id="edit-open-fees" label="Fees when sold" value={openFees} onChange={setOpenFees} />}
+        <MoneyField id="edit-fill" label="Sold per share" value={fill} onChange={setFill} error={fillError} />
+        {showFees && <MoneyField id="edit-open-fees" label="Selling fees" value={openFees} onChange={setOpenFees} />}
         {boughtBack && <>
-          <MoneyField id="edit-cost" label="Paid to buy back (total)" value={cost} onChange={setCost}
-            hint={p.close_cost == null ? 'Not entered yet' : null} />
-          {showFees && <MoneyField id="edit-close-fees" label="Fees when bought back" value={closeFees} onChange={setCloseFees} />}
+          <MoneyField id="edit-buy" label="Paid per share" value={buy} onChange={setBuy}
+            hint={cost == null ? 'Not entered yet' : `${money(cost)} in total${oddCents ? '. Not a whole cent a share: if it includes the commission, enter the price your broker filled at' : ''}`} />
+          {showFees && <MoneyField id="edit-close-fees" label="Buyback fees" value={closeFees} onChange={setCloseFees} />}
         </>}
       </div>
 
