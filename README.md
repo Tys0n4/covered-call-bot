@@ -120,43 +120,7 @@ The tests use a fake market and a temporary SQLite database, so they need no API
 
 ## Reference
 
-<details>
-<summary><strong>API endpoints</strong></summary>
-
-When `APP_PASSWORD` is set, every endpoint except `/`, `/health`, `/market` and `/auth/*`
-needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`).
-
-| Method | Endpoint             | Description                                   |
-|--------|----------------------|-----------------------------------------------|
-| GET    | `/auth/status`       | Whether a password is required                |
-| POST   | `/auth/login`        | Exchange the password for a login token       |
-| GET    | `/portfolio`         | All tickers with contract stats               |
-| POST   | `/portfolio`         | Add a stock you own                           |
-| PUT    | `/portfolio/{ticker}`| Change shares / average cost                  |
-| DELETE | `/portfolio/{ticker}`| Remove a stock (blocked while calls are open) |
-| POST   | `/scan`              | Run scanner for a ticker in your portfolio    |
-| POST   | `/scan/save`         | Save the recommended trade (checked against your shares and split) |
-| GET    | `/positions`         | Open positions (filter by ticker)             |
-| POST   | `/positions`         | Add a trade by hand (checked against your shares) |
-| GET    | `/positions/all`     | All positions including closed                |
-| POST   | `/positions/close`   | Mark a position as closed                     |
-| POST   | `/positions/{id}/roll` | Buy back a call and sell a new one (one step) |
-| POST   | `/positions/{id}/assign` | Record shares called away (removes them from the holding) |
-| POST   | `/positions/{id}/not-assigned` | Confirm an in-the-money expiry was not assigned |
-| GET    | `/positions/assignment-review` | Expired calls that probably got assigned |
-| GET    | `/manage`            | Evaluate positions for buyback                |
-| GET    | `/performance`       | Realized results: summary, months, every finished call |
-| GET    | `/upcoming`          | Fed decisions and your holdings' earnings in the next 30 days (Home) |
-| GET    | `/market`            | Whether the market is open now, and when it next opens (the header status; no login needed) |
-| GET    | `/settings`          | Your saved strategy                           |
-| PUT    | `/settings`          | Save your strategy                            |
-| GET    | `/alerts`            | Buy-back alert settings (the webhook is never returned in full) |
-| PUT    | `/alerts`            | Save the Discord webhook, turn alerts on/off, or remove the webhook |
-| POST   | `/alerts/test`       | Send a test message to Discord                |
-| POST   | `/alerts/check`      | Alert any open call that just reached the target (the manual workflow) |
-| POST   | `/alerts/cron`       | The same check for cron-job.org: no login, needs the `X-Alerts-Key` header (= `ALERTS_KEY`); answers 202 and checks in the background |
-
-</details>
+**API** — interactive docs at [/docs](https://covered-call-bot-production.up.railway.app/docs). With `APP_PASSWORD` set, every endpoint except `/`, `/health`, `/market` and `/auth/*` needs an `Authorization: Bearer <token>` header from `/auth/login`. `/alerts/cron` uses the `X-Alerts-Key` header instead.
 
 <details>
 <summary><strong>Project structure</strong></summary>
