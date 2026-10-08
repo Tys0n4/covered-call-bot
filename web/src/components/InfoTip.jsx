@@ -1,4 +1,5 @@
 // src/components/InfoTip.jsx — small ⓘ that explains a term on hover, tap or keyboard focus.
+// Kept for real jargon only (delta, open interest …); plain words don't need one.
 // The bubble is drawn in <body> with fixed positioning, so scrolling tables,
 // cards and dialogs can't clip it; it flips below the icon near the top of the
 // screen and stays inside the window.
@@ -9,7 +10,7 @@ import { Info } from 'lucide-react'
 const GAP = 8      // space between icon and bubble
 const MARGIN = 8   // keep this far from the window edges
 
-export default function InfoTip({ text, size = 13 }) {
+export default function InfoTip({ text, size = 14 }) {
   const id = useId()
   const btnRef = useRef(null)
   const bubbleRef = useRef(null)
@@ -50,7 +51,7 @@ export default function InfoTip({ text, size = 13 }) {
     <button
       ref={btnRef}
       type="button"
-      className={`infotip${open ? ' open' : ''}`}
+      className={`relative inline-flex shrink-0 align-[-2px] before:absolute before:-inset-2 before:content-[''] ${open ? 'text-fg' : 'text-muted hover:text-fg'}`}
       aria-label="What does this mean?"
       aria-describedby={id}
       onMouseEnter={() => setHover(true)}
@@ -60,17 +61,12 @@ export default function InfoTip({ text, size = 13 }) {
       // Escape hides it again for keyboard users
       onKeyDown={e => { if (e.key === 'Escape') { setHover(false); e.currentTarget.blur() } }}
     >
-      <Info size={size} strokeWidth={1.75} aria-hidden="true" />
+      <Info size={size} strokeWidth={1.9} aria-hidden="true" />
       {/* Text for screen readers; the visible bubble below is a copy */}
       <span id={id} className="sr-only">{text}</span>
       {open && createPortal(
-        <span
-          ref={bubbleRef}
-          className="infotip-bubble"
-          role="tooltip"
-          aria-hidden="true"
-          style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
-        >
+        <span ref={bubbleRef} className="tip" role="tooltip" aria-hidden="true"
+          style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}>
           {text}
         </span>,
         document.body,

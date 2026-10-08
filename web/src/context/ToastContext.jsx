@@ -1,7 +1,7 @@
 // src/context/ToastContext.jsx — short confirmations ("Call rolled") with an optional Undo
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle, Check, X } from 'lucide-react'
 
 const ToastContext = createContext(() => {})
 
@@ -14,18 +14,22 @@ function Toast({ t, onDismiss }) {
     const timer = setTimeout(() => onDismiss(t.id), t.action ? LIFETIME_WITH_ACTION : LIFETIME)
     return () => clearTimeout(timer)
   }, [t, onDismiss])
-  const Icon = t.tone === 'error' ? AlertTriangle : CheckCircle2
+  const error = t.tone === 'error'
+  const Icon = error ? AlertTriangle : Check
   return (
-    <div className={`toast toast-${t.tone || 'success'}`} role={t.tone === 'error' ? 'alert' : 'status'}>
-      <Icon size={17} strokeWidth={2} style={{ flexShrink: 0 }} />
-      <span style={{ flex: 1 }}>{t.message}</span>
+    <div className="toast" role={error ? 'alert' : 'status'}>
+      <Icon size={18} strokeWidth={2.2} className="shrink-0" style={{ color: error ? 'var(--loss)' : 'var(--accent)' }} aria-hidden="true" />
+      <span className="flex-1">{t.message}</span>
       {t.action && (
-        <button className="link-btn" style={{ fontSize: 13 }} disabled={busy}
+        <button type="button" className="btn-toast" disabled={busy}
           onClick={async () => { setBusy(true); try { await t.action.onClick() } finally { onDismiss(t.id) } }}>
-          {busy ? <span className="spinner" style={{ width: 12, height: 12 }} /> : t.action.label}
+          {busy ? <span className="spinner h-3.5 w-3.5" /> : t.action.label}
         </button>
       )}
-      <button className="toast-close" aria-label="Dismiss" onClick={() => onDismiss(t.id)}><X size={14} /></button>
+      <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-full opacity-60 hover:opacity-100"
+        aria-label="Dismiss" onClick={() => onDismiss(t.id)}>
+        <X size={16} strokeWidth={2} />
+      </button>
     </div>
   )
 }

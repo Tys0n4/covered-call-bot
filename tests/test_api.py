@@ -57,6 +57,24 @@ def test_password_protects_every_data_route(client, monkeypatch):
     assert client.get("/portfolio", headers={"Authorization": f"Bearer {tampered}"}).status_code == 401
 
 
+def test_market_status_for_the_header(client, monkeypatch):
+    import api.main as main
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    monkeypatch.setattr(main, "is_market_open", lambda: True)
+    assert client.get("/market").json() == {"market_open": True, "next_market_open": None}
+
+    opens = datetime(2026, 10, 12, 9, 30, tzinfo=ZoneInfo("America/New_York"))
+    monkeypatch.setattr(main, "is_market_open", lambda: False)
+    monkeypatch.setattr(main, "next_market_open", lambda: opens)
+    assert client.get("/market").json() == {"market_open": False, "next_market_open": opens.isoformat()}
+
+    # Public, like /health: it's only the market calendar
+    monkeypatch.setenv("APP_PASSWORD", "hunter2")
+    assert client.get("/market").status_code == 200
+
+
 def test_expired_and_rotated_tokens_are_rejected(monkeypatch):
     monkeypatch.setenv("APP_PASSWORD", "hunter2")
     token, expires = auth.make_token()

@@ -2,27 +2,29 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { MarketProvider } from './context/MarketContext'
+import { ThemeProvider } from './context/ThemeContext'
 import { TickerProvider } from './context/TickerContext'
 import { ToastProvider } from './context/ToastContext'
-import Layout    from './components/Layout'
+import Layout from './components/Layout'
+import { Spinner } from './components/ui'
 
 // Each page loads on demand, so the first screen doesn't wait for the others
-// (the Dashboard's chart library is the biggest piece).
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Scanner   = lazy(() => import('./pages/Scanner'))
 const Positions = lazy(() => import('./pages/Positions'))
 const Strategy  = lazy(() => import('./pages/Strategy'))
 const Performance = lazy(() => import('./pages/Performance'))
 
-const pageLoading = (
-  <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><div className="spinner" style={{ width: 36, height: 36 }} /></div>
-)
+const pageLoading = <div className="flex justify-center py-20 text-muted"><Spinner className="h-8 w-8" /></div>
 
 export default function App() {
   return (
     <BrowserRouter>
+      <ThemeProvider>
       <ToastProvider>
       <AuthProvider>
+      <MarketProvider>
       <TickerProvider>
         <Layout>
           <Suspense fallback={pageLoading}>
@@ -40,8 +42,10 @@ export default function App() {
           </Suspense>
         </Layout>
       </TickerProvider>
+      </MarketProvider>
       </AuthProvider>
       </ToastProvider>
+      </ThemeProvider>
     </BrowserRouter>
   )
 }

@@ -1,13 +1,15 @@
 // src/pages/Login.jsx — password screen, shown when the API has APP_PASSWORD set
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Lock } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { apiError, login, setToken } from '../api/client'
+import { Logo, Spinner } from '../components/ui'
 
 export default function LoginPage({ onLoggedIn }) {
   const [password, setPassword] = useState('')
+  const [shown, setShown]       = useState(false)
   const [busy, setBusy]         = useState(false)
   const [error, setError]       = useState(null)
-  useEffect(() => { document.title = 'Sign in · CovCall' }, [])
+  useEffect(() => { document.title = 'Log in · CovCall' }, [])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -24,27 +26,29 @@ export default function LoginPage({ onLoggedIn }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <form className="card fade-up" onSubmit={submit} style={{ width: '100%', maxWidth: 380, padding: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-          <div className="logo-mark">C</div>
-          <div style={{ lineHeight: 1.2 }}>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>CovCall</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Covered call scanner</div>
-          </div>
+    <div className="flex min-h-screen items-center justify-center px-6 py-12">
+      <form className="page w-full max-w-[360px]" onSubmit={submit} aria-labelledby="login-h">
+        <div className="flex items-center gap-3">
+          <Logo size={44} />
+          <span className="text-20 font-semibold tracking-title">CovCall</span>
         </div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Log in</h1>
-        <div className="hint" style={{ marginBottom: 20 }}>Enter the password set on your server.</div>
-        <label className="label" htmlFor="password">Password</label>
-        <input id="password" className="input" type="password" autoComplete="current-password" autoFocus
-          value={password} onChange={e => setPassword(e.target.value)} />
-        {error && (
-          <div className="callout callout-red" role="alert" style={{ marginTop: 14, padding: '10px 12px', fontSize: 13 }}>
-            <AlertTriangle size={16} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 1 }} /> {error}
-          </div>
-        )}
-        <button type="submit" className="btn-primary" disabled={busy} style={{ width: '100%', justifyContent: 'center', marginTop: 20 }}>
-          {busy ? <><span className="spinner" /> Checking…</> : <><Lock size={15} strokeWidth={2} /> Log in</>}
+        <h1 id="login-h" className="page-title mt-10">Log in</h1>
+        <p className="mt-1.5 text-15 text-fg-2">Enter the password set on your server.</p>
+
+        <label className="label mt-7" htmlFor="password">Password</label>
+        <span className="relative block">
+          <input id="password" className="input pr-14" type={shown ? 'text' : 'password'} autoComplete="current-password" autoFocus
+            value={password} onChange={e => setPassword(e.target.value)} aria-invalid={error ? true : undefined}
+            aria-describedby={error ? 'login-err' : undefined} />
+          <button type="button" className="icon-btn absolute top-0.5 right-0.5 rounded-sm" aria-label={shown ? 'Hide password' : 'Show password'}
+            aria-pressed={shown} onClick={() => setShown(s => !s)}>
+            {shown ? <EyeOff size={19} strokeWidth={1.8} /> : <Eye size={19} strokeWidth={1.8} />}
+          </button>
+        </span>
+        {error && <p id="login-err" role="alert" className="field-error">{error}</p>}
+
+        <button type="submit" className="btn btn-primary btn-block mt-5" disabled={busy}>
+          {busy ? <><Spinner /> Checking…</> : 'Log in'}
         </button>
       </form>
     </div>

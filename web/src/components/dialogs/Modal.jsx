@@ -1,13 +1,15 @@
-// src/components/dialogs/Modal.jsx — full-screen dark backdrop for pop-ups.
-// Rendered straight into <body> so page animations can't trap or clip it.
-// Handles the keyboard for every dialog: Escape closes it (via onDismiss),
-// Tab stays inside it, and focus returns to whatever opened it.
+// src/components/dialogs/Modal.jsx — the pop-up shell: a sheet that slides up from the
+// bottom on phones, a centered card on bigger screens. Rendered straight into <body>
+// so page animations can't trap or clip it. Handles the keyboard for every dialog:
+// Escape closes it (via onDismiss), Tab stays inside it, and focus returns to
+// whatever opened it.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export default function Modal({ children, onDismiss, blur = true }) {
+export default function Modal({ children, onDismiss, labelledBy, label, role = 'dialog', width, as: Tag = 'div', onSubmit }) {
   const ref = useRef(null)
   // What had focus when the dialog opened; read on first render, before any autoFocus field takes it
   const [opener] = useState(() => document.activeElement)
@@ -19,7 +21,7 @@ export default function Modal({ children, onDismiss, blur = true }) {
     // Start inside the dialog (an autoFocus field wins if there is one)
     if (!box.contains(document.activeElement)) {
       const first = box.querySelector('input:not([disabled]), select, textarea') || box.querySelector(FOCUSABLE)
-      first?.focus()
+      first?.focus({ preventScroll: true })
     }
     const onKey = e => {
       if (e.key === 'Escape') { e.preventDefault(); dismissRef.current?.() }
@@ -38,19 +40,32 @@ export default function Modal({ children, onDismiss, blur = true }) {
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = overflow
-      if (opener && document.contains(opener)) opener.focus()
+      if (opener && document.contains(opener)) opener.focus({ preventScroll: true })
     }
   }, [opener])
 
   return createPortal(
-    <div
-      ref={ref}
-      className="modal-backdrop"
-      onMouseDown={e => { if (onDismiss && e.target === e.currentTarget) onDismiss() }}
-      style={{ backdropFilter: blur ? 'blur(4px)' : undefined }}
-    >
-      {children}
+    <div ref={ref} className="backdrop" onMouseDown={e => { if (onDismiss && e.target === e.currentTarget) onDismiss() }}>
+      <Tag className="dialog" role={role} aria-modal="true" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : label}
+        style={width ? { maxWidth: width } : undefined} onSubmit={onSubmit}>
+        {children}
+      </Tag>
     </div>,
     document.body,
+  )
+}
+
+// Title (and optional line under it) with the close button
+export function DialogHead({ id, title, sub, onClose, disabled }) {
+  return (
+    <>
+      <h2 id={id} className="pr-10 text-22 font-semibold tracking-title">{title}</h2>
+      {sub && <p className="mt-1 text-15 text-fg-2">{sub}</p>}
+      {onClose && (
+        <button type="button" className="icon-btn dialog-close" aria-label="Close" onClick={onClose} disabled={disabled}>
+          <X size={20} strokeWidth={2} />
+        </button>
+      )}
+    </>
   )
 }

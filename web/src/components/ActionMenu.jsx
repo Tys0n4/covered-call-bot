@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import { MoreHorizontal } from 'lucide-react'
 
-export default function ActionMenu({ items, label = 'More actions' }) {
+export default function ActionMenu({ items, label = 'More actions', className = '' }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState(null)
   const btnRef = useRef(null)
@@ -56,9 +56,10 @@ export default function ActionMenu({ items, label = 'More actions' }) {
   if (visible.length === 0) return null
   return (
     <>
-      <button ref={btnRef} type="button" className="menu-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open}
+      <button ref={btnRef} type="button" className={`icon-btn ${open ? 'bg-surface-2 text-fg' : ''} ${className}`}
+        aria-label={label} aria-haspopup="menu" aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}>
-        <MoreHorizontal size={18} strokeWidth={2} />
+        <MoreHorizontal size={20} strokeWidth={2} />
       </button>
       {open && createPortal(
         <div ref={menuRef} role="menu" aria-label={label} className="menu" onKeyDown={onKeyDown}
@@ -66,7 +67,7 @@ export default function ActionMenu({ items, label = 'More actions' }) {
           {visible.map(item => (
             <button key={item.label} type="button" role="menuitem" className={`menu-item${item.danger ? ' danger' : ''}`}
               onClick={() => { close(); item.onClick() }}>
-              {item.icon && <item.icon size={15} strokeWidth={1.9} />}
+              {item.icon && <item.icon size={17} strokeWidth={1.9} aria-hidden="true" />}
               <span>{item.label}</span>
             </button>
           ))}

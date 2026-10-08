@@ -34,7 +34,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 - **Performance** — realized results by month, net after buybacks and fees, gains on shares called away, and yearly return on capital
 - **Multi-ticker support** — manage covered calls across multiple stock positions independently
 - **REST API** — FastAPI backend with auto-generated interactive docs at `/docs`
-- **React app** — dark-themed, works on desktop and phones. One meaning per color (cyan = action, green = money in, amber = heads up, red = loss, violet = Balanced); Syne for titles, Geist for text and Geist Mono for numbers, bundled with the app
+- **React app** — dark and light themes (Strategy › Appearance: System, Light or Dark), a top bar on desktop and five tabs on phones. One typeface (Geist, with aligned figures for money) on one type scale; one accent for money and actions, red only for losses and things that can't be undone, amber dots for earnings and Fed decisions. The colors, type sizes and radii are tokens in `web/src/index.css`, used through Tailwind (`bg-surface`, `text-muted`, `text-15` …)
 
 ---
 
@@ -42,17 +42,21 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 
 *Demo portfolio with simulated market data.*
 
-**Dashboard** — your monthly goal as a ring (with premium in open calls and contracts working) next to the one thing to do next, anything else that needs you, and "Coming up": the next three events, earnings and Fed decisions first, with the rest of the month (expiries too) behind "Show more". Then one row per stock, with Edit shares or cost in its ⋯ menu.
+**Home** — what you've kept this month as the big number, with a chart of premium kept against the pace your monthly goal needs (Month, 3M or Year; hover or drag across it to see any day). Next to it, the one thing to do next and anything else that needs you, then "Coming up": the next three events, earnings and Fed decisions first, with the rest of the month behind "See all". Under the chart, premium in open calls, contracts working and yearly return, then one row per stock with a mark for each contract that has a call sold (Edit shares or cost is in its ⋯ menu).
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Home](docs/screenshots/dashboard.png)
 
-**Scanner** — one recommended trade: what you collect, the income and balanced calls with each one's chance of being called, whether it keeps you on pace for your monthly goal, and the price you actually sold at. A plain line says whether premiums are rich or thin right now, with the numbers behind it in the ⓘ; the buy-back reserve split and every option that matched are one tap away.
+The same screen in the light theme:
+
+![Home, light theme](docs/screenshots/dashboard-light.png)
+
+**Scanner** — pick a stock (each shows how many contracts are free), scan, and get one recommended trade: what you collect as the big number, the income and balanced calls with each one's chance of being called, whether it keeps you on pace for your monthly goal, and boxes for the price you actually sold at. A plain line says whether premiums are rich or thin right now, with the numbers behind it in the ⓘ. Your rules and filters sit beside it, and every option that matched is listed below. The last scan of each stock stays on screen when you come back to it.
 
 ![Scanner](docs/screenshots/scanner.png)
 
-**Positions** — every open call across your stocks, with prices checked automatically and grouped into **Ready to buy back**, **Going against you** and **Holding**. Calls that need something from you get the full card with the buy-back limit price and a Copy button; calls you're just holding are one line each (premium kept against the target) and open to the full card. Roll and Close sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone.
+**Positions** — every open call across your stocks, with prices checked automatically and grouped into **Ready to buy back**, **Going against you** and **Holding**. Calls that need something from you get a card with premium kept against the target, the buy-back limit price (with a Copy button), the price now and what buying back costs; calls you're just holding are one line each and open to the full card. Roll and Buy back sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone. On phones, every pop-up is a sheet that slides up from the bottom.
 
-**Strategy** — your monthly goal, your broker's commission and Discord alerts first. The trading rules (chance of being called, expiry window, buy-back targets, split, reserve) start on recommended settings and show as a one-card summary; **Change rules** opens the controls.
+**Strategy** — your monthly goal, then the trading rules (chance of being called, expiry window, buy-back targets, split, reserve) as a list with each value on the right; a rule opens in place on bigger screens and in a sheet on phones, and changes wait for Save. Then Discord alerts, your broker's commission, Appearance (light or dark) and CSV downloads of your data.
 
 ![Positions](docs/screenshots/positions.png)
 
@@ -77,7 +81,7 @@ Covered Call Scanner automates the process of finding, evaluating, and tracking 
 | Backend     | Python, FastAPI, Uvicorn            |
 | Data        | Cboe delayed quotes, yfinance, Alpha Vantage API, pandas |
 | Frontend    | React, Vite, Tailwind CSS           |
-| State       | React Context API, localStorage     |
+| State       | React Context API, localStorage (theme, filters) |
 | Persistence | Postgres (SQLite locally), SQLAlchemy |
 | Deployment  | Vercel (frontend), Railway (backend)|
 
@@ -107,7 +111,7 @@ covered-call-bot/
 ├── tests/                    # pytest suite (fake market, temporary database)
 ├── web/                      # React frontend (Vite), deployed to Vercel
 │   └── src/
-│       ├── pages/            # Dashboard, Scanner, Positions, Performance, Strategy, Login
+│       ├── pages/            # Dashboard (Home), Scanner, Positions, Performance, Strategy, Login
 │       ├── components/       # Shared UI (Layout, PageHeader, InfoTip, ...)
 │       │   └── dialogs/      # Pop-up dialogs (add, close, roll, edit, holding)
 │       ├── context/          # Login state and the selected stock
@@ -168,7 +172,7 @@ uvicorn api.main:app --app-dir backend --reload --port 8000
 
 API docs available at [http://localhost:8000/docs](http://localhost:8000/docs)
 
-Without `DATABASE_URL`, an empty local SQLite database is created at `backend/covcall.db`. Add your stocks from the Dashboard.
+Without `DATABASE_URL`, an empty local SQLite database is created at `backend/covcall.db`. Add your stocks from Home.
 
 ### 5. Install and start the frontend
 
@@ -208,7 +212,7 @@ Monthly income is what you expect to keep per contract: the premium × your buy-
 
 **Chance of being called (delta)** is Cboe's own delta when Cboe supplies one. Otherwise it's Black-Scholes delta, lowered slightly for dividend payers. Its volatility comes from Yahoo's implied volatility; outside market hours Yahoo reports roughly zero there, so it's worked out from each option's own price instead, or from the stock's recent moves as a last resort. The Scanner says when it's using these estimates. A quiet strike whose last trade is from before the latest session is marked **Old price**: the stock has moved since, so that price doesn't set its volatility and the picks skip it.
 
-**Events.** When earnings, a Fed rate decision (FOMC dates in `backend/core/events.py`), or earnings from the industry's largest companies or your other stocks in the same industry fall before an option's expiry, it's flagged and both picks stay within 3 points of your lowest delta. Industry comes from Yahoo Finance; the leaders list is in `backend/core/events.py`. Earnings and ex-dividend dates come from Yahoo and are saved in the database, so when Yahoo doesn't answer (it rate-limits cloud servers, often right after a redeploy) the saved dates are used until they pass, and Yahoo is asked again after 5 minutes. If there's no saved date either, the Dashboard and Scanner say the earnings date couldn't be checked instead of treating the stock as having none. Only confirmed Fed dates go there; when an expiry runs past the last one, the Scanner says the calendar ends there.
+**Events.** When earnings, a Fed rate decision (FOMC dates in `backend/core/events.py`), or earnings from the industry's largest companies or your other stocks in the same industry fall before an option's expiry, it's flagged and both picks stay within 3 points of your lowest delta. Industry comes from Yahoo Finance; the leaders list is in `backend/core/events.py`. Earnings and ex-dividend dates come from Yahoo and are saved in the database, so when Yahoo doesn't answer (it rate-limits cloud servers, often right after a redeploy) the saved dates are used until they pass, and Yahoo is asked again after 5 minutes. If there's no saved date either, Home and the Scanner say the earnings date couldn't be checked instead of treating the stock as having none. Only confirmed Fed dates go there; when an expiry runs past the last one, the Scanner says the calendar ends there.
 
 ### Allocation
 
@@ -221,7 +225,7 @@ The management module prices each open call at what buying it back costs now: th
 - **Buy back now**: the call's price (the midpoint) is at or below your **buy-back price**. That's your target share of the premium kept (85% by default) turned into a price per share: what you sold for × (1 − target), rounded to the closest cent, since options trade in whole cents. Sold at $0.34: 85% kept is $0.051, so the buy-back price is $0.05 (85.3% kept). Sold at $0.38: $0.057 rounds to $0.06 (84.2% kept), which is closer than $0.05. Half a cent rounds down, and it's never below $0.01. If earnings or a Fed decision comes before the call expires, the earlier event target applies (65% by default). Both targets are set on the Strategy page; Positions and the Discord alerts show the price to set as a limit order.
 - **Let it expire**: past the target, but it expires within a week with the stock at least 5% below the strike and no event before expiry. Buying back would mostly pay the spread and commission for very little risk removed.
 - **Keep holding**: not at the target yet.
-- **When a call goes against you** (it now costs more than you sold it for), the card shows your two real choices in dollars instead: buy back now (the loss on the call; you keep your shares) or let it be called away at the strike (premium plus the gain or loss on your shares over your average cost). It's marked "Stock above strike" in red when the stock has passed the strike (the Dashboard lists these too), or "Call is up" in amber while it's still below.
+- **When a call goes against you** (it now costs more than you sold it for), the card shows your two real choices in dollars instead: buy back now (the loss on the call; you keep your shares) or let it be called away at the strike (premium plus the gain or loss on your shares over your average cost). It's marked "Stock above strike" in red when the stock has passed the strike (Home lists these too), or "Call is up" in amber while it's still below.
 
 Buyback costs include your usual commission. Discord alerts are only sent for "Buy back now".
 
@@ -299,7 +303,8 @@ needs an `Authorization: Bearer <token>` header (get a token from `/auth/login`)
 | GET    | `/positions/assignment-review` | Expired calls that probably got assigned |
 | GET    | `/manage`            | Evaluate positions for buyback                |
 | GET    | `/performance`       | Realized results: summary, months, every finished call |
-| GET    | `/upcoming`          | Fed decisions and your holdings' earnings in the next 30 days (Dashboard) |
+| GET    | `/upcoming`          | Fed decisions and your holdings' earnings in the next 30 days (Home) |
+| GET    | `/market`            | Whether the market is open now, and when it next opens (the header status; no login needed) |
 | GET    | `/settings`          | Your saved strategy                           |
 | PUT    | `/settings`          | Save your strategy                            |
 | GET    | `/alerts`            | Buy-back alert settings (the webhook is never returned in full) |

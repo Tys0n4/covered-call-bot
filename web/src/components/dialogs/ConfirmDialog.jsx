@@ -1,6 +1,7 @@
 // src/components/dialogs/ConfirmDialog.jsx — "Are you sure?" for actions like delete or undo
 import { useState } from 'react'
 import Modal from './Modal'
+import { Spinner } from '../ui'
 
 export default function ConfirmDialog({ title, children, confirmLabel, danger = false, onConfirm, onCancel }) {
   const [busy, setBusy] = useState(false)
@@ -13,19 +14,15 @@ export default function ConfirmDialog({ title, children, confirmLabel, danger = 
   }
 
   return (
-    <Modal onDismiss={() => { if (!busy) onCancel() }}>
-      <div className="card dialog-card" role="alertdialog" aria-modal="true" aria-label={title}
-        style={{ maxWidth: 420 }}>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{title}</div>
-        <div className="hint" style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.55 }}>{children}</div>
-        {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div className="dialog-actions" style={{ marginTop: 22 }}>
-          <button className="btn-secondary" onClick={onCancel} disabled={busy} autoFocus>Cancel</button>
-          <button className={danger ? 'btn-danger' : 'btn-primary'} style={danger ? { padding: '10px 18px', fontSize: 14 } : undefined}
-            onClick={confirm} disabled={busy}>
-            {busy ? <span className="spinner" style={{ width: 14, height: 14 }} /> : confirmLabel}
-          </button>
-        </div>
+    <Modal onDismiss={() => { if (!busy) onCancel() }} role="alertdialog" labelledBy="confirm-title" width={440}>
+      <h2 id="confirm-title" className="text-22 font-semibold tracking-title">{title}</h2>
+      <p className="mt-2 text-15 text-fg-2">{children}</p>
+      {error && <p role="alert" className="mt-3 text-13 text-loss">{error}</p>}
+      <div className="dialog-actions">
+        <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy} autoFocus>Cancel</button>
+        <button type="button" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={confirm} disabled={busy}>
+          {busy ? <Spinner /> : confirmLabel}
+        </button>
       </div>
     </Modal>
   )

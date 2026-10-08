@@ -1,9 +1,6 @@
 // src/components/Skeleton.jsx — grey placeholder shapes in the page's layout
 // while data loads, so the page doesn't jump when it arrives.
-
-function Bone({ w = '100%', h = 14, r = 8, style }) {
-  return <span className="skeleton" style={{ width: w, height: h, borderRadius: r, ...style }} />
-}
+import { Bone } from './ui'
 
 // Wraps placeholders; screen readers hear "Loading…" instead of empty shapes
 export function Loading({ children }) {
@@ -15,46 +12,31 @@ export function Loading({ children }) {
   )
 }
 
-function StatCard({ big = false }) {
-  return (
-    <div className="card">
-      <Bone w={110} h={12} />
-      <Bone w={big ? 180 : 70} h={30} style={{ marginTop: 14 }} />
-      <Bone w={big ? '70%' : 120} h={12} style={{ marginTop: 14 }} />
-    </div>
-  )
-}
+const Rows = ({ n = 3 }) => Array.from({ length: n }, (_, i) => (
+  <div key={i} className="flex items-center justify-between border-b border-line py-4">
+    <div><Bone className="h-4 w-16" /><Bone className="mt-2 h-3 w-32" /></div>
+    <Bone className="h-4 w-20" />
+  </div>
+))
 
 export function DashboardSkeleton() {
   return (
     <Loading>
-      <div className="hero-grid">
-        <StatCard big />
-        <div className="card">
-          <Bone w={80} h={12} />
-          <Bone w="70%" h={24} style={{ marginTop: 14 }} />
-          <Bone w="90%" style={{ marginTop: 12 }} />
-          <Bone w={160} h={42} r={12} style={{ marginTop: 18 }} />
+      <div className="md:grid md:grid-cols-[minmax(0,1fr)_320px] md:gap-12">
+        <div>
+          <Bone className="h-4 w-28" />
+          <Bone className="mt-3 h-11 w-52 md:h-14" />
+          <Bone className="mt-3 h-4 w-64" />
+          <div className="relative mt-6 h-[180px] md:h-[240px]"><Bone className="absolute inset-x-0 top-[70%] h-0.5" /></div>
+          <div className="mt-8 flex gap-2"><Bone className="h-11 flex-1 rounded-full md:w-20 md:flex-none" /><Bone className="h-11 flex-1 rounded-full md:w-20 md:flex-none" /><Bone className="h-11 flex-1 rounded-full md:w-20 md:flex-none" /></div>
+          <Bone className="mt-8 h-36 rounded-card md:hidden" />
+          <div className="mt-10"><Rows n={3} /></div>
         </div>
-      </div>
-      <div className="card" style={{ marginBottom: 24 }}>
-        <Bone w={110} h={16} />
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-            <Bone w={48} h={44} r={10} /><Bone w="50%" /><span style={{ flex: 1 }} />
-          </div>
-        ))}
-      </div>
-      <Bone w={110} h={16} style={{ marginBottom: 14 }} />
-      <div className="card" style={{ padding: 0 }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} className="stock-row">
-            <div className="stock-name"><Bone w={64} h={26} /><Bone w={150} h={12} /></div>
-            <div className="stock-bar"><Bone w={150} h={12} style={{ marginBottom: 8 }} /><Bone h={8} /></div>
-            <div className="stock-num"><Bone w={80} h={14} /></div>
-            <div className="stock-actions"><Bone w={80} h={30} r={10} /></div>
-          </div>
-        ))}
+        <div className="hidden md:block">
+          <Bone className="h-64 rounded-card" />
+          <Bone className="mt-10 h-4 w-28" />
+          <Rows n={3} />
+        </div>
       </div>
     </Loading>
   )
@@ -63,24 +45,20 @@ export function DashboardSkeleton() {
 export function PositionsSkeleton() {
   return (
     <Loading>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} className="card">
-            <div className="grid-split">
-              <div>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}><Bone w={46} h={22} /><Bone w={64} h={22} r={99} /></div>
-                <Bone w="60%" h={20} style={{ marginBottom: 10 }} />
-                <Bone w="80%" h={13} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><Bone w={120} h={24} r={99} /><Bone w={90} h={13} /></div>
-                <Bone h={6} style={{ marginBottom: 12 }} />
-                <Bone w="70%" h={13} />
-              </div>
-            </div>
+      <Bone className="mb-3 h-4 w-40" />
+      <div className="grid gap-3 md:grid-cols-2">
+        {[0, 1].map(i => (
+          <div key={i} className="rounded-card bg-surface p-5">
+            <div className="flex justify-between"><Bone className="h-5 w-36" /><Bone className="h-5 w-12" /></div>
+            <Bone className="mt-2 h-3 w-48" />
+            <Bone className="mt-5 h-1.5" />
+            <div className="mt-6 grid grid-cols-3 gap-3"><Bone className="h-9" /><Bone className="h-9" /><Bone className="h-9" /></div>
+            <div className="mt-5 flex gap-2.5"><Bone className="h-12 flex-1 rounded-full" /><Bone className="h-12 flex-[2] rounded-full" /></div>
           </div>
         ))}
       </div>
+      <Bone className="mt-8 h-4 w-28" />
+      <Rows n={3} />
     </Loading>
   )
 }
@@ -88,11 +66,14 @@ export function PositionsSkeleton() {
 export function PerformanceSkeleton() {
   return (
     <Loading>
-      <div className="grid-3" style={{ marginBottom: 16 }}><StatCard /><StatCard /><StatCard /></div>
-      <div className="grid-3" style={{ marginBottom: 32 }}><StatCard /><StatCard /><StatCard /></div>
-      <Bone w={130} h={16} style={{ marginBottom: 12 }} />
-      <div className="card" style={{ height: 260, display: 'flex', alignItems: 'flex-end', gap: '8%', padding: '24px 40px' }}>
-        {[45, 70, 85, 25].map((h, i) => <Bone key={i} w="14%" h={`${h}%`} r={6} />)}
+      <Bone className="h-4 w-48" />
+      <Bone className="mt-3 h-11 w-56 md:h-14" />
+      <Bone className="mt-3 h-4 w-80 max-w-full" />
+      <div className="mt-10 flex h-[200px] items-end gap-4 border-b border-line md:h-[240px] md:max-w-[640px] md:gap-6">
+        {[45, 74, 87, 18].map((h, i) => <Bone key={i} className="flex-1 rounded-b-none" style={{ height: `${h}%` }} />)}
+      </div>
+      <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-4">
+        {[0, 1, 2, 3].map(i => <div key={i}><Bone className="h-3 w-24" /><Bone className="mt-2 h-6 w-28" /></div>)}
       </div>
     </Loading>
   )

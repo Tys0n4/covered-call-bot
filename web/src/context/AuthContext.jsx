@@ -39,7 +39,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => { clearToken(); setState('login') }, [])
 
   if (state === 'checking') {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}><div className="spinner" style={{ width: 36, height: 36 }} /></div>
+    return <div className="flex min-h-screen items-center justify-center text-muted"><span className="spinner h-8 w-8" /></div>
   }
   if (state === 'down') return <ServerDown onRetry={retry} fullPage />
   if (state === 'login') return <LoginPage onLoggedIn={() => setState('ready')} />

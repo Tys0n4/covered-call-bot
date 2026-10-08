@@ -1,23 +1,21 @@
-// src/components/PriceStamp.jsx — when option prices were last checked, and
-// whether they're from the last close because the market is shut.
-import { Clock3, Moon } from 'lucide-react'
-import { SOURCE_LABEL } from '../lib/source'
+// src/components/PriceStamp.jsx — one quiet line: when option prices were checked,
+// and whether they're last-close prices because the market is shut.
+import { Dot } from './ui'
 
-const time = iso => new Date(iso).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
-const opens = iso => new Date(iso).toLocaleString('en-CA', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
+const time = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+const opens = iso => new Date(iso).toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
 
 // meta: { checked_at, market_open, next_market_open, quotes_live_at, data_source } from /manage
-export default function PriceStamp({ meta, style }) {
+export default function PriceStamp({ meta, className = '' }) {
   if (!meta?.checked_at) return null
-  const Icon = meta.market_open && !meta.quotes_live_at ? Clock3 : Moon
+  const text = meta.quotes_live_at
+    ? `Trading just opened. Prices are 15 minutes behind, so these are last-close prices until ${time(meta.quotes_live_at)}.`
+    : !meta.market_open
+      ? `Market closed · last-close prices${meta.next_market_open ? ` until ${opens(meta.next_market_open)}` : ''}`
+      : `Prices checked ${time(meta.checked_at)}${meta.data_source === 'yahoo' ? ' from Yahoo (Cboe was unavailable)' : ''}`
   return (
-    <div className="hint price-stamp" style={style}>
-      <Icon size={13} strokeWidth={2} aria-hidden="true" />
-      <span>
-        Prices checked {time(meta.checked_at)}{SOURCE_LABEL[meta.data_source] ? ` from ${SOURCE_LABEL[meta.data_source]}` : ''}
-        {meta.quotes_live_at && <> · Trading just opened: prices are about 15 minutes behind, so these are still last-close prices until {time(meta.quotes_live_at)}</>}
-        {!meta.market_open && <> · Market closed: these are last-close prices{meta.next_market_open ? ` until it reopens (${opens(meta.next_market_open)} your time)` : ''}</>}
-      </span>
-    </div>
+    <p className={`flex items-center gap-2 text-12 text-muted ${className}`}>
+      <Dot tone={meta.market_open && !meta.quotes_live_at ? 'accent' : undefined} />{text}
+    </p>
   )
 }
