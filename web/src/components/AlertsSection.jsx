@@ -1,14 +1,14 @@
 // src/components/AlertsSection.jsx — Strategy page: Discord message when a call is ready to buy back.
 // Saved on its own (not with the strategy rules), since it isn't part of the strategy.
 import { useEffect, useState } from 'react'
-import { BellRing, Send, Trash2 } from 'lucide-react'
 import { apiError, getAlerts, saveAlerts, testAlert } from '../api/client'
 import { useToast } from '../context/ToastContext'
 import Collapsible from './Collapsible'
+import { Field, Spinner, Switch } from './ui'
 
 const WEBHOOK_RE = /^https:\/\/((canary|ptb)\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/
 
-const fmtTime = iso => new Date(iso).toLocaleString('en-CA', { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+const fmtTime = iso => new Date(iso).toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
 
 export default function AlertsSection() {
   const toast = useToast()
@@ -52,69 +52,66 @@ export default function AlertsSection() {
   })
 
   return (
-    <div className="card">
-      <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <BellRing size={17} strokeWidth={2} color="var(--accent-light)" /> Buy-back alerts
-      </div>
-      <div className="hint" style={{ marginBottom: 18 }}>
-        Get a Discord message when a call is ready to buy back, so you don't have to keep checking. Prices are checked every 15 minutes while the market is open.
-      </div>
-
-      {loadError ? <div className="hint" style={{ color: 'var(--red)' }}>{loadError}</div> : !state ? (
-        <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 14, height: 14 }} /> Loading…</div>
+    <section aria-labelledby="alerts-h">
+      <h2 id="alerts-h" className="text-17 font-semibold">Buy-back alerts</h2>
+      {loadError ? <p className="mt-2 text-13 text-loss">{loadError}</p> : !state ? (
+        <p className="mt-3 flex items-center gap-2 text-13 text-muted"><Spinner className="h-3.5 w-3.5" /> Loading…</p>
       ) : (
         <>
+          {state.webhook_set && (
+            <div className="flex items-center justify-between gap-4 border-b border-line py-3">
+              <div>
+                <div className="text-15">Discord message when a call is ready to buy back</div>
+                <div className="text-13 text-muted">Checked every 15 minutes while the market is open</div>
+              </div>
+              <Switch checked={state.enabled} disabled={busy !== null} onChange={toggle} label="Buy-back alerts" />
+            </div>
+          )}
           {state.webhook_set && !editing && (
-            <div className="alert-status">
-              <label className="switch">
-                <input type="checkbox" checked={state.enabled} disabled={busy !== null} onChange={e => toggle(e.target.checked)} />
-                <span aria-hidden="true" />
-                <span>{state.enabled ? 'Alerts on' : 'Alerts paused'}</span>
-              </label>
-              <span className="hint">Discord webhook {state.webhook_hint}</span>
-              <span style={{ flex: 1 }} />
-              <button className="btn-secondary" style={{ padding: '7px 14px', fontSize: 13 }} onClick={sendTest} disabled={busy !== null}>
-                {busy === 'test' ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <Send size={14} strokeWidth={2} />} Send test
-              </button>
-              <button className="link-btn" style={{ fontSize: 13 }} onClick={() => setEditing(true)} disabled={busy !== null}>Change</button>
-              <button className="link-btn" style={{ fontSize: 13, color: 'var(--text-muted)' }} onClick={remove} disabled={busy !== null} aria-label="Remove webhook">
-                <Trash2 size={14} strokeWidth={2} />
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-3">
+              <div className="text-15"><span className="text-fg-2">Webhook</span> <span className="ml-2">{state.webhook_hint}</span></div>
+              <div className="flex items-center gap-1">
+                <button type="button" className="btn btn-secondary btn-sm" onClick={sendTest} disabled={busy !== null}>
+                  {busy === 'test' && <Spinner className="h-3.5 w-3.5" />} Send test
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)} disabled={busy !== null}>Change</button>
+                <button type="button" className="btn btn-ghost btn-sm text-loss hover:text-loss" onClick={remove} disabled={busy !== null}>Remove</button>
+              </div>
             </div>
           )}
 
           {showBox && (
-            <>
-              <label className="label" htmlFor="discord-webhook">Discord webhook URL</label>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <input id="discord-webhook" className="input" style={{ flex: '1 1 320px' }} type="url" autoComplete="off" spellCheck={false}
-                  placeholder="https://discord.com/api/webhooks/…" value={url}
-                  aria-invalid={trimmed !== '' && !urlOk} aria-describedby={trimmed !== '' && !urlOk ? 'webhook-error' : undefined}
-                  onChange={e => setUrl(e.target.value)} />
-                <button className="btn-primary" onClick={saveUrl} disabled={!urlOk || busy !== null}>
-                  {busy === 'save' ? <><span className="spinner" /> Connecting…</> : 'Connect'}
+            <div className="mt-3">
+              {!state.webhook_set && <p className="mb-4 text-15 text-fg-2">Get a Discord message when a call is ready to buy back, so you don't have to keep checking.</p>}
+              <div className="flex flex-wrap items-end gap-2.5">
+                <Field className="min-w-0 flex-[1_1_280px]" id="discord-webhook" label="Discord webhook URL" type="url" spellCheck={false}
+                  placeholder="https://discord.com/api/webhooks/…" value={url} onChange={e => setUrl(e.target.value)}
+                  error={trimmed !== '' && !urlOk ? 'Paste the whole webhook URL. It starts with https://discord.com/api/webhooks/' : null} />
+                <button type="button" className="btn btn-primary" onClick={saveUrl} disabled={!urlOk || busy !== null}>
+                  {busy === 'save' ? <><Spinner /> Connecting…</> : 'Connect'}
                 </button>
-                {editing && <button className="btn-secondary" onClick={() => { setEditing(false); setUrl('') }} disabled={busy !== null}>Cancel</button>}
+                {editing && <button type="button" className="btn btn-secondary" onClick={() => { setEditing(false); setUrl('') }} disabled={busy !== null}>Cancel</button>}
               </div>
-              {trimmed !== '' && !urlOk && <div id="webhook-error" style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 6 }}>Paste the whole webhook URL. It starts with https://discord.com/api/webhooks/</div>}
-              <div style={{ marginTop: 10 }}>
+              <div className="mt-1">
                 <Collapsible label="How do I get this URL?" openLabel="Hide the steps">
-                  <ol className="hint webhook-steps" style={{ marginTop: 0 }}>
-                    <li>In Discord, open the channel you want alerts in and click ⚙ <strong>Edit Channel</strong>.</li>
-                    <li>Go to <strong>Integrations → Webhooks → New Webhook</strong>, then <strong>Copy Webhook URL</strong>.</li>
-                    <li>Paste it here and click Connect. You'll get a test message right away.</li>
+                  <ol className="list-decimal space-y-1 pl-5 text-13 text-fg-2">
+                    <li>In Discord, open the channel you want alerts in and choose <strong className="font-semibold text-fg">Edit Channel</strong>.</li>
+                    <li>Go to <strong className="font-semibold text-fg">Integrations → Webhooks → New Webhook</strong>, then <strong className="font-semibold text-fg">Copy Webhook URL</strong>.</li>
+                    <li>Paste it here and choose Connect. You'll get a test message right away.</li>
                   </ol>
                 </Collapsible>
               </div>
-            </>
+            </div>
           )}
 
-          {state.enabled && state.last_check_at && (
-            <div className="hint" style={{ marginTop: 12 }}>Last checked {fmtTime(state.last_check_at)}.</div>
+          {state.webhook_set && (
+            <p className="mt-2 text-13 text-muted">
+              {state.enabled ? (state.last_check_at ? `Alerts on. Last checked ${fmtTime(state.last_check_at)}.` : 'Alerts on.') : 'Alerts paused. Nothing is sent until you turn them back on.'}
+            </p>
           )}
-          {error && <div role="alert" style={{ color: 'var(--red)', fontSize: 13, marginTop: 10 }}>{error}</div>}
+          {error && <p role="alert" className="mt-2 text-13 text-loss">{error}</p>}
         </>
       )}
-    </div>
+    </section>
   )
 }

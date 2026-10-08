@@ -6,14 +6,14 @@ export default function Collapsible({ label, openLabel, children, defaultOpen = 
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <button type="button" className="link-btn" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-          <ChevronDown size={16} strokeWidth={2} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" className="link link-quiet min-h-11" onClick={() => setOpen(o => !o)} aria-expanded={open}>
           {open ? (openLabel || label) : label}
+          <ChevronDown size={16} strokeWidth={2} className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
         {right}
       </div>
-      {open && <div style={{ marginTop: 16 }}>{children}</div>}
+      {open && <div className="mt-3">{children}</div>}
     </div>
   )
 }

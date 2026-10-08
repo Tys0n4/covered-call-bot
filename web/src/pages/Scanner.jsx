@@ -1,21 +1,20 @@
-// src/pages/Scanner.jsx
+// src/pages/Scanner.jsx — find a covered call to sell on one of your stocks
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { ArrowRight, Check, RefreshCw, RotateCcw, ScanLine } from 'lucide-react'
 import { runScan, savePositions, apiError } from '../api/client'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
-import { SOURCE_LABEL } from '../lib/source'
 import { useTicker } from '../context/TickerContext'
-import { RotateCcw, ScanLine, AlertTriangle, TrendingDown, CheckCircle2, ArrowRight, Moon } from 'lucide-react'
-import PageHeader from '../components/PageHeader'
+import { usePageTitle } from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
-import Collapsible from '../components/Collapsible'
-import MoneyInput from '../components/MoneyInput'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
-import OptionsTable, { EventBadges } from '../components/OptionsTable'
+import OptionsTable, { eventsText } from '../components/OptionsTable'
 import PremiumCheck, { GoalCheck } from '../components/PremiumCheck'
+import StockChips from '../components/StockChips'
+import { Dot, Field, MoneyField, Spinner } from '../components/ui'
 import { TERMS } from '../lib/terms'
-import { fmtDate, money, plural } from '../lib/format'
+import { fmtDate, money, plural, strike } from '../lib/format'
 import { moneyValue, splitFees } from '../lib/pnl'
 
 // The expiry window and delta range come from your strategy (Strategy page)
@@ -36,10 +35,10 @@ const STORAGE_KEY = 'scanner_config'
 
 // The filter boxes: what each accepts and the allowed range
 const FIELDS = [
-  { name: 'min_strike_pct',    label: 'Min. distance above price (optional)', tip: TERMS.minStrike, kind: 'dec', min: 0, max: 0.5, pct: true },
-  { name: 'min_premium',       label: 'Min. premium per share ($)',  tip: TERMS.minPremium,  kind: 'dec', min: 0.01, max: 1000 },
-  { name: 'min_volume',        label: 'Min. daily volume',           tip: TERMS.volume,      kind: 'int', min: 1,    max: 1000000 },
-  { name: 'min_open_interest', label: 'Min. open interest',          tip: TERMS.openInt,     kind: 'int', min: 1,    max: 1000000 },
+  { name: 'min_premium',       label: 'Min. premium per share', tip: TERMS.minPremium,  kind: 'dec', min: 0.01, max: 1000, prefix: '$' },
+  { name: 'min_strike_pct',    label: 'Min. distance above price', tip: TERMS.minStrike, kind: 'dec', min: 0, max: 0.5, pct: true },
+  { name: 'min_volume',        label: 'Min. daily volume',      tip: TERMS.volume,      kind: 'int', min: 1,    max: 1000000 },
+  { name: 'min_open_interest', label: 'Min. open interest',     tip: TERMS.openInt,     kind: 'int', min: 1,    max: 1000000 },
 ]
 // Fields with pct: true are typed as percentages (20 = 20%) but stored and
 // sent to the API as fractions (0.20), with min/max in stored units.
@@ -49,8 +48,7 @@ const shownLimit = (f, v) => (f.pct ? `${Math.round(v * 100)}%` : v.toLocaleStri
 
 const inRange = (f, v) => Number.isFinite(v) && v >= f.min && v <= f.max && (f.kind !== 'int' || Number.isInteger(v))
 
-// Saved filters from this browser. Anything missing or invalid (e.g. a box
-// that was left empty before this fix) falls back to the default.
+// Saved filters from this browser. Anything missing or invalid falls back to the default.
 function loadConfig() {
   let saved
   try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {} } catch { saved = {} }
@@ -91,65 +89,21 @@ function cleanInput(raw, kind) {
   return t.replace(/^0+(?=\d)/, '')
 }
 
-function Field({ field, text, error, onChange }) {
-  const id = `f-${field.name}`
-  return (
-    <div>
-      <label className="label" htmlFor={id}>{field.label} <InfoTip text={field.tip} /></label>
-      <div style={{ position: 'relative' }}>
-        <input
-          id={id} type="text" className="input" autoComplete="off"
-          inputMode={field.kind === 'int' ? 'numeric' : 'decimal'}
-          value={text}
-          aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined}
-          onChange={e => onChange(field.name, cleanInput(e.target.value, field.kind))}
-          style={{ ...(field.pct ? { paddingRight: 32 } : {}), ...(error ? { borderColor: 'var(--red)' } : {}) }}
-        />
-        {field.pct && <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>%</span>}
-      </div>
-      {error && <div id={`${id}-err`} style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 5 }}>{error}</div>}
-    </div>
-  )
-}
-
-function BelowCostBadge() {
-  return <span className="badge badge-amber" title={TERMS.belowCost}>Below your cost</span>
-}
-
-function HowItWorks() {
-  const steps = [
-    ['Scan', 'We look at call options on your shares that match your filters.'],
-    ['Pick', 'You get one pick for income and one balanced pick, plus a recommended trade.'],
-    ['Track', 'Save the trade and follow it on the Positions page until you close it.'],
-  ]
-  return (
-    <div className="card" style={{ marginTop: 24 }}>
-      <div className="section-title" style={{ marginBottom: 16 }}>How it works</div>
-      <div className="grid-steps">
-        {steps.map(([t, d], i) => (
-          <div key={t} style={{ display: 'flex', gap: 12 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 99, background: 'var(--accent-dim)', color: 'var(--accent-light)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 2 }}>{t}</div>
-              <div className="hint">{d}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+// The last scan of each stock stays on screen when you come back to it
+const lastScans = new Map()   // ticker -> { result, fills, fees, saved, at }
+const clock = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+const wide = () => window.matchMedia?.('(min-width: 768px)').matches
 
 export default function Scanner() {
-  const { selected, loaded, loadError, refresh } = useTicker()
+  usePageTitle('Scanner')
+  const { selected, tickers, selectTicker, loaded, loadError, refresh } = useTicker()
   const [form, setForm]       = useState(() => toForm(loadConfig()))   // boxes, exactly as typed
-  const [result, setResult]   = useState(null)
+  const [scan, setScan]       = useState(() => lastScans.get(selected) || null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
-  const [saved, setSaved]     = useState(false)
   const [saving, setSaving]   = useState(false)
-  const [fills, setFills]     = useState([])   // per-share fill for each planned leg, as typed
-  const [feesText, setFees]   = useState('')   // total commissions for the trade, as typed
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [tableOpen, setTableOpen] = useState(wide)
   const strategy = useStrategy()          // delta range, expiry window and commission
   const showFees = chargesCommission(strategy)
 
@@ -161,23 +115,39 @@ export default function Scanner() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)) } catch { /* storage unavailable */ }
   }, [form]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Clear the last scan when you switch stocks
+  // Switching stocks shows that stock's last scan, if there is one
   const [scannedFor, setScannedFor] = useState(selected)
   if (scannedFor !== selected) {
-    setScannedFor(selected); setResult(null); setError(null); setSaved(false)
+    setScannedFor(selected); setScan(lastScans.get(selected) || null); setError(null)
   }
+  const update = patch => setScan(s => {
+    const next = { ...s, ...patch }
+    lastScans.set(next.result.ticker, next)
+    return next
+  })
+
+  const result = scan?.result
+  const fills = scan?.fills || []
+  const feesText = scan?.fees ?? ''
+  const saved = !!scan?.saved
 
   const updateField = (k, text) => setForm(f => ({ ...f, [k]: text }))
 
   const handleScan = async () => {
     if (!selected || !filtersValid) return
-    setLoading(true); setError(null); setResult(null); setSaved(false)
+    setLoading(true); setError(null)
     try {
       const res = await runScan({ ...config, ticker: selected })
-      setResult(res.data)
-      setFills(res.data.planned_positions.map(p => p.entry_price.toFixed(2)))
-      // Your usual commission for these contracts; edit it if your broker charged something else
-      setFees(res.data.estimated_fees > 0 ? res.data.estimated_fees.toFixed(2) : '')
+      const next = {
+        result: res.data,
+        fills: res.data.planned_positions.map(p => p.entry_price.toFixed(2)),
+        // Your usual commission for these contracts; edit it if your broker charged something else
+        fees: res.data.estimated_fees > 0 ? res.data.estimated_fees.toFixed(2) : '',
+        saved: false,
+        at: new Date().toISOString(),
+      }
+      lastScans.set(res.data.ticker, next)
+      setScan(next)
     } catch (e) {
       setError(apiError(e, 'Scan failed. Is the API running?'))
     } finally {
@@ -198,45 +168,70 @@ export default function Scanner() {
       allocation_type: p.allocation_type, fees: fees[i],
     }))
     setSaving(true)
-    try { await savePositions(payload); setSaved(true) }
+    try { await savePositions(payload); update({ saved: true }); refresh().catch(() => {}) }
     catch (e) { setError(apiError(e, 'Could not save the trade. Is the API running?')) }
     finally { setSaving(false) }
   }
 
-  const rules = strategy ? `Calls with a ${Math.round(strategy.delta_min * 100)}–${Math.round(strategy.delta_max * 100)}% chance of being called, expiring in ${strategy.min_dte}–${strategy.max_dte} days` : 'Calls in your strategy'
-  // Only filters you've changed from the defaults are spelled out
-  const filterSummary = filtersValid
-    ? rules +
-      (config.min_premium !== DEFAULT_CONFIG.min_premium ? `, paying at least ${money(config.min_premium)} per share` : '') +
-      (config.min_strike_pct > 0 ? `, with strikes at least ${Math.round(config.min_strike_pct * 100)}% above today's price.` : '.') +
-      (config.exclude_below_cost ? ' Strikes below your average cost are skipped.' : '') +
-      (config.avoid_earnings ? ' Expiries that span earnings are skipped.' : '')
-    : 'One of the filters needs fixing before you can scan. Check the highlighted box under Adjust filters.'
-
+  const holding = tickers.find(t => t.ticker === selected)
   const planned = result?.planned_positions || []
+  const contracts = planned.reduce((s, p) => s + p.contracts, 0)
   // Market closed (or opened under 15 min ago, while the delayed quotes catch up):
   // results use last-session prices, so saving waits for live prices
   const lastPrices = result?.quotes_live === false
-  const liveAt = lastPrices && result?.quotes_live_at
-    ? new Date(result.quotes_live_at).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
+  const liveAt = lastPrices && result?.quotes_live_at ? clock(result.quotes_live_at) : null
+  const nextOpen = result?.next_market_open
+    ? new Date(result.next_market_open).toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
     : null
   const optionFor = p => result?.candidates.find(c => c.expiry === p.expiry && c.strike === p.strike) || {}
-  const nextOpen = result?.next_market_open
-    ? new Date(result.next_market_open).toLocaleString('en-CA', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
-    : null
+  const picked = new Map(planned.map(p => [`${p.expiry}|${p.strike}`, 'Picked']))
   const fillTotal = planned.reduce((s, p, i) => s + (fillValues[i] || 0) * p.contracts * 100, 0) - (moneyValue(feesText) || 0)
-  // You typed a different price or fee than suggested (the boxes start at the suggested ones, to the cent)
-  const fillsEdited = result && (
-    planned.some((p, i) => fillValues[i] !== Number(p.entry_price.toFixed(2)))
-    || (moneyValue(feesText) || 0) !== Number((result.estimated_fees > 0 ? result.estimated_fees : 0).toFixed(2)))
+  const reservePct = result && result.gross_premium > 0 ? Math.round((result.buyback_budget / result.gross_premium) * 100) : null
+  const allEvents = planned.length > 0 && planned.every(p => eventsText(optionFor(p)))
+
+  const rules = strategy
+    ? [
+        ['Chance of being called', `${Math.round(strategy.delta_min * 100)}–${Math.round(strategy.delta_max * 100)}%`],
+        ['Expiring in', `${strategy.min_dte}–${strategy.max_dte} days`],
+        ['Income / balanced', `${Math.round(strategy.income_weight * 100)} / ${100 - Math.round(strategy.income_weight * 100)}`],
+        ['Set aside to buy back', `${Math.round(strategy.buyback_budget_pct * 100)}%`],
+      ]
+    : []
+  const changed = FIELDS.filter(f => config[f.name] !== DEFAULT_CONFIG[f.name]).length + TOGGLES.filter(t => config[t.name]).length
+  const filterSummary = !filtersValid
+    ? 'One of the filters needs fixing before you can scan.'
+    : `At least ${money(config.min_premium)} a share, ${config.min_volume.toLocaleString()} contracts traded today and ${config.min_open_interest.toLocaleString()} open.`
+      + (config.min_strike_pct > 0 ? ` Strikes at least ${Math.round(config.min_strike_pct * 100)}% above the price.` : '')
+      + (config.exclude_below_cost ? ' Strikes below your cost are skipped.' : '')
+      + (config.avoid_earnings ? ' Expiries after earnings are skipped.' : '')
+
+  const scanButton = (
+    <button type="button" className="btn btn-primary" onClick={handleScan} disabled={loading || !filtersValid}>
+      {loading ? <><Spinner /> Scanning…</> : <><ScanLine size={17} strokeWidth={2} /> Scan {selected}</>}
+    </button>
+  )
 
   return (
-    <div className="fade-up">
-      <PageHeader
-        title="Scanner"
-        showTicker
-        subtitle={selected ? `Find a covered call to sell on your ${selected} shares.` : 'Find a covered call to sell on your shares.'}
-      />
+    <div className="page">
+      <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-3 md:mb-8">
+        <h1 className="page-title">Scanner</h1>
+        {tickers.length > 0 && (
+          <div className="order-last w-full md:order-none md:w-auto">
+            <StockChips label="Stock to scan" free tickers={tickers} value={selected} onChange={selectTicker} />
+          </div>
+        )}
+        {result && !loading && (
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-13 text-muted md:inline">Scanned {clock(scan.at)}</span>
+            <button type="button" className="icon-btn -mr-2 md:hidden" onClick={handleScan} aria-label={`Scan ${selected} again`}>
+              <RefreshCw size={19} strokeWidth={1.9} />
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm hidden md:inline-flex" onClick={handleScan} disabled={!filtersValid}>
+              <RefreshCw size={15} strokeWidth={2} /> Scan again
+            </button>
+          </div>
+        )}
+      </div>
 
       {!selected && loadError && <ServerDown onRetry={() => refresh().catch(() => {})} />}
 
@@ -247,236 +242,216 @@ export default function Scanner() {
       )}
 
       {selected && (
-        <>
-          {/* Scan bar */}
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px 24px', flexWrap: 'wrap' }}>
-              <div>
-                <div className="section-sub" style={{ maxWidth: 680, marginTop: 0, color: filtersValid ? undefined : 'var(--red)' }}>{filterSummary}{' '}
-                  <Link to="/strategy" style={{ color: 'var(--accent-light)', whiteSpace: 'nowrap' }}>Change</Link></div>
+        <div className="md:grid md:grid-cols-[minmax(0,1fr)_300px] md:items-start md:gap-12">
+          <div className="min-w-0">
+            <p className="flex flex-wrap gap-x-5 gap-y-1 text-15 text-fg-2">
+              {result && <span>{result.ticker} <strong className="font-semibold text-fg">{money(result.current_price)}</strong>{lastPrices ? ' at the last close' : ''}</span>}
+              {holding && <span>{holding.shares.toLocaleString()} shares · avg {money(holding.avg_cost)}</span>}
+              {result?.earnings_date && <span>Earnings {fmtDate(result.earnings_date)}</span>}
+              {result?.ex_dividend_date && <span>Ex-dividend {fmtDate(result.ex_dividend_date)}</span>}
+            </p>
+
+            {error && <p role="alert" className="mt-5 flex items-start gap-2 text-15 text-loss"><Dot tone="loss" className="mt-2" />{error}</p>}
+
+            {loading && (
+              <div className="mt-10 flex items-center gap-4 rounded-card bg-surface p-6" role="status">
+                <Spinner className="h-6 w-6 text-accent" />
+                <div><div className="text-17 font-semibold">Checking {selected} options…</div><div className="text-13 text-muted">This usually takes 15–30 seconds.</div></div>
               </div>
-              <button className="btn-primary" onClick={handleScan} disabled={loading || !filtersValid} style={{ padding: '13px 28px', fontSize: 15, flexShrink: 0 }}>
-                {loading ? <><span className="spinner" /> Scanning…</> : <><ScanLine size={17} strokeWidth={2} /> Scan {selected}</>}
-              </button>
-            </div>
-            <div className="divider" style={{ margin: '18px 0 10px' }} />
-            <Collapsible
-              label="Adjust filters"
-              openLabel="Hide filters"
-              right={
-                <button className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setForm(toForm(DEFAULT_CONFIG))}>
-                  <RotateCcw size={13} strokeWidth={1.75} /> Reset to defaults
-                </button>
-              }
-            >
-              <div className="grid-filters">
-                {FIELDS.map(f => (
-                  <Field key={f.name} field={f} text={form[f.name]} error={fieldErrors[f.name]} onChange={updateField} />
+            )}
+
+            {!result && !loading && (
+              <section aria-labelledby="ready-h" className="mt-8">
+                <h2 id="ready-h" className="text-22 font-semibold tracking-title">Find a call to sell on {selected}</h2>
+                <p className="mt-2 max-w-[560px] text-15 text-fg-2">
+                  {strategy ? `Calls with a ${Math.round(strategy.delta_min * 100)}–${Math.round(strategy.delta_max * 100)}% chance of being called, expiring in ${strategy.min_dte}–${strategy.max_dte} days.` : 'Calls that fit your strategy.'}
+                  {holding?.available === 0 ? ` Every ${selected} contract already has a call sold, so this is just to look.` : ''}
+                </p>
+                <div className="mt-6">{scanButton}</div>
+                <ol className="mt-10 grid gap-4 border-t border-line pt-6 md:grid-cols-3">
+                  {[['Scan', 'Calls on your shares that match your rules and filters.'], ['Pick', 'One recommended trade, split between income and balanced calls.'], ['Track', 'Save it, then follow it on Positions until you close it.']].map(([t, d], i) => (
+                    <li key={t} className="flex gap-3">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-13 font-semibold text-fg-2">{i + 1}</span>
+                      <span><span className="block text-15 font-semibold">{t}</span><span className="block text-13 text-muted">{d}</span></span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
+
+            {result && !loading && (
+              <>
+                <div className="mt-4"><PremiumCheck check={result.premium_check} ticker={result.ticker} /></div>
+
+                {lastPrices && (
+                  <p className="mt-4 flex items-start gap-2 text-15 text-fg-2">
+                    <Dot tone="amber" className="mt-2" />
+                    <span>{liveAt
+                      ? <>Trading just opened, but option prices are 15 minutes behind, so these are still last-close prices. Scan again after {liveAt} to save a trade.</>
+                      : <>The market is closed, so these are last-close prices. Use them to plan; scan again{nextOpen ? ` after it opens (${nextOpen})` : ' when it opens'} to save a trade.</>}</span>
+                  </p>
+                )}
+                {result.warnings?.map((w, i) => (
+                  <p key={i} className="mt-3 flex items-start gap-2 text-15 text-fg-2"><Dot tone="amber" className="mt-2" />{w}</p>
                 ))}
-              </div>
-              <div style={{ display: 'flex', gap: '10px 28px', flexWrap: 'wrap', marginTop: 18 }}>
-                {TOGGLES.map(t => (
-                  <label key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-dim)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form[t.name]} onChange={e => updateField(t.name, e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                    {t.label} <InfoTip text={t.tip} />
-                  </label>
-                ))}
-              </div>
-            </Collapsible>
+
+                {planned.length > 0 && (
+                  <section aria-labelledby="rec-h" className="mt-9">
+                    <h2 id="rec-h" className="text-15 font-medium text-fg-2">Recommended trade</h2>
+                    <div className="hero-num mt-1.5">{money(result.gross_premium)}</div>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-x-1.5 text-15 text-fg-2">
+                      <span>{lastPrices ? 'Estimated at last prices for' : 'You collect today for'} selling {plural(contracts, `${result.ticker} call`)}</span>
+                      {result.goal_check && <><span aria-hidden="true">·</span><GoalCheck check={result.goal_check} deltaMax={result.delta_max} /></>}
+                    </div>
+
+                    <ul className="mt-6 border-t border-line">
+                      {planned.map((p, i) => {
+                        const o = optionFor(p)
+                        const ev = eventsText(o, result.ticker)
+                        return (
+                          <li key={i} className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-line py-4">
+                            <div className="w-full md:w-[110px]">
+                              <div className="text-13 font-semibold text-fg-2 md:text-15 md:text-fg">{p.allocation_type}</div>
+                              <div className="hidden text-13 text-muted md:block">{p.allocation_type === 'Income' ? 'more premium' : 'more room to rise'}</div>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-17 font-semibold">{p.contracts} × {strike(p.strike)} call</div>
+                              <div className="text-13 text-muted">
+                                {fmtDate(p.expiry)} · {plural(o.dte ?? 0, 'day')}{o.delta != null ? ` · ${Math.round(o.delta * 100)}% chance of being called` : ''}
+                                {p.below_cost_basis && <span className="text-amber"> · below your cost</span>}
+                              </div>
+                              {ev && <div className="flex items-center gap-1.5 text-13 text-muted"><Dot tone="amber" />Expires {ev}</div>}
+                            </div>
+                            <div className="text-17 font-semibold text-accent">+{money(p.premium_total)}</div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    <p className="mt-3 text-13 text-muted">
+                      Of the {money(result.gross_premium)}, {money(result.buyback_budget)}{reservePct != null ? ` (${reservePct}%)` : ''} is set aside in case you buy back early
+                      {result.estimated_fees > 0 ? ` and ${money(result.estimated_fees)} goes to fees` : ''}, so you keep {money(result.net_premium)}.
+                      {!allEvents && result.earnings_date && planned.every(p => !optionFor(p).spans_earnings) ? ` ${planned.length > 1 ? 'Both calls expire' : 'It expires'} before ${result.ticker} reports on ${fmtDate(result.earnings_date)}.` : ''}
+                    </p>
+
+                    <div className="mt-7 rounded-card bg-surface p-5 md:p-6">
+                      {saved ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span className="inline-flex items-center gap-2 text-17 font-semibold"><Check size={20} strokeWidth={2.4} className="text-accent" /> Saved</span>
+                          <Link to="/positions" className="btn btn-secondary btn-sm">View in Positions <ArrowRight size={15} strokeWidth={2.2} /></Link>
+                        </div>
+                      ) : lastPrices ? (
+                        <>
+                          <h3 className="text-17 font-semibold">Record what you sold at</h3>
+                          <p className="mt-1.5 text-15 text-fg-2">
+                            Saving opens {liveAt ? `when prices catch up at ${liveAt}` : 'when the market opens'}, so trades are never recorded at an out-of-date price.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <h3 className="text-17 font-semibold">Record what you sold at <InfoTip text={TERMS.fill} /></h3>
+                            <span className="text-13 text-muted">Per share, from your broker</span>
+                          </div>
+                          <div className={`mt-4 grid gap-3 ${planned.length + (showFees ? 1 : 0) >= 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                            {planned.map((p, i) => (
+                              <MoneyField key={i} id={`fill-${i}`} label={<><span className="md:hidden">{p.allocation_type}</span><span className="hidden md:inline">{p.allocation_type} · {strike(p.strike)}</span></>}
+                                value={fills[i] ?? ''} onChange={v => update({ fills: fills.map((x, j) => (j === i ? v : x)) })}
+                                error={fillValues[i] == null || !(fillValues[i] > 0) ? 'Enter the price' : null} />
+                            ))}
+                            {showFees && <MoneyField id="fill-fees" label="Fees" value={feesText} onChange={v => update({ fees: v })} />}
+                          </div>
+                          <p className="mt-3 text-13 text-fg-2">{fillsValid ? `At these prices you collect ${money(fillTotal)}${showFees ? ' after fees' : ''}.` : 'Enter the price each call sold at.'}</p>
+                          <button type="button" className="btn btn-primary btn-block mt-4 md:w-auto md:inline-flex" onClick={handleSave} disabled={saving || !fillsValid}>
+                            {saving ? <><Spinner /> Saving…</> : 'Save trade'}
+                          </button>
+                          <p className="mt-3 text-12 text-muted">This records the trade in CovCall so you can track it. It doesn't place an order.</p>
+                        </>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {planned.length === 0 && result.candidates.length > 0 && (
+                  <p className="mt-8 flex items-start gap-2 text-15 text-fg-2">
+                    <Check size={18} strokeWidth={2.4} className="mt-0.5 shrink-0 text-accent" />
+                    All of your {result.ticker} contracts are already working, so there's nothing new to sell. Every option that matched is below.
+                  </p>
+                )}
+
+                {result.candidates.length > 0 ? (
+                  <section aria-labelledby="all-h" className="mt-12">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h2 id="all-h" className="text-20 font-semibold tracking-title">All {plural(result.candidates.length, 'matching call')}</h2>
+                      <button type="button" className="link link-quiet min-h-11 text-13" aria-expanded={tableOpen} onClick={() => setTableOpen(o => !o)}>
+                        {tableOpen ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {tableOpen && <div className="mt-2"><OptionsTable candidates={result.candidates} ticker={result.ticker} picked={picked} /></div>}
+                  </section>
+                ) : (
+                  <EmptyState title="No options matched">
+                    None of the {result.ticker} calls expiring in {result.min_dte}–{result.max_dte} days with a {Math.round(result.delta_min * 100)}–{Math.round(result.delta_max * 100)}% chance
+                    of being called passed every filter. Try a wider range on the Strategy page, or lower the filters
+                    {config.min_strike_pct > 0 ? ` (the distance above price is ${Math.round(config.min_strike_pct * 100)}%)` : ''}.
+                  </EmptyState>
+                )}
+              </>
+            )}
           </div>
 
-          {error && (
-            <div className="callout callout-red" style={{ marginBottom: 20 }}>
-              <AlertTriangle size={18} strokeWidth={1.75} /> {error}
-            </div>
-          )}
-
-          {loading && (
-            <div className="card" style={{ textAlign: 'center', padding: 60 }}>
-              <div className="spinner" style={{ width: 40, height: 40, margin: '0 auto 16px' }} />
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Checking {selected} options…</div>
-              <div className="hint" style={{ marginTop: 6 }}>This usually takes 15–30 seconds.</div>
-            </div>
-          )}
-
-          {result && !loading && (
-            <>
-              <div style={{ fontSize: 15, color: 'var(--text-dim)', marginBottom: 20 }}>
-                <strong style={{ color: 'var(--text)' }}>{result.ticker}</strong> {lastPrices ? 'last traded at' : 'is trading at'}{' '}
-                <strong style={{ color: 'var(--text)' }}>{money(result.current_price)}</strong>.
-                {SOURCE_LABEL[result.data_source] && (
-                  <span className="hint" style={{ display: 'block', marginTop: 4 }}>
-                    {result.price_source === 'cboe' && result.data_source === 'cboe' ? 'Stock and option prices' : 'Option prices'}: {SOURCE_LABEL[result.data_source]}
-                  </span>
-                )}
-                {(result.earnings_date || result.ex_dividend_date) && (
-                  <span className="hint" style={{ display: 'block', marginTop: 4 }}>
-                    {result.earnings_date && <>Next earnings: <strong style={{ color: 'var(--text-dim)' }}>{fmtDate(result.earnings_date)}</strong></>}
-                    {result.earnings_date && result.ex_dividend_date && ' · '}
-                    {result.ex_dividend_date && <>Next ex-dividend: <strong style={{ color: 'var(--text-dim)' }}>{fmtDate(result.ex_dividend_date)}</strong></>}
-                  </span>
+          <aside className="mt-12 flex flex-col gap-10 md:mt-0">
+            {rules.length > 0 && (
+              <section aria-labelledby="rules-h">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 id="rules-h" className="text-17 font-semibold">Your rules</h2>
+                  <Link to="/strategy" className="link link-quiet min-h-11 text-13">Change</Link>
+                </div>
+                <dl>
+                  {rules.map(([k, v], i) => (
+                    <div key={k} className={`flex justify-between gap-3 py-3 ${i < rules.length - 1 ? 'border-b border-line' : ''}`}>
+                      <dt className="text-fg-2">{k}</dt><dd className="font-semibold">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            )}
+            <section aria-labelledby="filters-h">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id="filters-h" className="text-17 font-semibold">Filters</h2>
+                <span className="text-13 text-muted">{changed ? `${changed} changed` : 'Defaults'}</span>
+              </div>
+              <p className={`mt-2 text-13 ${filtersValid ? 'text-muted' : 'text-loss'}`}>{filterSummary}</p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button type="button" className="btn btn-secondary btn-sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(o => !o)}>
+                  {filtersOpen ? 'Hide filters' : 'Adjust filters'}
+                </button>
+                {changed > 0 && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm(toForm(DEFAULT_CONFIG))}>
+                    <RotateCcw size={14} strokeWidth={2} /> Reset
+                  </button>
                 )}
               </div>
-              <PremiumCheck check={result.premium_check} ticker={result.ticker} />
-
-              {lastPrices && (
-                <div className="callout callout-amber" style={{ marginBottom: 20 }}>
-                  <Moon size={18} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 1 }} />
-                  <div>
-                    {liveAt ? <>
-                      <strong>Trading just opened, but option prices are about 15 minutes behind, so these are still the last session's closing prices.</strong>{' '}
-                      Scan again after {liveAt} your time to see today's prices and save a trade.
-                    </> : <>
-                      <strong>The market is closed, so these are the last session's closing prices, not live quotes.</strong>{' '}
-                      Use them to plan. Prices will change when trading starts{nextOpen ? ` (${nextOpen} your time)` : ''}.
-                      Scan again then to save a trade.
-                    </>}
-                  </div>
-                </div>
-              )}
-
-              {result.warnings?.length > 0 && (
-                <div className="callout callout-amber" style={{ marginBottom: 20, flexDirection: 'column', gap: 6 }}>
-                  {result.warnings.map((w, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <AlertTriangle size={15} strokeWidth={1.75} /> {w}
+              {filtersOpen && (
+                <div className="mt-5 flex flex-col gap-4">
+                  {FIELDS.map(f => (
+                    <Field key={f.name} id={`f-${f.name}`} label={f.label} tip={<InfoTip text={f.tip} size={12} />}
+                      prefix={f.prefix} suffix={f.pct ? '%' : undefined} type="text" inputMode={f.kind === 'int' ? 'numeric' : 'decimal'}
+                      value={form[f.name]} onChange={e => updateField(f.name, cleanInput(e.target.value, f.kind))} error={fieldErrors[f.name]} />
+                  ))}
+                  {TOGGLES.map(t => (
+                    <div key={t.name} className="flex min-h-11 items-center gap-2">
+                      <label className="flex cursor-pointer items-center gap-3 text-15 text-fg-2">
+                        <input type="checkbox" className="h-[18px] w-[18px] accent-[var(--accent)]" checked={form[t.name]} onChange={e => updateField(t.name, e.target.checked)} />
+                        {t.label}
+                      </label>
+                      <InfoTip text={t.tip} size={12} />
                     </div>
                   ))}
                 </div>
               )}
-
-              {/* 1. The recommendation */}
-              {planned.length > 0 && (
-                <div className="rec-card" style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px 24px', marginBottom: 20, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-light)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        Recommended trade
-                        {lastPrices && <span className="badge badge-amber">Last prices</span>}
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700 }}>
-                        Sell {plural(planned.reduce((s, p) => s + p.contracts, 0), 'call')} on {result.ticker}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="fact-label" style={{ justifyContent: 'flex-end' }}>{lastPrices ? 'Estimated at last prices' : 'You collect today'} <InfoTip text={TERMS.premium} size={12} /></div>
-                      <div className="stat-num" style={{ color: 'var(--green)', fontSize: 30 }}>{money(result.gross_premium)}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                    {planned.map((p, i) => (
-                      <div key={i} className="rec-leg">
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px 16px' }}>
-                          <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
-                          <span className="fact-value" style={{ color: 'var(--green)' }}>+{money(p.premium_total)}</span>
-                        </div>
-                        <div style={{ fontSize: 15, fontWeight: 600 }}>
-                          {plural(p.contracts, 'contract')} · {money(p.strike)} strike · {fmtDate(p.expiry)}
-                        </div>
-                        <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          {optionFor(p).delta != null && <span>{Math.round(optionFor(p).delta * 100)}% chance of being called <InfoTip text={TERMS.delta} size={12} /></span>}
-                          {p.below_cost_basis && <BelowCostBadge />}
-                          <EventBadges option={optionFor(p)} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
-                    <GoalCheck check={result.goal_check} deltaMax={result.delta_max} />
-                    <Collapsible label="How this is split" openLabel="Hide the split">
-                      <div className="facts" style={{ gridTemplateColumns: 'repeat(3, auto)', gap: '8px clamp(16px, 4vw, 40px)', justifyContent: 'start' }}>
-                        <div><div className="fact-label">Premium</div><div className="fact-value">{money(result.gross_premium)}</div></div>
-                        <div><div className="fact-label">Set aside for buyback <InfoTip text={TERMS.buyback} size={12} /></div><div className="fact-value">{money(result.buyback_budget)}</div></div>
-                        <div><div className="fact-label">You keep <InfoTip text={TERMS.keep} size={12} /></div><div className="fact-value" style={{ color: 'var(--green)' }}>{money(result.net_premium)}</div></div>
-                      </div>
-                      <div className="hint" style={{ marginTop: 8 }}>
-                        Part of the premium is set aside in case you buy the calls back early. Change how much on the <Link to="/strategy" style={{ color: 'var(--accent-light)' }}>Strategy</Link> page.
-                      </div>
-                    </Collapsible>
-                  </div>
-
-                  {!saved && !lastPrices && (
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 20 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
-                        Price you sold at <span className="hint">(per share)</span> <InfoTip text={TERMS.fill} size={12} />
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-                        {planned.map((p, i) => (
-                          <MoneyInput key={i} id={`fill-${i}`} label={`${p.allocation_type} · ${money(p.strike)}`}
-                            value={fills[i] ?? ''} onChange={v => setFills(f => f.map((x, j) => (j === i ? v : x)))}
-                            error={fillValues[i] == null || !(fillValues[i] > 0) ? 'Enter the price you sold at' : null} />
-                        ))}
-                        {showFees && <MoneyInput id="fill-fees" label="Fees (total)" value={feesText} onChange={setFees} />}
-                      </div>
-                      {fillsValid && fillsEdited && (
-                        <div className="hint" style={{ marginTop: 8 }}>
-                          At these prices you collect <strong style={{ color: 'var(--green)' }}>{money(fillTotal)}</strong>{showFees ? ' after fees' : ''}.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-                    {saved ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontWeight: 600 }}>
-                          <CheckCircle2 size={17} strokeWidth={1.75} /> Saved
-                        </span>
-                        <Link to="/positions" className="link-btn">View in Positions <ArrowRight size={15} /></Link>
-                      </div>
-                    ) : (
-                      <button className="btn-primary" onClick={handleSave} disabled={saving || lastPrices || !fillsValid}
-                        title={lastPrices ? (liveAt ? `Available after ${liveAt}, once prices catch up` : 'Available when the market is open and prices are live') : undefined}>
-                        {saving ? <><span className="spinner" /> Saving…</> : 'Save this trade'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="hint" style={{ marginTop: 14 }}>
-                    {lastPrices
-                      ? `Saving is turned off until ${liveAt ? `prices catch up at ${liveAt}` : 'the market opens'}, so trades are never recorded at an out-of-date price.`
-                      : 'Saving records the trade here so you can track it. It doesn\'t place an order with your broker.'}
-                  </div>
-                </div>
-              )}
-
-              {planned.length === 0 && result.candidates.length > 0 && (
-                <div className="callout callout-green" style={{ marginBottom: 24 }}>
-                  <CheckCircle2 size={18} strokeWidth={1.75} />
-                  All of your {result.ticker} contracts are already working, so there is nothing new to sell. Every option that matched is listed below for reference.
-                </div>
-              )}
-
-              {/* 2. Every option that matched, on request */}
-              {result.candidates.length > 0 && (
-                <div className="card">
-                  <Collapsible label={`See all ${plural(result.candidates.length, 'option')}`} openLabel="Hide the full list">
-                    <OptionsTable candidates={result.candidates} />
-                  </Collapsible>
-                </div>
-              )}
-
-              {result.candidates.length === 0 && (
-                <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-                  <TrendingDown size={24} strokeWidth={1.75} style={{ marginBottom: 12, opacity: 0.6 }} />
-                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)', marginBottom: 8 }}>No options matched</div>
-                  <div style={{ fontSize: 14, lineHeight: 1.7, maxWidth: 520, margin: '0 auto' }}>
-                    None of the {result.ticker} calls expiring in {result.min_dte}–{result.max_dte} days with
-                    a {Math.round(result.delta_min * 100)}–{Math.round(result.delta_max * 100)}% chance of being called passed every filter.
-                    Try a wider range or expiry window on the <Link to="/strategy" style={{ color: 'var(--accent-light)' }}>Strategy</Link> page,
-                    or under <strong style={{ color: 'var(--text-dim)' }}>Adjust filters</strong> a lower minimum premium, volume or open interest
-                    {config.min_strike_pct > 0 ? `, or a smaller distance above price (now ${Math.round(config.min_strike_pct * 100)}%)` : ''}.
-                    {lastPrices && <><br />Options are priced at the last session's closing quote, or their last trade when there isn't one. Ones that haven't traded recently have no price and are skipped.</>}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {!result && !loading && !error && <HowItWorks />}
-        </>
+            </section>
+          </aside>
+        </div>
       )}
     </div>
   )

@@ -3,8 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0B0D" />
     <title>CovCall</title>
+    <script>
+      // Pick the theme before the first paint so the page never flashes the wrong one
+      // (Strategy › Appearance saves it; "system" follows the device)
+      (function () {
+        var theme = 'dark'
+        try {
+          var pref = localStorage.getItem('theme') || 'system'
+          theme = pref === 'system'
+            ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+            : pref
+        } catch (e) { /* storage unavailable: dark */ }
+        document.documentElement.dataset.theme = theme
+        document.querySelector('meta[name="theme-color"]').content = theme === 'light' ? '#FFFFFF' : '#0A0B0D'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

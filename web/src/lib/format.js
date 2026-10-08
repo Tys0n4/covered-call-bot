@@ -23,6 +23,12 @@ export function daysUntil(iso) {
 export const money = (n, digits = 2) =>
   n == null || Number.isNaN(n) ? '—' : `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
 
+// A strike as people say it: "$245", "$112.50"
+export const strike = n => (n == null ? '—' : Number.isInteger(Number(n)) ? `$${Number(n).toLocaleString('en-US')}` : money(n))
+
+// Signed money: "+$613.05", "−$40.00"
+export const signedMoney = (n, digits = 2) => (n == null ? '—' : `${n < 0 ? '−' : '+'}${money(Math.abs(n), digits)}`)
+
 export const pct = (n, digits = 1) => (n == null || Number.isNaN(n) ? '—' : `${Number(n).toFixed(digits)}%`)
 
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`

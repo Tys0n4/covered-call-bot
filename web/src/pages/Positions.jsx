@@ -7,14 +7,12 @@ import {
 } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import {
-  AlertTriangle, Hourglass, Layers, RefreshCw, CheckCircle2, Clock3, ScanLine, HelpCircle, Repeat, Plus, Pencil, Trash2, Undo2, UserCheck, Copy, ArrowUpRight, ChevronDown,
-} from 'lucide-react'
+import { ChevronRight, Copy, Layers, Pencil, Plus, RefreshCw, Repeat, ScanLine, Trash2, Undo2, UserCheck } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
 import { PositionsSkeleton } from '../components/Skeleton'
+import StockChips from '../components/StockChips'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
 import ActionMenu from '../components/ActionMenu'
 import AssignmentReview from '../components/AssignmentReview'
@@ -24,13 +22,19 @@ import EditTradeModal from '../components/dialogs/EditTradeModal'
 import AddCallModal from '../components/dialogs/AddCallModal'
 import ConfirmDialog from '../components/dialogs/ConfirmDialog'
 import PriceStamp from '../components/PriceStamp'
-import { TERMS } from '../lib/terms'
-import { fmtDate, daysUntil, money, plural } from '../lib/format'
-import { againstYou, optionNet, resultLabel, totalFees } from '../lib/pnl'
+import { Dot, KeptBar, Segmented, Spinner } from '../components/ui'
+import { fmtDate, daysUntil, money, plural, signedMoney, strike } from '../lib/format'
+import { againstYou, optionNet, resultLabel } from '../lib/pnl'
 
 const SCOPE_KEY = 'positions_scope'
 const loadScope = () => { try { return localStorage.getItem(SCOPE_KEY) === 'stock' ? 'stock' : 'all' } catch { return 'all' } }
 const saveScope = s => { try { localStorage.setItem(SCOPE_KEY, s) } catch { /* storage unavailable */ } }
+
+const callName = (p, showTicker) => `${showTicker ? `${p.ticker} ` : ''}${strike(p.strike)} call`
+const daysLeft = p => {
+  const d = daysUntil(p.expiry)
+  return d === 0 ? 'expires today' : d > 0 ? `${plural(d, 'day')} left` : 'expired'
+}
 
 // Copy the buy-back price, ready to paste into a limit order at your broker
 function CopyPrice({ price }) {
@@ -40,243 +44,174 @@ function CopyPrice({ price }) {
     catch { toast(`Buy-back price: ${money(price)}`) }
   }
   return (
-    <button type="button" className="btn-secondary copy-btn" onClick={copy} aria-label={`Copy the buy-back price, ${money(price)}`}>
-      <Copy size={14} strokeWidth={2} /> Copy
+    <button type="button" className="icon-btn icon-btn-sm -my-2 -ml-0.5" onClick={copy} aria-label={`Copy the buy-back price, ${money(price)}`}>
+      <Copy size={15} strokeWidth={2} />
     </button>
   )
 }
 
 // The call costs more than you sold it for: the two real choices, in dollars
-function AgainstYouPanel({ p, a }) {
-  const signed = v => `${v < 0 ? '−' : '+'}${money(Math.abs(v), 0)}`
+function AgainstYou({ p, a }) {
+  const tone = v => (v < 0 ? 'var(--loss)' : 'var(--accent)')
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        {a.aboveStrike
-          ? <span className="badge badge-red" style={{ fontSize: 13 }}><ArrowUpRight size={14} strokeWidth={2.2} /> Stock above strike</span>
-          : <span className="badge badge-amber" style={{ fontSize: 13 }}><AlertTriangle size={14} strokeWidth={2} /> Call is up</span>}
-        <span className="hint">
-          {p.ticker} <span className="mono" style={{ color: a.aboveStrike ? 'var(--red)' : 'var(--text)' }}>{money(a.stock)}</span>
-          {' '}· {a.fromStrikePct.toFixed(1)}% {a.aboveStrike ? 'above' : 'below'} the strike
-          {' '}· call now <span className="mono" style={{ color: 'var(--text)' }}>{money(a.now)}</span>, sold at <span className="mono" style={{ color: 'var(--text)' }}>{money(p.entry_price)}</span>
+    <div className="mt-4">
+      <p className="flex items-start gap-2 text-13 text-fg-2">
+        <Dot tone={a.aboveStrike ? 'loss' : 'amber'} className="mt-1.5" />
+        <span>
+          <strong className="font-semibold text-fg">{a.aboveStrike ? 'Stock above your strike.' : 'The call is up.'}</strong>{' '}
+          {p.ticker} {money(a.stock)}, {a.fromStrikePct.toFixed(1)}% {a.aboveStrike ? 'above' : 'below'} the strike. The call is {money(a.now)}; you sold it at {money(p.entry_price)}.
+          {!a.aboveStrike && <> If {p.ticker} stays under {strike(p.strike)} until {fmtDate(p.expiry)}, it expires worthless and you keep all {money(a.collected)}.</>}
         </span>
-      </div>
-      {!a.aboveStrike && (
-        <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 12 }}>
-          The call costs more than you sold it for, but {p.ticker} is still below your strike. If it stays there
-          until {fmtDate(p.expiry)}, the call expires worthless and you keep all <span className="mono" style={{ color: 'var(--green)' }}>{money(a.collected)}</span>.
+      </p>
+      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+        <div className="rounded-sm bg-panel p-4">
+          <div className="text-13 text-fg-2">Buy back now</div>
+          <div className="mt-0.5 text-20 font-semibold tracking-title" style={{ color: tone(a.buybackPL) }}>{signedMoney(a.buybackPL, 0)}</div>
+          <div className="mt-1 text-13 text-muted">Costs {money(a.buybackCost)} against the {money(a.collected)} collected. You keep your shares.</div>
         </div>
-      )}
-      <div className="choice-pair">
-        <div className="choice-card">
-          <div style={{ fontWeight: 600 }}>Buy back now</div>
-          <div className="mono choice-amount" style={{ color: a.buybackPL < 0 ? 'var(--red)' : 'var(--green)' }}>{signed(a.buybackPL)}</div>
-          <div className="hint">Costs {money(a.buybackCost)} against the {money(a.collected)} you collected. You keep your {a.shares.toLocaleString()} shares.</div>
-        </div>
-        <div className="choice-card">
-          <div style={{ fontWeight: 600 }}>{a.aboveStrike ? 'Let it be called away' : `If it's called away at ${money(p.strike, 0)}`}</div>
+        <div className="rounded-sm bg-panel p-4">
+          <div className="text-13 text-fg-2">{a.aboveStrike ? 'Let it be called away' : `If it's called away at ${strike(p.strike)}`}</div>
           {a.calledPL != null ? (
             <>
-              <div className="mono choice-amount" style={{ color: a.calledPL < 0 ? 'var(--red)' : 'var(--green)' }}>{signed(a.calledPL)}</div>
-              <div className="hint">
-                {a.aboveStrike ? `If ${p.ticker} is above ${money(p.strike, 0)} on ${fmtDate(p.expiry)}: ` : ''}{a.shares.toLocaleString()} shares sold at {money(p.strike)}.
-                {' '}{money(a.collected)} premium {a.shareGain >= 0 ? '+' : '−'} {money(Math.abs(a.shareGain))} {a.shareGain >= 0 ? 'over' : 'under'} your {money(a.cost)} average cost.
+              <div className="mt-0.5 text-20 font-semibold tracking-title" style={{ color: tone(a.calledPL) }}>{signedMoney(a.calledPL, 0)}</div>
+              <div className="mt-1 text-13 text-muted">
+                {a.shares.toLocaleString()} shares sold at {money(p.strike)}: {money(a.collected)} premium {a.shareGain >= 0 ? '+' : '−'} {money(Math.abs(a.shareGain))} {a.shareGain >= 0 ? 'over' : 'under'} your {money(a.cost)} cost.
               </div>
             </>
           ) : (
-            <div className="hint">{a.shares.toLocaleString()} shares sold at {money(p.strike)}, and you keep the {money(a.collected)} premium. Add your average cost to the holding to see the total.</div>
+            <div className="mt-1 text-13 text-muted">{a.shares.toLocaleString()} shares sold at {money(p.strike)}, and you keep the {money(a.collected)} premium. Add your average cost to the stock to see the total.</div>
           )}
         </div>
       </div>
       {a.aboveStrike && a.upsideGiven > 0 && (
-        <div className="hint" style={{ marginTop: 10 }}>
-          At today's price, {money(a.upsideGiven, 0)} of {p.ticker}'s rise above {money(p.strike, 0)} goes to the buyer of the call. Buying back keeps that upside; letting it go locks in the sale at {money(p.strike, 0)}.
-        </div>
+        <p className="mt-2 text-13 text-muted">
+          At today's price, {money(a.upsideGiven, 0)} of {p.ticker}'s rise above {strike(p.strike)} goes to the buyer. Buying back keeps that upside.
+        </p>
       )}
     </div>
   )
 }
 
-function StatusPanel({ p, evaluation, checking, failed, avgCost }) {
+// What the latest price check says about one call
+function Status({ p, ev, checking, failed, avgCost }) {
   const withFees = chargesCommission(useStrategy()) ? ' with fees' : ''
-  const against = againstYou(p, evaluation, avgCost)
-  if (!evaluation) {
-    if (checking) return <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span className="spinner" style={{ width: 14, height: 14 }} /> Checking the price…</div>
-    return <div className="hint">{failed ? "Couldn't check prices." : 'No price data for this call.'}</div>
-  }
-  if (!(evaluation.current_option_price > 0)) {
+  if (!ev) {
     return (
-      <div>
-        <span className="badge" style={{ fontSize: 13, background: 'rgba(255,255,255,0.06)', color: 'var(--text-dim)', border: '1px solid var(--border)' }}>
-          <HelpCircle size={14} strokeWidth={2} /> Price unavailable
-        </span>
-        <div className="hint" style={{ marginTop: 8 }}>
-          {evaluation.old_trade_date
-            ? <>It last traded on {fmtDate(evaluation.old_trade_date)}, when the stock was at a different price, so that's no guide to what it costs now. Check again once the market opens.</>
-            : "Couldn't get a price for this call right now (common outside market hours). Check again while the market is open."}
-        </div>
-      </div>
+      <p className="mt-4 flex items-center gap-2 text-13 text-muted">
+        {checking ? <><Spinner className="h-3.5 w-3.5" /> Checking the price…</> : failed ? "Couldn't check prices." : 'No price data for this call.'}
+      </p>
     )
   }
-  if (against) return <AgainstYouPanel p={p} a={against} />
-  const kept = Math.max(0, Math.min(evaluation.profit_capture_pct, 100))
-  const buy = evaluation.should_buy_back
-  const expire = evaluation.action === 'let_expire'
-  const ev = evaluation.event
-  const evText = ev ? `${ev.kind === 'earnings' ? 'Earnings' : "The Fed's rate decision"} on ${fmtDate(ev.date)}` : null
-  // How far the stock is under the strike, as a share of the strike
-  const below = evaluation.stock_price > 0 ? (1 - evaluation.stock_price / evaluation.strike) * 100 : null
+  if (!(ev.current_option_price > 0)) {
+    return (
+      <p className="mt-4 text-13 text-muted">
+        {ev.old_trade_date
+          ? <>No current price: it last traded on {fmtDate(ev.old_trade_date)}, when the stock was elsewhere. Check again once the market opens.</>
+          : "Couldn't get a price for this call right now (common outside market hours). Check again while the market is open."}
+      </p>
+    )
+  }
+  const against = againstYou(p, ev, avgCost)
+  if (against) return <AgainstYou p={p} a={against} />
+
+  const buy = ev.should_buy_back
+  const expire = ev.action === 'let_expire'
+  const evText = ev.event ? `${ev.event.kind === 'earnings' ? `${p.ticker} reports` : 'The Fed decides'} on ${fmtDate(ev.event.date)}` : null
+  const below = ev.stock_price > 0 ? (1 - ev.stock_price / ev.strike) * 100 : null
+  const target = ev.buyback_kept_pct
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 }}>
-        {buy
-          ? <span className="badge badge-green" style={{ fontSize: 13 }}><CheckCircle2 size={14} strokeWidth={2} /> Buy back now</span>
-          : expire
-            ? <span className="badge badge-blue" style={{ fontSize: 13 }}><Hourglass size={14} strokeWidth={2} /> Let it expire</span>
-            : <span className="badge badge-amber" style={{ fontSize: 13 }}><Clock3 size={14} strokeWidth={2} /> Keep holding</span>}
-        <span className="fact-label" style={{ margin: 0 }}>
-          Premium kept <InfoTip text={TERMS.profit} size={12} />
-          <strong className="mono" style={{ color: buy || expire ? 'var(--green)' : 'var(--text)', marginLeft: 4 }}>{evaluation.profit_capture_pct.toFixed(0)}%</strong>
+    <>
+      <KeptBar className="mt-4" pct={ev.profit_capture_pct} target={target} event={!!ev.event} hot={buy || expire} />
+      <div className="relative mt-1 h-4 text-11 text-muted" aria-hidden="true">
+        {target > 0 && <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${Math.min(Math.max(target, 12), 88)}%` }}>target {Math.round(target)}%</span>}
+      </div>
+      <dl className="mt-3 grid grid-cols-3 gap-3">
+        <div>
+          <dt className="text-12 text-muted">Limit price</dt>
+          <dd className="mt-0.5 flex items-center text-17 font-semibold">
+            {ev.buyback_price > 0 ? <>{money(ev.buyback_price)}<CopyPrice price={ev.buyback_price} /></> : '—'}
+          </dd>
+        </div>
+        <div><dt className="text-12 text-muted">Price now</dt><dd className="mt-0.5 text-17 font-semibold">{money(ev.current_option_price)}</dd></div>
+        <div><dt className="text-12 text-muted">Costs about</dt><dd className="mt-0.5 text-17 font-semibold">{money(ev.cost_to_close)}</dd></div>
+      </dl>
+      <p className="mt-3 flex items-start gap-2 text-13 text-fg-2">
+        {ev.event && <Dot tone="amber" className="mt-1.5" />}
+        <span>
+          {buy && evText
+            ? <>{evText}, before this call expires, so the target drops to {ev.target_pct}%.</>
+            : buy
+              ? <>Buying back now locks in the gain{withFees ? `, including fees` : ''}.</>
+              : expire
+                ? <>Expires in {plural(ev.days_left, 'day')} with the stock {below.toFixed(0)}% under the strike. Buying back would cost {money(ev.cost_to_close)}{withFees} for little benefit, so you can let it expire.</>
+                : <>Not worth buying back yet{evText ? <>. {evText} before expiry, so you'll be told to buy back at {ev.target_pct}%</> : ''}.</>}
         </span>
-      </div>
-      <div className="kept-bar">
-        <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${kept}%`, background: buy || expire ? 'var(--green)' : 'var(--accent)' }} />
-        </div>
-        {evaluation.buyback_kept_pct > 0 && (
-          <span className="kept-mark" style={{ left: `${Math.min(evaluation.buyback_kept_pct, 100)}%`, background: ev ? 'var(--amber)' : 'var(--text)' }}
-            title={`Target: ${evaluation.buyback_kept_pct.toFixed(1)}% kept`} />
-        )}
-      </div>
-      {evaluation.buyback_price > 0 && (
-        <div className="buyback-box">
-          <div>
-            <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Limit order: buy back at <InfoTip text={TERMS.buybackPrice} size={12} /></div>
-            <div>
-              <strong className="mono" style={{ fontSize: 18 }}>{money(evaluation.buyback_price)}</strong>
-              <span className="dim"> or less · {evaluation.buyback_kept_pct.toFixed(1)}% kept · now <span className="mono">{money(evaluation.current_option_price)}</span></span>
-            </div>
-          </div>
-          <CopyPrice price={evaluation.buyback_price} />
-        </div>
-      )}
-      <div className="hint" style={{ marginTop: 8 }}>
-        {buy && ev
-          ? <>{evText} comes before this call expires, so the earlier {evaluation.target_pct}% target applies. Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong>{withFees} and avoids holding through the jump.</>
-          : buy
-          ? <>Buying back now costs about <strong style={{ color: 'var(--text)' }}>{money(evaluation.cost_to_close)}</strong>{withFees} and locks in the gain.</>
-          : expire
-            ? <>Expires in {plural(evaluation.days_left, 'day')} with the stock {below.toFixed(0)}% below the strike. Buying back would cost {money(evaluation.cost_to_close)}{withFees} for little benefit, so you can let it expire and keep that.</>
-            : <>It would cost {money(evaluation.cost_to_close)}{withFees} to buy back today. Not worth it yet{ev ? <>; {evText.charAt(0).toLowerCase() + evText.slice(1)} comes before expiry, so you'll be told to buy back at {evaluation.target_pct}%</> : ''}.</>}
-      </div>
-    </div>
+      </p>
+    </>
   )
 }
 
-function PositionCard({ p, showTicker, evaluation, checking, failed, avgCost, onClose, onRoll, onEdit, onDelete, onCollapse }) {
-  const days = daysUntil(p.expiry)
-  const buy = evaluation?.should_buy_back
-  const against = againstYou(p, evaluation, avgCost)
-  const border = against ? (against.aboveStrike ? 'rgba(242,107,122,0.45)' : 'rgba(242,180,74,0.4)') : buy ? 'rgba(62,224,166,0.35)' : undefined
+function PositionCard({ p, showTicker, ev, checking, failed, avgCost, onClose, onRoll, onEdit, onDelete, onCollapse }) {
+  const buy = ev?.should_buy_back
+  const against = againstYou(p, ev, avgCost)
+  const priced = ev && ev.current_option_price > 0 && !against
   return (
-    <div className="card" style={{ borderColor: border }}>
-      <div className="grid-split">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-            {showTicker && <span className="ticker-tag">{p.ticker}</span>}
-            <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
-            {p.rolled_from && <span className="badge badge-blue">Rolled</span>}
-            <span className="hint">Opened {fmtDate(p.opened_at)}</span>
-            {onCollapse && (
-              <button type="button" className="menu-btn" style={{ marginLeft: 'auto' }} onClick={onCollapse} aria-expanded="true"
-                aria-label={`Hide details for the ${money(p.strike)} ${p.ticker} call`}>
-                <ChevronDown size={18} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} />
-              </button>
-            )}
-          </div>
-          <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>
-            {money(p.strike)} call <span className="muted" style={{ fontWeight: 500, fontSize: 15 }}>
-              · expires {fmtDate(p.expiry)}{days === 0 ? ' (today)' : days != null && days > 0 ? ` (${plural(days, 'day')})` : ''}
-            </span>
-          </div>
-          <div style={{ fontSize: 14, color: 'var(--text-dim)' }}>
-            {plural(p.contracts, 'contract')} · sold at {money(p.entry_price)}/share · collected{' '}
-            <strong style={{ color: 'var(--green)' }}>{money(p.premium_total)}</strong>
-            {p.open_fees > 0 && <span className="muted"> ({money(p.open_fees)} fees)</span>}
-          </div>
-        </div>
-        <div>
-          <StatusPanel p={p} evaluation={evaluation} checking={checking} failed={failed} avgCost={avgCost} />
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-            <button className="btn-secondary" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => onRoll(p)}>
-              <Repeat size={14} strokeWidth={2} /> Roll
-            </button>
-            <button className={buy ? 'btn-primary' : 'btn-secondary'} style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => onClose(p)}>
-              {buy ? 'Buy back & close' : 'Close'}
-            </button>
-            <ActionMenu label={`More actions for the ${money(p.strike)} ${p.ticker} call`} items={[
-              { label: 'Edit fill or fees', icon: Pencil, onClick: () => onEdit(p) },
-              // A rolled call is undone from History so the original call reopens
-              !p.rolled_from && { label: 'Delete (entered by mistake)', icon: Trash2, danger: true, onClick: () => onDelete(p) },
-            ]} />
-          </div>
-        </div>
+    <article aria-label={`${p.ticker} ${strike(p.strike)} call`} className="rounded-card bg-surface p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-17 font-semibold">{callName(p, showTicker)}</h3>
+        {priced && <span className="text-17 font-semibold" style={{ color: buy || ev.action === 'let_expire' ? 'var(--accent)' : undefined }}>{Math.round(ev.profit_capture_pct)}%</span>}
       </div>
-    </div>
+      <div className="mt-0.5 flex justify-between gap-3 text-13 text-muted">
+        <span>{plural(p.contracts, 'contract')} · {fmtDate(p.expiry)} · {daysLeft(p)}</span>
+        {priced && <span>kept</span>}
+      </div>
+      <div className="mt-0.5 text-13 text-muted">
+        {p.allocation_type}{p.rolled_from ? ' · rolled' : ''} · sold at {money(p.entry_price)} · collected {money(p.premium_total)}
+      </div>
+
+      <Status p={p} ev={ev} checking={checking} failed={failed} avgCost={avgCost} />
+
+      <div className="mt-5 flex items-center gap-2.5">
+        <button type="button" className="btn btn-secondary flex-1" onClick={() => onRoll(p)}>
+          <Repeat size={16} strokeWidth={2} /> Roll
+        </button>
+        <button type="button" className={`btn flex-[2] ${buy ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onClose(p)}>
+          {buy ? 'Buy back' : 'Close'}
+        </button>
+        <ActionMenu label={`More for the ${p.ticker} ${strike(p.strike)} call`} className="-mr-2" items={[
+          onCollapse && { label: 'Show less', icon: ChevronRight, onClick: onCollapse },
+          { label: 'Edit fill or fees', icon: Pencil, onClick: () => onEdit(p) },
+          // A rolled call is undone from History so the original call reopens
+          !p.rolled_from && { label: 'Delete (entered by mistake)', icon: Trash2, danger: true, onClick: () => onDelete(p) },
+        ]} />
+      </div>
+    </article>
   )
 }
 
-// One line for a call that needs nothing from you right now: how much of the
-// premium you've kept, against the buy-back target. The chevron opens the full card.
-function CompactCall({ p, showTicker, evaluation, checking, failed, onExpand }) {
-  const ev = evaluation
+// One line for a call that needs nothing from you right now: premium kept against the target
+function CallRow({ p, showTicker, ev, checking, failed, onExpand }) {
   const priced = ev && ev.current_option_price > 0
-  const kept = priced ? Math.max(0, Math.min(ev.profit_capture_pct, 100)) : 0
   const expire = ev?.action === 'let_expire'
   return (
-    <div className="card compact-call">
-      <div className="compact-head">
-        <div className="compact-title">
-          {showTicker && <span className="ticker-tag">{p.ticker}</span>}
-          <span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span>
-          <span className="compact-name">{money(p.strike)} call · {fmtDate(p.expiry)}</span>
-        </div>
-        <button type="button" className="menu-btn" onClick={onExpand} aria-expanded="false"
-          aria-label={`Show details for the ${money(p.strike)} ${p.ticker} call`}>
-          <ChevronDown size={18} strokeWidth={2} />
-        </button>
-      </div>
-      {priced ? (
-        <>
-          <div className="kept-bar">
-            <div className="progress-bar" style={{ height: 6 }}>
-              <div className="progress-fill" style={{ width: `${kept}%`, background: expire ? 'var(--green)' : 'var(--accent)' }} />
-            </div>
-            {ev.buyback_kept_pct > 0 && (
-              <span className="kept-mark" style={{ left: `${Math.min(ev.buyback_kept_pct, 100)}%`, background: ev.event ? 'var(--amber)' : 'var(--text)' }}
-                title={`Target: ${ev.buyback_kept_pct.toFixed(1)}% kept`} />
-            )}
-          </div>
-          <div className="compact-foot">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              {expire
-                ? <span className="badge badge-blue"><Hourglass size={13} strokeWidth={2} /> Let it expire</span>
-                : <span className="badge badge-neutral">Keep holding</span>}
-              <span className="mono">{ev.profit_capture_pct.toFixed(0)}% kept</span>
-            </span>
-            {ev.buyback_price > 0 && (
-              <span className="hint">target <span className="mono">{money(ev.buyback_price)}</span> · now <span className="mono">{money(ev.current_option_price)}</span></span>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {checking && !ev
-            ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Checking the price…</>
-            : failed && !ev ? "Couldn't check prices." : 'No current price for this call. Open it for details.'}
-        </div>
-      )}
-    </div>
+    <li className="border-b border-line last:border-b-0">
+      <button type="button" className="flex w-full items-center gap-3 py-3.5 text-left" onClick={onExpand} aria-expanded="false"
+        aria-label={`${callName(p, true)}, ${priced ? `${Math.round(ev.profit_capture_pct)}% kept` : 'no current price'}. Show details`}>
+        <span className="min-w-0 flex-1">
+          <span className="block text-15 font-medium">{callName(p, showTicker)}</span>
+          <span className="block text-13 text-muted">{plural(p.contracts, 'contract')} · {fmtDate(p.expiry)}{expire ? ' · let it expire' : ''}</span>
+        </span>
+        {priced ? (
+          <span className="w-[76px] shrink-0">
+            <span className="block text-right text-15 font-semibold" style={{ color: expire ? 'var(--accent)' : undefined }}>{Math.round(ev.profit_capture_pct)}%</span>
+            <KeptBar className="mt-1.5" height={4} pct={ev.profit_capture_pct} target={ev.buyback_kept_pct} event={!!ev.event} hot={expire} />
+          </span>
+        ) : (
+          <span className="text-13 text-muted">{checking && !ev ? <Spinner className="h-3.5 w-3.5" /> : failed && !ev ? 'No price' : '—'}</span>
+        )}
+        <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-muted" aria-hidden="true" />
+      </button>
+    </li>
   )
 }
 
@@ -298,7 +233,7 @@ export default function Positions() {
   const [editingPos, setEditingPos] = useState(null)   // Edit dialog
   const [adding, setAdding]       = useState(false)    // Add a call dialog
   const [confirm, setConfirm]     = useState(null)     // { title, body, confirmLabel, danger, run }
-  const [expanded, setExpanded]   = useState(() => new Set())  // compact calls opened to their full card
+  const [expanded, setExpanded]   = useState(() => new Set())  // held calls opened to their full card
   const toggleExpanded = id => setExpanded(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
@@ -325,10 +260,10 @@ export default function Positions() {
 
   const inScope   = p => scope === 'all' || p.ticker === selected
   const open      = positions.filter(p => p.status === 'OPEN' && inScope(p))
-  const finished  = positions.filter(p => p.status !== 'OPEN')
-  const closed    = finished.filter(inScope)
+  const closed    = positions.filter(p => p.status !== 'OPEN' && inScope(p))
     .slice().sort((a, b) => (b.closed_at || '').localeCompare(a.closed_at || '') || b.id - a.id)
   const rolledIds = new Set(positions.filter(p => p.rolled_from).map(p => p.rolled_from))
+  const showTicker = scope === 'all'
 
   // Prices are checked automatically whenever the open calls change; "Refresh" re-checks
   const [refreshKey, setRefreshKey] = useState(0)
@@ -369,16 +304,16 @@ export default function Positions() {
 
   const askDelete = p => setConfirm({
     title: 'Delete this call?',
-    body: <>Only for a call entered by mistake. The {money(p.strike)} {p.ticker} call ({plural(p.contracts, 'contract')}) is removed and its contracts are free again. This can't be undone.</>,
+    body: <>Only for a call entered by mistake. The {p.ticker} {strike(p.strike)} call ({plural(p.contracts, 'contract')}) is removed and its contracts are free again. This can't be undone.</>,
     confirmLabel: 'Delete call', danger: true,
-    run: async () => { await deletePosition(p.id); afterChange(); toast(`${p.ticker} ${money(p.strike)} call deleted`) },
+    run: async () => { await deletePosition(p.id); afterChange(); toast(`${p.ticker} ${strike(p.strike)} call deleted`) },
   })
   const askUndo = p => {
     const rolled = rolledIds.has(p.id)
     const what = p.status === 'ASSIGNED'
       ? <>Your {(p.contracts * 100).toLocaleString()} {p.ticker} shares go back into your holding and the call returns to {p.expiry < new Date().toISOString().slice(0, 10) ? 'expired' : 'open'}.</>
-      : rolled ? <>The new call from this roll is removed and this {money(p.strike)} call is open again.</>
-        : <>The {money(p.strike)} {p.ticker} call is open again and its buyback cost is cleared.</>
+      : rolled ? <>The new call from this roll is removed and this {strike(p.strike)} call is open again.</>
+        : <>The {p.ticker} {strike(p.strike)} call is open again and its buyback cost is cleared.</>
     setConfirm({
       title: p.status === 'ASSIGNED' ? 'Undo the assignment?' : rolled ? 'Undo the roll?' : 'Reopen this call?',
       body: what, confirmLabel: 'Undo',
@@ -391,7 +326,7 @@ export default function Positions() {
   }
   const askCalledAway = p => setConfirm({
     title: 'Were your shares called away?',
-    body: <>Records that the {money(p.strike)} {p.ticker} call was exercised: {(p.contracts * 100).toLocaleString()} shares leave your holding and you keep the full premium.</>,
+    body: <>Records that the {p.ticker} {strike(p.strike)} call was exercised: {(p.contracts * 100).toLocaleString()} shares leave your holding and you keep the full premium.</>,
     confirmLabel: 'Record assignment',
     run: async () => { await assignPosition(p.id); afterChange(); undoable(`Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`, p.id) },
   })
@@ -401,7 +336,7 @@ export default function Positions() {
   }
 
   // Ready to buy back and going against you get the full card (there's something
-  // to do); the rest are compact until opened. Soonest expiry first in each group.
+  // to do); the rest are one line until opened. Soonest expiry first in each group.
   const avgCostOf = p => tickers.find(t => t.ticker === p.ticker)?.avg_cost
   const groupOf = p => {
     const e = evals?.[p.id]
@@ -411,20 +346,26 @@ export default function Positions() {
   }
   const byExpiry = (a, b) => a.expiry.localeCompare(b.expiry) || a.ticker.localeCompare(b.ticker)
   const groups = [
-    { key: 'ready',   title: 'Ready to buy back', tone: 'var(--green)' },
-    { key: 'against', title: 'Going against you', tone: 'var(--amber)' },
-    { key: 'hold',    title: 'Holding',           tone: 'var(--text-dim)' },
+    { key: 'ready',   title: 'Ready to buy back' },
+    { key: 'against', title: 'Going against you' },
+    { key: 'hold',    title: evals ? 'Holding' : 'Open calls' },
   ].map(g => ({ ...g, calls: open.filter(p => groupOf(p) === g.key).sort(byExpiry) })).filter(g => g.calls.length > 0)
 
+  const card = (p, onCollapse) => (
+    <PositionCard key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={prices.failed}
+      avgCost={avgCostOf(p)} onCollapse={onCollapse}
+      onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
+  )
+
   return (
-    <div className="fade-up">
+    <div className="page">
       {closingPos && <CloseModal position={closingPos} evaluation={evals?.[closingPos.id]} onCancel={() => setClosingPos(null)}
         onDone={how => {
           const p = closingPos
           afterChange()
           undoable(how === 'assigned'
             ? `Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`
-            : `${p.ticker} ${money(p.strike)} call closed`, p.id)
+            : `${p.ticker} ${strike(p.strike)} call closed`, p.id)
         }} />}
       {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]} onCancel={() => setRollingPos(null)}
         onDone={() => { const p = rollingPos; afterChange(); undoable(`${p.ticker} call rolled`, p.id) }} />}
@@ -437,141 +378,126 @@ export default function Positions() {
 
       <PageHeader
         title="Positions"
-        showTicker={scope === 'stock'}
-        subtitle={scope === 'all' ? 'Your covered calls on every stock and what to do with each one.' : `Your covered calls on ${selected || 'this stock'} and what to do with each one.`}
         actions={!fetched.failed && tickers.length > 0 && <>
-          <button className="btn-secondary" onClick={() => setAdding(true)}><Plus size={15} strokeWidth={2} /> Add a call</button>
-          {open.length > 0 && (
-            <button className="btn-secondary" onClick={() => setRefreshKey(k => k + 1)} disabled={checking} title="Check the latest option prices again">
-              {checking ? <><span className="spinner" /> Checking…</> : <><RefreshCw size={15} strokeWidth={2} /> Refresh prices</>}
+          {open.length > 0 && <>
+            <button type="button" className="icon-btn md:hidden" onClick={() => setRefreshKey(k => k + 1)} disabled={checking} aria-label="Refresh prices">
+              {checking ? <Spinner /> : <RefreshCw size={19} strokeWidth={1.9} />}
             </button>
-          )}
+            <button type="button" className="btn btn-secondary btn-sm hidden md:inline-flex" onClick={() => setRefreshKey(k => k + 1)} disabled={checking}>
+              {checking ? <Spinner /> : <RefreshCw size={15} strokeWidth={2} />} Refresh prices
+            </button>
+          </>}
+          <button type="button" className="icon-btn text-fg md:hidden" onClick={() => setAdding(true)} aria-label="Add a call">
+            <Plus size={22} strokeWidth={2} />
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm hidden md:inline-flex" onClick={() => setAdding(true)}>
+            <Plus size={15} strokeWidth={2.2} /> Add a call
+          </button>
         </>}
       />
 
-      {error && (
-        <div className="callout callout-red" style={{ marginBottom: 20 }}>
-          <AlertTriangle size={18} strokeWidth={1.75} /> {error}
-        </div>
-      )}
+      {error && <p role="alert" className="mb-4 flex items-start gap-2 text-15 text-loss"><Dot tone="loss" className="mt-2" />{error}</p>}
 
       {fetched.failed && !loading ? <ServerDown onRetry={reload} /> : <>
       <AssignmentReview items={review} onChanged={(kind, p) => {
         afterChange()
         if (kind === 'assigned') undoable(`Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`, p.id)
-        else toast(`${p.ticker} ${money(p.strike)} call marked as not assigned`)
+        else toast(`${p.ticker} ${strike(p.strike)} call marked as not assigned`)
       }} />
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-        <div className="tabs">
-          <button className={`tab ${tab === 'OPEN' ? 'active' : ''}`} onClick={() => setTab('OPEN')}>Open{loading ? '' : ` (${open.length})`}</button>
-          <button className={`tab ${tab === 'CLOSED' ? 'active' : ''}`} onClick={() => setTab('CLOSED')}>History{loading ? '' : ` (${closed.length})`}</button>
-        </div>
-        <div className="tabs" role="group" aria-label="Which stocks">
-          <button className={`tab ${scope === 'all' ? 'active' : ''}`} onClick={() => setScope('all')}>All stocks</button>
-          <button className={`tab ${scope === 'stock' ? 'active' : ''}`} onClick={() => setScope('stock')} disabled={!selected}>
-            {selected || 'One stock'}
-          </button>
-        </div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Segmented large className="md:w-[300px]" label="Open or finished calls" value={tab} onChange={setTab}
+          options={[{ value: 'OPEN', label: `Open${loading ? '' : ` · ${open.length}`}` }, { value: 'CLOSED', label: `History${loading ? '' : ` · ${closed.length}`}` }]} />
+        {tickers.length > 1 && (
+          <StockChips label="Which stocks" all tickers={tickers} value={scope === 'all' ? null : selected}
+            onChange={t => { if (t == null) setScope('all'); else { selectTicker(t); setScope('stock') } }} />
+        )}
       </div>
 
-      {loading ? (
-        <PositionsSkeleton />
-      ) : tab === 'OPEN' ? (
-        tickers.length === 0 ? (
-          <EmptyState icon={Layers} title="Add a stock first" action={<AddStockLink />}>
-            Covered calls are sold against shares you own. Add your stocks, then scan for a call or record one you sold with your broker.
-          </EmptyState>
-        ) : open.length === 0 ? (
-          <EmptyState icon={Layers} title={`No open calls${scope === 'stock' && selected ? ` on ${selected}` : ''}`}
-            action={<Link to="/scanner" className="btn-primary" style={{ textDecoration: 'none' }}><ScanLine size={15} strokeWidth={2} /> Go to Scanner</Link>}>
-            Run a scan to find one to sell, or add one you sold with your broker.
-          </EmptyState>
-        ) : (
-          <>
-            {evals && readyCount === 0 && (
-              <div className="callout callout-amber" style={{ marginBottom: 16 }}>
-                {expireCount > 0
-                    ? <><Clock3 size={18} strokeWidth={1.75} /> Nothing to buy back. {expireCount === open.length ? (expireCount === 1 ? 'It' : 'They') : plural(expireCount, 'call')} can be left to expire.</>
-                    : <><Clock3 size={18} strokeWidth={1.75} /> Nothing to do right now. Keep holding all {plural(open.length, 'call')}.</>}
-              </div>
-            )}
-            {evals && <PriceStamp meta={prices.meta} style={{ marginTop: -6, marginBottom: 14 }} />}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+      <div className="mt-5">
+        {loading ? (
+          <PositionsSkeleton />
+        ) : tab === 'OPEN' ? (
+          tickers.length === 0 ? (
+            <EmptyState icon={Layers} title="Add a stock first" action={<AddStockLink />}>
+              Covered calls are sold against shares you own. Add your stocks, then scan for a call or record one you sold with your broker.
+            </EmptyState>
+          ) : open.length === 0 ? (
+            <EmptyState icon={Layers} title={`No open calls${scope === 'stock' && selected ? ` on ${selected}` : ''}`}
+              action={<Link to="/scanner" className="btn btn-primary"><ScanLine size={16} strokeWidth={2} /> Go to Scanner</Link>}>
+              Run a scan to find one to sell, or add one you sold with your broker.
+            </EmptyState>
+          ) : (
+            <>
+              {evals && <PriceStamp meta={prices.meta} />}
+              {evals && readyCount === 0 && (
+                <p className="mt-3 text-15 text-fg-2">
+                  {expireCount > 0
+                    ? <>Nothing to buy back. {expireCount === open.length ? (expireCount === 1 ? 'It' : 'They') : plural(expireCount, 'call')} can be left to expire.</>
+                    : <>Nothing to do right now. Keep holding {open.length === 1 ? 'it' : `all ${open.length}`}.</>}
+                </p>
+              )}
               {groups.map(g => (
-                <section key={g.key} aria-label={g.title} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {evals && <h2 className="group-title" style={{ color: g.tone }}>{g.title} · {g.calls.length}</h2>}
-                  {g.calls.map(p => (g.key !== 'hold' || expanded.has(p.id)) ? (
-                    <PositionCard key={p.id} p={p} showTicker={scope === 'all'} evaluation={evals?.[p.id]} checking={checking} failed={prices.failed}
-                      avgCost={avgCostOf(p)} onCollapse={g.key === 'hold' ? () => toggleExpanded(p.id) : undefined}
-                      onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
+                <section key={g.key} aria-label={g.title} className="mt-7 first:mt-5">
+                  <h2 className="mb-3 text-17 font-semibold">{g.title} <span className="font-medium text-muted">{g.calls.length}</span></h2>
+                  {g.key !== 'hold' ? (
+                    <div className="grid gap-3 md:grid-cols-2">{g.calls.map(p => card(p))}</div>
                   ) : (
-                    <CompactCall key={p.id} p={p} showTicker={scope === 'all'} evaluation={evals?.[p.id]} checking={checking} failed={prices.failed}
-                      onExpand={() => toggleExpanded(p.id)} />
-                  ))}
+                    <>
+                      {g.calls.some(p => expanded.has(p.id)) && (
+                        <div className="mb-3 grid gap-3 md:grid-cols-2">
+                          {g.calls.filter(p => expanded.has(p.id)).map(p => card(p, () => toggleExpanded(p.id)))}
+                        </div>
+                      )}
+                      <ul>
+                        {g.calls.filter(p => !expanded.has(p.id)).map(p => (
+                          <CallRow key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={prices.failed}
+                            onExpand={() => toggleExpanded(p.id)} />
+                        ))}
+                      </ul>
+                    </>
+                  )}
                 </section>
               ))}
-            </div>
+              {evals && <p className="mt-6 text-12 text-muted">Kept is the share of the premium you'd keep if you bought the call back now. The mark on each bar is your target.</p>}
+            </>
+          )
+        ) : closed.length === 0 ? (
+          <EmptyState icon={Layers} title="No finished calls yet">Calls show up here once they're bought back, expire or are assigned.</EmptyState>
+        ) : (
+          <>
+            <p className="text-13 text-muted">{scope === 'all' ? 'Every finished call, including stocks you no longer hold.' : `Finished calls on ${selected || 'this stock'}.`}</p>
+            <ul className="mt-2">
+              {closed.map(p => {
+                const net = optionNet(p)
+                const label = resultLabel(p, rolledIds)
+                return (
+                  <li key={p.id} className="flex items-center gap-3 border-b border-line py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-15 font-semibold">{p.ticker} {strike(p.strike)} × {p.contracts}</div>
+                      <div className="flex items-center gap-1.5 text-13 text-muted">
+                        {label === 'Assigned' && <Dot tone="amber" />}{label === 'Assigned' ? 'Called away' : label} · {fmtDate(p.closed_at)} · {p.allocation_type}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {net == null
+                        ? <button type="button" className="link text-15 text-amber" onClick={() => setEditingPos(p)}>Add cost</button>
+                        : <div className="text-15 font-semibold" style={{ color: net < 0 ? 'var(--loss)' : undefined }}>{signedMoney(net)}</div>}
+                      <div className="text-13 text-muted">collected {money(p.premium_total)}{p.close_cost > 0 ? ` · paid ${money(p.close_cost)}` : ''}</div>
+                    </div>
+                    <ActionMenu label={`Actions for the ${p.ticker} ${strike(p.strike)} call`} className="-mr-2" items={[
+                      { label: 'Edit', icon: Pencil, onClick: () => setEditingPos(p) },
+                      p.status === 'EXPIRED'
+                        ? { label: 'Shares were called away', icon: UserCheck, onClick: () => askCalledAway(p) }
+                        : { label: rolledIds.has(p.id) ? 'Undo roll' : p.status === 'ASSIGNED' ? 'Undo assignment' : 'Reopen (undo close)', icon: Undo2, onClick: () => askUndo(p) },
+                    ]} />
+                  </li>
+                )
+              })}
+            </ul>
           </>
-        )
-      ) : (
-        <div className="card">
-          <div className="hint" style={{ marginBottom: 12 }}>
-            {scope === 'all' ? 'Every finished call, including stocks you no longer hold.' : `Finished calls on ${selected || 'this stock'}.`}
-          </div>
-          {closed.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No finished calls yet.</div>
-          ) : (
-            <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  {scope === 'all' && <th>Stock</th>}
-                  <th>Type</th><th className="num">Strike</th><th>Expiry</th><th className="num">Contracts</th>
-                  <th>Result</th><th className="num">Collected</th><th className="num">Paid to close</th><th className="num">Fees</th>
-                  <th className="num">Net <InfoTip text={TERMS.net} size={12} /></th><th>Closed</th><th><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {closed.map(p => {
-                  const cost = p.close_cost
-                  const net = optionNet(p)
-                  const fees = totalFees(p)
-                  const label = resultLabel(p, rolledIds)
-                  return (
-                    <tr key={p.id}>
-                      {scope === 'all' && <td className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>{p.ticker}</td>}
-                      <td><span className={`badge badge-${p.allocation_type === 'Income' ? 'accent' : 'violet'}`}>{p.allocation_type}</span></td>
-                      <td className="mono num" style={{ color: 'var(--text)', fontWeight: 600 }}>{money(p.strike)}</td>
-                      <td className="nowrap">{fmtDate(p.expiry)}</td>
-                      <td className="mono num">{p.contracts}</td>
-                      <td className="nowrap">{label === 'Assigned' ? <span className="badge badge-amber">Assigned</span> : label}</td>
-                      <td className="mono num" style={{ color: 'var(--green)' }}>{money(p.premium_total)}</td>
-                      <td className="mono num">
-                        {cost == null
-                          ? <button className="link-btn" style={{ fontSize: 13, color: 'var(--amber)' }} onClick={() => setEditingPos(p)}>Add cost</button>
-                          : money(cost)}
-                      </td>
-                      <td className="mono num">{fees ? money(fees) : <span className="muted">—</span>}</td>
-                      <td className="mono num" style={{ color: net == null ? 'var(--text-muted)' : net >= 0 ? 'var(--text)' : 'var(--red)' }}>{net == null ? '—' : money(net)}</td>
-                      <td className="muted nowrap">{fmtDate(p.closed_at)}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <ActionMenu label={`Actions for the ${money(p.strike)} ${p.ticker} call`} items={[
-                          { label: 'Edit', icon: Pencil, onClick: () => setEditingPos(p) },
-                          p.status === 'EXPIRED'
-                            ? { label: 'Shares were called away', icon: UserCheck, onClick: () => askCalledAway(p) }
-                            : { label: rolledIds.has(p.id) ? 'Undo roll' : p.status === 'ASSIGNED' ? 'Undo assignment' : 'Reopen (undo close)', icon: Undo2, onClick: () => askUndo(p) },
-                        ]} />
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
       </>}
     </div>
   )

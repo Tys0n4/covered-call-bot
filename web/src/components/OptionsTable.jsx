@@ -1,55 +1,49 @@
 // src/components/OptionsTable.jsx — every option that matched the Scanner filters.
-// Grouped by expiry by default (earnings / ex-dividend badges show once per
+// Grouped by expiry by default (heads-ups about earnings / the Fed show once per
 // group); click a column header to sort the whole list by it instead.
 import { useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import InfoTip from './InfoTip'
+import { Dot } from './ui'
 import { TERMS } from '../lib/terms'
-import { fmtDate, money, pct, plural } from '../lib/format'
+import { fmtDate, money, pct, plural, strike } from '../lib/format'
 
 const COLUMNS = [
-  { key: 'strike',               label: 'Strike',        tip: TERMS.strike,  first: 'asc' },
+  { key: 'strike',               label: 'Strike',        first: 'asc' },
   { key: 'premium_price',        label: 'Premium',       tip: TERMS.fillPrice, first: 'desc' },
   { key: 'annualized_yield_pct', label: 'Yearly return', tip: TERMS.yield,   first: 'desc' },
   { key: 'upside_to_strike_pct', label: 'Room to rise',  tip: TERMS.upside,  first: 'desc' },
-  { key: 'delta',                label: 'Called chance', tip: TERMS.delta,   first: 'asc' },
+  { key: 'delta',                label: 'Chance called', tip: TERMS.delta,   first: 'asc' },
   { key: 'spread_pct',           label: 'Spread',        tip: TERMS.spread,  first: 'asc' },
 ]
 
-// Earnings / ex-dividend before expiry
-export function EventBadges({ option, compact = false }) {
-  if (compact) return <>
-    {option.spans_earnings && <span className="event-mark tone-amber" title={TERMS.earnings} aria-label="Spans earnings">E</span>}
-    {option.spans_fed && <span className="event-mark tone-amber" title={TERMS.fed} aria-label="Spans a Fed rate decision">F</span>}
-    {option.spans_industry && <span className="event-mark tone-amber" title={TERMS.industry} aria-label="Spans industry earnings">I</span>}
-    {option.spans_ex_dividend && <span className="event-mark tone-blue" title={TERMS.exDividend} aria-label="Spans an ex-dividend date">D</span>}
-  </>
-  return <>
-    {option.spans_earnings && <span className="badge badge-amber" title={TERMS.earnings}>Earnings</span>}
-    {option.spans_fed && <span className="badge badge-amber" title={TERMS.fed}>Fed</span>}
-    {option.spans_industry && <span className="badge badge-amber" title={TERMS.industry}>Industry earnings</span>}
-    {option.spans_ex_dividend && <span className="badge badge-blue" title={TERMS.exDividend}>Ex-div</span>}
-  </>
+// What comes before expiry, in words: "after AMZN earnings and the Fed decision"
+// eslint-disable-next-line react-refresh/only-export-components
+export function eventsText(o, ticker) {
+  const parts = []
+  if (o.spans_earnings) parts.push(`${ticker ? `${ticker} ` : ''}earnings`)
+  if (o.spans_fed) parts.push('the Fed decision')
+  if (o.spans_industry) parts.push('industry earnings')
+  if (o.spans_ex_dividend) parts.push('the ex-dividend date')
+  if (!parts.length) return null
+  return `after ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]}`
 }
 
-function QuoteBadge({ quality, basis, lastTrade }) {
-  if (quality === 'LIVE') return <span className="muted">Current</span>
-  if (quality === 'OLD') {
-    return <span className="badge badge-amber" title={`${TERMS.oldPrice}${lastTrade ? ` Last traded ${fmtDate(lastTrade)}.` : ''}`}>Old price</span>
-  }
-  if (quality === 'STALE' && basis === 'closing') return <span className="muted" title={TERMS.closingQuote}>Closing</span>
-  if (quality === 'STALE') return <span className="badge badge-amber" title={TERMS.lastTrade}>Last trade</span>
-  return <span className="badge badge-red">{quality}</span>
+function QuoteNote({ c }) {
+  if (c.quote_quality === 'LIVE') return null
+  const text = c.quote_quality === 'OLD' ? 'old price' : c.quote_quality === 'STALE' && c.price_basis === 'closing' ? 'closing' : c.quote_quality === 'STALE' ? 'last trade' : c.quote_quality.toLowerCase()
+  const tip = c.quote_quality === 'OLD' ? `${TERMS.oldPrice}${c.last_trade_date ? ` Last traded ${fmtDate(c.last_trade_date)}.` : ''}` : c.price_basis === 'closing' ? TERMS.closingQuote : TERMS.lastTrade
+  return <span className="ml-1.5 text-12 text-muted" title={tip}>{text}</span>
 }
 
-function SortHeader({ col, sort, onSort, className = 'num' }) {
+function SortHeader({ col, sort, onSort, num = true }) {
   const active = sort.key === col.key
   const Icon = !active ? ArrowUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown
   return (
-    <th className={className} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        <button type="button" className={`sort-btn${active ? ' active' : ''}`} onClick={() => onSort(col)}>
-          {col.label} <Icon size={12} strokeWidth={2.25} aria-hidden="true" />
+    <th className={num ? 'num' : ''} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <span className="inline-flex items-center gap-1">
+        <button type="button" className={`inline-flex items-center gap-1 ${active ? 'text-fg' : 'hover:text-fg'}`} onClick={() => onSort(col)}>
+          {col.label} <Icon size={12} strokeWidth={2.25} className={active ? 'text-accent' : 'opacity-50'} aria-hidden="true" />
         </button>
         {col.tip && <InfoTip text={col.tip} size={12} />}
       </span>
@@ -57,31 +51,33 @@ function SortHeader({ col, sort, onSort, className = 'num' }) {
   )
 }
 
-function Cells({ c }) {
+function Cells({ c, picked }) {
   return <>
-    <td className="mono num" style={{ color: c.below_cost_basis ? 'var(--amber)' : 'var(--text)', fontWeight: 600 }}
-      title={c.below_cost_basis ? 'Below your average cost' : undefined}>{c.below_cost_basis ? '▾ ' : ''}{money(c.strike)}</td>
-    <td className="mono num" style={{ color: 'var(--accent-light)' }}>{money(c.premium_price)}</td>
-    <td className="mono num">{pct(c.annualized_yield_pct)}</td>
-    <td className="mono num">{pct(c.upside_to_strike_pct)}</td>
-    <td className="mono num">{c.delta != null ? `${Math.round(c.delta * 100)}%` : 'n/a'}</td>
-    <td className="mono num">{pct(c.spread_pct)}</td>
+    <td className="font-semibold" title={c.below_cost_basis ? 'Below your average cost' : undefined}>
+      <span style={{ color: c.below_cost_basis ? 'var(--amber)' : undefined }}>{strike(c.strike)}</span>
+      {picked && <span className="ml-2 text-13 font-semibold text-accent">{picked}</span>}
+      {c.below_cost_basis && <span className="ml-2 text-12 font-medium text-amber">below your cost</span>}
+    </td>
+    <td className="num">{money(c.premium_price)}<QuoteNote c={c} /></td>
+    <td className="num">{pct(c.annualized_yield_pct)}</td>
+    <td className="num">{pct(c.upside_to_strike_pct)}</td>
+    <td className="num">{c.delta != null ? `${Math.round(c.delta * 100)}%` : '—'}</td>
+    <td className="num text-fg-2">{pct(c.spread_pct)}</td>
   </>
 }
 
 const EXPIRY = { key: 'expiry', label: 'Expires', first: 'asc' }
 
-export default function OptionsTable({ candidates }) {
+// picked: Map of "expiry|strike" -> "Income" / "Balanced" for the recommended calls
+export default function OptionsTable({ candidates, ticker, picked = new Map() }) {
   const [sort, setSort] = useState({ key: 'expiry', dir: 'asc' })
   const onSort = col => setSort(s => (s.key === col.key
     ? { key: col.key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
     : { key: col.key, dir: col.first }))
 
-  // Only show the quote column when some prices aren't live
-  const showQuote = candidates.some(c => c.quote_quality !== 'LIVE')
   const grouped = sort.key === 'expiry'
-  const hasEvents = candidates.some(c => c.spans_earnings || c.spans_ex_dividend || c.spans_fed || c.spans_industry)
-  const span = COLUMNS.length + (grouped ? 0 : 2) + (showQuote ? 1 : 0)
+  const span = COLUMNS.length + (grouped ? 0 : 2)
+  const pick = c => picked.get(`${c.expiry}|${c.strike}`)
 
   const sign = sort.dir === 'asc' ? 1 : -1
   const rows = candidates.slice().sort((a, b) => {
@@ -103,51 +99,45 @@ export default function OptionsTable({ candidates }) {
 
   return (
     <>
-    <div className="table-scroll">
-      <table className="data-table options-table">
-        <thead>
-          <tr>
-            {!grouped && <SortHeader col={EXPIRY} sort={sort} onSort={onSort} className="" />}
-            {!grouped && <th className="num">Days left</th>}
-            {COLUMNS.map(col => <SortHeader key={col.key} col={col} sort={sort} onSort={onSort} />)}
-            {showQuote && <th>Quote <InfoTip text={TERMS.quote} size={12} /></th>}
-          </tr>
-        </thead>
-        <tbody>
-          {grouped ? groups.map(g => [
-            <tr key={g.expiry} className="group-row">
-              <td colSpan={span}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" className="sort-btn active" onClick={() => onSort(EXPIRY)}
-                    title={sort.dir === 'asc' ? 'Show latest expiry first' : 'Show soonest expiry first'}>
-                    {fmtDate(g.expiry)}
-                  </button>
-                  <span className="muted">{plural(g.dte, 'day')} · {plural(g.items.length, 'option')}</span>
-                  <EventBadges option={g.items[0]} />
-                </span>
-              </td>
-            </tr>,
-            ...g.items.map(c => (
-              <tr key={`${c.expiry}-${c.strike}`}>
-                <Cells c={c} />
-                {showQuote && <td><QuoteBadge quality={c.quote_quality} basis={c.price_basis} lastTrade={c.last_trade_date} /></td>}
-              </tr>
-            )),
-          ]) : rows.map(c => (
-            <tr key={`${c.expiry}-${c.strike}`}>
-              <td className="nowrap"><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{fmtDate(c.expiry)} <EventBadges option={c} compact /></span></td>
-              <td className="mono num">{c.dte}</td>
-              <Cells c={c} />
-              {showQuote && <td><QuoteBadge quality={c.quote_quality} lastTrade={c.last_trade_date} /></td>}
+      <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+        <table className="dtable min-w-[600px]">
+          <thead>
+            <tr>
+              {!grouped && <SortHeader col={EXPIRY} sort={sort} onSort={onSort} num={false} />}
+              {!grouped && <th className="num">Days</th>}
+              {COLUMNS.map((col, i) => <SortHeader key={col.key} col={col} sort={sort} onSort={onSort} num={i > 0} />)}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-      <div className="hint" style={{ padding: '10px 14px 2px', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {!grouped && hasEvents && <span><span className="event-mark tone-amber">E</span> expires after earnings · <span className="event-mark tone-amber">F</span> a Fed decision · <span className="event-mark tone-amber">I</span> industry earnings · <span className="event-mark tone-blue">D</span> an ex-dividend date</span>}
-        {!showQuote && <span>All prices are current quotes, about 15 minutes behind.</span>}
+          </thead>
+          <tbody>
+            {grouped ? groups.map(g => {
+              const ev = eventsText(g.items[0], ticker)
+              return [
+                <tr key={g.expiry}>
+                  <td colSpan={span} className="pt-6 pb-2 text-13 font-semibold text-fg-2">
+                    <button type="button" className="hover:text-fg" onClick={() => onSort(EXPIRY)}
+                      title={sort.dir === 'asc' ? 'Show latest expiry first' : 'Show soonest expiry first'}>
+                      {fmtDate(g.expiry)} · {plural(g.dte, 'day')}
+                    </button>
+                    {ev && <span className="ml-3 inline-flex items-center gap-1.5 font-medium"><Dot tone="amber" />{ev}</span>}
+                  </td>
+                </tr>,
+                ...g.items.map(c => <tr key={`${c.expiry}-${c.strike}`}><Cells c={c} picked={pick(c)} /></tr>),
+              ]
+            }) : rows.map(c => (
+              <tr key={`${c.expiry}-${c.strike}`}>
+                <td>
+                  <span className="inline-flex items-center gap-1.5">{fmtDate(c.expiry)}{eventsText(c) && <span title={eventsText(c, ticker)}><Dot tone="amber" /></span>}</span>
+                </td>
+                <td className="num text-fg-2">{c.dte}</td>
+                <Cells c={c} picked={pick(c)} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+      <p className="mt-3 text-12 text-muted">
+        Premium is the midpoint, where sell orders usually fill. Calls that expire after earnings are only picked near the low end of your range.
+      </p>
     </>
   )
 }

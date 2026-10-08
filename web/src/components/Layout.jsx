@@ -1,81 +1,55 @@
-// src/components/Layout.jsx — sidebar on desktop; top bar + bottom tabs on phones
-import { NavLink } from 'react-router-dom'
-import { LayoutGrid, ScanLine, Briefcase, TrendingUp, SlidersHorizontal, LogOut } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
+// src/components/Layout.jsx — top bar on bigger screens; five tabs along the bottom on phones
+import { Link, NavLink } from 'react-router-dom'
+import { Briefcase, House, ScanLine, SlidersHorizontal, TrendingUp } from 'lucide-react'
+import { Logo, MarketStatus } from './ui'
 
-// The workflow: see where you stand, find a trade, look after it, see how it went.
+// The workflow: see where you stand, find a trade, look after it, see how it went
 const NAV = [
-  { to: '/',          label: 'Dashboard', hint: 'Overview',          icon: LayoutGrid },
-  { to: '/scanner',   label: 'Scanner',   hint: 'Find a trade',      icon: ScanLine },
-  { to: '/positions', label: 'Positions', hint: 'Manage your calls', icon: Briefcase },
-  { to: '/performance', label: 'Performance', hint: 'Your results',  icon: TrendingUp },
+  { to: '/',            label: 'Home',        icon: House },
+  { to: '/scanner',     label: 'Scanner',     icon: ScanLine },
+  { to: '/positions',   label: 'Positions',   icon: Briefcase },
+  { to: '/performance', label: 'Performance', icon: TrendingUp },
 ]
-const STRATEGY = { to: '/strategy', label: 'Strategy', hint: 'Your rules', icon: SlidersHorizontal }
-
-function NavItem({ to, label, hint, icon: Icon, small = false }) {
-  return (
-    <NavLink to={to} end={to === '/'} className={`nav-item${small ? ' small' : ''}`}>
-      {({ isActive }) => (
-        <>
-          <Icon size={small ? 16 : 18} strokeWidth={1.75} color={isActive ? 'var(--accent-light)' : 'currentColor'} style={{ flexShrink: 0 }} />
-          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
-            <span className="nav-label">{label}</span>
-            {hint && <span className="nav-hint">{hint}</span>}
-          </span>
-        </>
-      )}
-    </NavLink>
-  )
-}
-
-function Logo() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div className="logo-mark">C</div>
-      <div style={{ lineHeight: 1.2 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17 }}>CovCall</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Covered call scanner</div>
-      </div>
-    </div>
-  )
-}
+const STRATEGY = { to: '/strategy', label: 'Strategy', icon: SlidersHorizontal }
 
 export default function Layout({ children }) {
-  const { authRequired, logout } = useAuth()
-  const logoutButton = authRequired && (
-    <button className="link-btn" onClick={logout} style={{ color: 'var(--text-muted)', fontSize: 13, padding: '6px 14px' }}>
-      <LogOut size={15} strokeWidth={1.75} /> Log out
-    </button>
-  )
-
   return (
-    <div className="app-shell">
-      {/* Desktop sidebar */}
-      <aside className="app-sidebar">
-        <div style={{ padding: '28px 24px 24px' }}><Logo /></div>
-        <nav aria-label="Main" style={{ flex: 1, padding: '0 12px' }}>
-          {NAV.map(item => <NavItem key={item.to} {...item} />)}
-        </nav>
-        <div style={{ padding: '12px 12px 24px', borderTop: '1px solid var(--border)' }}>
-          <NavItem {...STRATEGY} small />
-          {logoutButton}
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-40 hidden border-b border-line bg-bg/90 backdrop-blur-md md:block">
+        <div className="mx-auto flex min-h-16 max-w-[1160px] items-center gap-7 px-6">
+          <Link to="/" className="flex items-center gap-2.5 text-17 font-semibold tracking-title text-fg">
+            <Logo /> CovCall
+          </Link>
+          <nav aria-label="Main" className="flex gap-1">
+            {NAV.map(({ to, label }) => (
+              <NavLink key={to} to={to} end={to === '/'}
+                className={({ isActive }) => `rounded-full p-3 text-15 ${isActive ? 'font-semibold text-fg' : 'font-medium text-muted hover:text-fg'}`}>
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="ml-auto flex items-center gap-3">
+            <MarketStatus />
+            <NavLink to={STRATEGY.to}
+              className={({ isActive }) => `inline-flex min-h-11 items-center gap-2 rounded-full px-3.5 text-15 ${isActive ? 'bg-surface font-semibold text-fg' : 'font-medium text-muted hover:text-fg'}`}>
+              <SlidersHorizontal size={18} strokeWidth={1.9} aria-hidden="true" /> Strategy
+            </NavLink>
+          </div>
         </div>
-      </aside>
-
-      {/* Phone top bar */}
-      <header className="app-topbar">
-        <Logo />
-        {logoutButton}
       </header>
 
-      <main className="app-main">{children}</main>
+      <main className="mx-auto max-w-[1160px] px-4 pt-4 pb-[calc(104px+env(safe-area-inset-bottom))] md:px-6 md:pt-10 md:pb-12">
+        {children}
+        <footer className="mt-16 border-t border-line pt-5 text-12 text-muted">
+          Prices from Cboe, delayed about 15 minutes. CovCall tracks your trades; it doesn't place orders with your broker.
+        </footer>
+      </main>
 
-      {/* Phone bottom tabs */}
-      <nav className="app-bottomnav" aria-label="Main">
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-bg px-1 pt-1.5 pb-[calc(10px+env(safe-area-inset-bottom))] md:hidden">
         {[...NAV, STRATEGY].map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === '/'} className="bottom-tab">
-            <Icon size={20} strokeWidth={1.75} />
-            <span>{label}</span>
+          <NavLink key={to} to={to} end={to === '/'}
+            className={({ isActive }) => `flex min-h-13 flex-1 flex-col items-center justify-center gap-1 text-11 ${isActive ? 'font-semibold text-fg' : 'font-medium text-muted'}`}>
+            {({ isActive }) => <><Icon size={22} strokeWidth={isActive ? 2.1 : 1.75} aria-hidden="true" />{label}</>}
           </NavLink>
         ))}
       </nav>

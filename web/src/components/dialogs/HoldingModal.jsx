@@ -1,9 +1,8 @@
 // src/components/dialogs/HoldingModal.jsx — add a stock you own, or edit/remove one
 import { useState } from 'react'
-import { X, AlertTriangle, Trash2 } from 'lucide-react'
 import { addHolding, updateHolding, deleteHolding, apiError } from '../../api/client'
-import InfoTip from '../InfoTip'
-import Modal from './Modal'
+import Modal, { DialogHead } from './Modal'
+import { Field, Spinner } from '../ui'
 import { plural } from '../../lib/format'
 
 export default function HoldingModal({ holding, onClose, onSaved }) {
@@ -58,82 +57,51 @@ export default function HoldingModal({ holding, onClose, onSaved }) {
   }
 
   return (
-    <Modal onDismiss={() => { if (!saving) onClose() }}>
-      <form className="card dialog-card" onSubmit={handleSave} style={{ maxWidth: 460 }} role="dialog" aria-modal="true" aria-labelledby="holding-title">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-          <div id="holding-title" style={{ fontWeight: 700, fontSize: 20 }}>{editing ? `Edit ${holding.ticker}` : 'Add a stock'}</div>
-          <button type="button" className="link-btn" style={{ color: 'var(--text-muted)', padding: 0 }} onClick={onClose} aria-label="Close" disabled={saving}><X size={20} /></button>
-        </div>
-        <div className="hint" style={{ marginBottom: 22 }}>
-          {editing ? 'Update how many shares you own and what you paid.' : 'Enter a stock you own so you can sell covered calls on it.'}
-        </div>
+    <Modal as="form" onSubmit={handleSave} onDismiss={() => { if (!saving) onClose() }} labelledBy="holding-title" width={460}>
+      <DialogHead id="holding-title" title={editing ? `Edit ${holding.ticker}` : 'Add a stock'}
+        sub={editing ? 'How many shares you own and what you paid.' : 'A stock you own, so you can sell covered calls on it.'}
+        onClose={onClose} disabled={saving} />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {!editing && (
-            <div>
-              <label className="label" htmlFor="h-ticker">Ticker symbol</label>
-              <input id="h-ticker" className="input" value={ticker} autoFocus maxLength={10} placeholder="e.g. MSFT"
-                onChange={e => setTicker(e.target.value.toUpperCase())}
-                style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, letterSpacing: '0.04em' }} />
-            </div>
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <div>
-              <label className="label" htmlFor="h-shares">Shares owned <InfoTip text="Each 100 shares lets you sell one covered call contract." size={12} /></label>
-              <input id="h-shares" className="input" type="number" min={0} step={1} value={shares} autoFocus={editing}
-                onChange={e => setShares(e.target.value)} placeholder="e.g. 300" />
-            </div>
-            <div>
-              <label className="label" htmlFor="h-cost">Avg cost per share ($)</label>
-              <input id="h-cost" className="input" type="number" min={0} step={0.01} value={avgCost}
-                onChange={e => setAvgCost(e.target.value)} placeholder="e.g. 420.00" />
-            </div>
-          </div>
+      {!editing && (
+        <Field className="mt-5" id="h-ticker" label="Ticker symbol" value={ticker} autoFocus maxLength={10} placeholder="e.g. MSFT"
+          onChange={e => setTicker(e.target.value.toUpperCase())} inputClassName="font-semibold tracking-wide" />
+      )}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <Field id="h-shares" label="Shares owned" type="text" inputMode="numeric" value={shares} autoFocus={editing} placeholder="e.g. 300"
+          onChange={e => setShares(e.target.value.replace(/[^0-9]/g, ''))} />
+        <Field id="h-cost" label="Average cost per share" prefix="$" type="text" inputMode="decimal" value={avgCost} placeholder="0.00"
+          onChange={e => setAvgCost(e.target.value.replace(/[^0-9.]/g, ''))} />
+      </div>
 
-          <div style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 10, padding: '12px 14px', fontSize: 14, color: 'var(--text-dim)' }}>
-            {contracts > 0
-              ? <>That's <strong style={{ color: 'var(--accent-light)' }}>{plural(contracts, 'contract')}</strong> you can sell calls on{leftover ? ` (${leftover} shares left over)` : ''}.</>
-              : <>You need at least 100 shares to sell a covered call.</>}
-            {editing && openCalls > 0 && (
-              <div className="hint" style={{ marginTop: 6 }}>{plural(openCalls, 'contract')} already sold, so keep at least {minShares} shares.</div>
-            )}
-          </div>
+      <p className="mt-4 rounded-sm bg-panel px-4 py-3 text-15 text-fg-2">
+        {contracts > 0
+          ? <><strong className="font-semibold text-accent">{plural(contracts, 'contract')}</strong> you can sell calls on{leftover ? ` (${leftover} shares left over)` : ''}.</>
+          : 'You need at least 100 shares to sell a covered call.'}
+        {editing && openCalls > 0 && <span className="mt-1 block text-13 text-muted">{plural(openCalls, 'contract')} already sold, so keep at least {minShares} shares.</span>}
+      </p>
 
-          {error && (
-            <div className="callout callout-red" style={{ padding: '10px 12px', fontSize: 13 }}>
-              <AlertTriangle size={16} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 1 }} /> {error}
-            </div>
-          )}
-        </div>
+      {error && <p role="alert" className="mt-3 text-13 text-loss">{error}</p>}
 
-        {/* Actions */}
-        <div className="dialog-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            {editing && !confirmDelete && (
-              <button type="button" className="link-btn" style={{ color: openCalls ? 'var(--text-muted)' : 'var(--red)', fontSize: 13 }}
-                onClick={() => (openCalls ? setError(`Close the ${plural(openCalls, 'open call')} on ${holding.ticker} before removing it.`) : setConfirmDelete(true))}
-                disabled={saving}>
-                <Trash2 size={14} /> Remove stock
-              </button>
-            )}
-            {editing && confirmDelete && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
-                <span style={{ color: 'var(--red)' }}>Remove {holding.ticker}?</span>
-                <button type="button" className="btn-danger" style={{ padding: '6px 12px' }} onClick={handleDelete} disabled={saving}>Yes, remove</button>
-                <button type="button" className="link-btn" style={{ color: 'var(--text-muted)', fontSize: 13 }} onClick={() => setConfirmDelete(false)} disabled={saving}>Cancel</button>
-              </span>
-            )}
-          </div>
-          {!confirmDelete && (
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={saving}>
-                {saving ? <><span className="spinner" /> {editing ? 'Saving…' : 'Checking ticker…'}</> : editing ? 'Save changes' : 'Add stock'}
-              </button>
-            </div>
-          )}
-        </div>
-      </form>
+      <div className="dialog-actions items-center">
+        {editing && (confirmDelete ? (
+          <span className="mr-auto flex items-center gap-2 text-13">
+            <span className="text-loss">Remove {holding.ticker}?</span>
+            <button type="button" className="btn btn-danger btn-sm" onClick={handleDelete} disabled={saving}>Yes, remove</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)} disabled={saving}>Keep</button>
+          </span>
+        ) : (
+          <button type="button" className="btn btn-ghost mr-auto flex-none text-loss hover:text-loss" disabled={saving}
+            onClick={() => (openCalls ? setError(`Close the ${plural(openCalls, 'open call')} on ${holding.ticker} before removing it.`) : setConfirmDelete(true))}>
+            Remove
+          </button>
+        ))}
+        {!confirmDelete && <>
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? <><Spinner /> {editing ? 'Saving…' : 'Checking ticker…'}</> : editing ? 'Save' : 'Add stock'}
+          </button>
+        </>}
+      </div>
     </Modal>
   )
 }

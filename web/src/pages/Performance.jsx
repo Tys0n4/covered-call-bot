@@ -1,98 +1,101 @@
-// src/pages/Performance.jsx — what your covered calls actually made (see app/performance.py)
+// src/pages/Performance.jsx — what your covered calls actually made (see core/performance.py)
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, TrendingUp } from 'lucide-react'
+import { TrendingUp } from 'lucide-react'
 import { apiError, getPerformance, getStrategy } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
 import EmptyState from '../components/EmptyState'
 import { PerformanceSkeleton } from '../components/Skeleton'
-import Collapsible from '../components/Collapsible'
-import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { fmtDate, money, pct, plural } from '../lib/format'
+import { Dot, Stat } from '../components/ui'
+import { fmtDate, money, pct, plural, signedMoney, strike } from '../lib/format'
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const fmtMonth = ym => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const monthName = ym => MONTHS[Number(ym.slice(5, 7)) - 1]
+const whole = v => `${v < 0 ? '−' : ''}$${Math.round(Math.abs(v)).toLocaleString('en-US')}`
+const SHOWN = 10
 
 const TIPS = {
-  realized:   'Premium you kept from calls that have finished (bought back, expired or assigned), after buybacks and fees.',
-  annualized: 'Net premium as a yearly return on the money in the shares you covered (your cost per share), weighted by how long each call was open.',
-  winRate:    'Share of finished calls that made money after buybacks and fees.',
-  open:       'Premium from calls that are still open. It is not yours for sure until they finish: buying back costs some of it.',
-  shareGains: 'Profit or loss on shares that were called away: (strike − your cost per share) × shares.',
   vsHolding:  'What selling calls added compared with just holding the same shares: the premium you kept after buybacks and fees, minus any gain you gave up when shares were called away below their market price that day. Bought-back calls already include any rise in the stock in their buyback cost.',
+  annualized: 'Premium kept as a yearly return on the money in the shares you covered (your cost per share), weighted by how long each call was open.',
 }
 
-const signed = (v, color = true) => (
-  <span style={color ? { color: v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text)' } : undefined}>{money(v)}</span>
-)
-
-function Stat({ label, tip, value, sub }) {
+// Kept per month as bars (oldest first, the last 12), with your goal as a dashed line.
+// Pick a bar to see how that month adds up.
+function MonthBars({ months, goal, selected, onSelect, thisMonth }) {
+  // Bar heights are the size of the month; a month that lost money is drawn in the loss color
+  const range = Math.max(...months.map(m => Math.abs(m.option_net)), goal || 0, 1) * 1.15
   return (
-    <div className="card">
-      <div className="stat-label">{label} {tip && <InfoTip text={tip} size={12} />}</div>
-      <div className="stat-num" style={{ fontSize: 26 }}>{value}</div>
-      {sub && <div className="hint" style={{ marginTop: 6 }}>{sub}</div>}
-    </div>
-  )
-}
-
-// Kept per month, oldest first, with the monthly goal as a dashed line
-function MonthlyChart({ months, goal }) {
-  const data = months.slice().reverse().map(m => ({ label: fmtMonth(m.month), kept: m.option_net }))
-  const short = v => `$${Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v)}`
-  return (
-    <div style={{ height: 240 }}>
-      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height: 240 }}>
-        <BarChart data={data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.06)" />
-          <XAxis dataKey="label" tick={{ fill: '#8a94a6', fontSize: 12 }} axisLine={false} tickLine={false} />
-          <YAxis tickFormatter={short} tick={{ fill: '#8a94a6', fontSize: 12 }} axisLine={false} tickLine={false} width={52} />
-          <Tooltip
-            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-            contentStyle={{ background: '#202a3e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, fontSize: 12 }}
-            labelStyle={{ color: '#cdd0d6' }} itemStyle={{ color: '#ffffff' }}
-            formatter={v => [money(v), 'Kept']}
-          />
-          {goal > 0 && <ReferenceLine y={goal} ifOverflow="extendDomain" stroke="#f2b44a" strokeDasharray="4 4"
-            label={{ value: `Goal ${short(goal)}`, position: 'insideTopRight', fill: '#f2b44a', fontSize: 11 }} />}
-          <Bar dataKey="kept" radius={[6, 6, 0, 0]} maxBarSize={56}>
-            {data.map(d => <Cell key={d.label} fill={d.kept < 0 ? '#f26b7a' : '#3ee0a6'} />)}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-// The honest bottom line: did selling calls beat just holding the shares?
-function Scorecard({ s }) {
-  const v = s.vs_holding
-  if (v == null) return null
-  const kept = s.realized_all_time
-  return (
-    <div className="card scorecard" style={{ marginBottom: 16 }}>
-      <div className="stat-label">Compared with just holding your shares <InfoTip text={TIPS.vsHolding} size={12} /></div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <span className="stat-num" style={{ fontSize: 30, color: v >= 0 ? 'var(--green)' : 'var(--red)' }}>{v >= 0 ? '+' : '−'}{money(Math.abs(v))}</span>
-        <span style={{ fontSize: 15, color: 'var(--text-dim)' }}>{v >= 0 ? 'added' : 'lost'} by selling covered calls</span>
+    <div>
+      <div className="relative flex h-[170px] items-end gap-4 border-b border-line-2 md:h-[240px] md:gap-6">
+        {months.map(m => {
+          const on = m.month === selected
+          const h = (Math.abs(m.option_net) / range) * 100
+          return (
+            <button key={m.month} type="button" aria-pressed={on} onClick={() => onSelect(m.month)}
+              aria-label={`${monthName(m.month)}: ${money(m.option_net)} kept`}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5 md:gap-2">
+              <span className={`whitespace-nowrap text-12 font-semibold md:text-13 ${on ? 'text-fg' : 'text-muted'}`}>{whole(m.option_net)}</span>
+              <span className="block w-full max-w-[88px] rounded-t-sm transition-colors"
+                style={{ height: `${h}%`, background: m.option_net < 0 ? 'var(--loss)' : on ? 'var(--accent)' : 'var(--accent-dim)', opacity: m.option_net < 0 && !on ? 0.5 : 1 }} />
+            </button>
+          )
+        })}
+        {goal > 0 && (
+          <>
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 border-t-[1.5px] border-dashed border-pace" style={{ bottom: `${(goal / range) * 100}%` }} />
+            <div aria-hidden="true" className="pointer-events-none absolute right-0 hidden rounded-sm bg-bg px-1 text-12 text-muted md:block" style={{ bottom: `calc(${(goal / range) * 100}% + 6px)` }}>{whole(goal)} goal</div>
+          </>
+        )}
       </div>
-      <div className="hint" style={{ marginTop: 6 }}>
-        {money(kept)} premium kept
-        {s.upside_given_up > 0 && <> − {money(s.upside_given_up)} of gains given up when shares were called away</>}
-        {s.upside_given_up < 0 && <> + {money(-s.upside_given_up)} from shares called away above their market price</>}
-        {!s.upside_given_up && ', and no gains given up on shares called away'}
-        .
-        {s.upside_unknown > 0 && <> {plural(s.upside_unknown, 'assignment')} without a stock price for that day {s.upside_unknown === 1 ? 'is' : 'are'} left out.</>}
+      <div className="mt-2 flex gap-4 md:gap-6" aria-hidden="true">
+        {months.map(m => (
+          <span key={m.month} className={`min-w-0 flex-1 truncate text-center text-13 ${m.month === selected ? 'text-fg' : 'text-muted'}`}>
+            {monthName(m.month).slice(0, 3)}{m.month === thisMonth ? '*' : ''}
+          </span>
+        ))}
       </div>
+      {goal > 0 && <div className="mt-2 flex items-center gap-1.5 text-12 text-muted md:hidden"><span className="w-3.5 border-t-[1.5px] border-dashed border-pace" />{whole(goal)} goal</div>}
     </div>
   )
 }
 
-function resultLabel(t) {
+function MonthDetail({ m, goal, thisMonth }) {
+  const partial = m.month === thisMonth
+  const over = m.option_net - goal
+  const row = (label, value) => (
+    <div className="flex justify-between gap-3 border-b border-line py-2.5"><dt className="text-fg-2">{label}</dt><dd>{value}</dd></div>
+  )
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-17 font-semibold">{monthName(m.month)} {m.month.slice(0, 4)}{partial ? ', so far' : ''}</h3>
+        <span className="text-13 text-muted">{plural(m.calls, 'call')} finished</span>
+      </div>
+      <dl className="mt-1">
+        {row('Collected', money(m.premium))}
+        {row('Bought back', m.buybacks ? `−${money(m.buybacks)}` : money(0))}
+        {m.fees > 0 && row('Fees', `−${money(m.fees)}`)}
+        <div className="flex justify-between gap-3 py-3">
+          <dt className="font-semibold">Kept{m.missing_costs > 0 ? '*' : ''}</dt>
+          <dd className="text-17 font-semibold" style={{ color: m.option_net < 0 ? 'var(--loss)' : 'var(--accent)' }}>{money(m.option_net)}</dd>
+        </div>
+        {m.share_gains ? <div className="flex justify-between gap-3 border-t border-line py-2.5"><dt className="text-fg-2">Gains on shares called away</dt><dd>{signedMoney(m.share_gains)}</dd></div> : null}
+      </dl>
+      {goal > 0 && (
+        <p className="text-13 font-semibold" style={{ color: !partial && over >= 0 ? 'var(--accent)' : 'var(--text-2)' }}>
+          {partial ? (over >= 0 ? `Goal reached: ${whole(over)} over` : `${whole(-over)} to go this month`) : over >= 0 ? `${whole(over)} over your ${whole(goal)} goal` : `${whole(-over)} short of your ${whole(goal)} goal`}
+        </p>
+      )}
+      {m.missing_costs > 0 && <p className="mt-1 text-12 text-muted">* Leaves out {plural(m.missing_costs, 'call')} with no buyback cost entered.</p>}
+    </div>
+  )
+}
+
+function resultText(t) {
   if (t.status === 'EXPIRED') return 'Expired'
-  if (t.status === 'ASSIGNED') return <span className="badge badge-amber">Assigned</span>
+  if (t.status === 'ASSIGNED') return 'Called away'
   return t.rolled ? 'Rolled' : 'Bought back'
 }
 
@@ -101,6 +104,8 @@ export default function Performance() {
   const [failed, setFailed]   = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [goal, setGoal]       = useState(0)        // monthly goal from the Strategy page (0 = off)
+  const [picked, setPicked]   = useState(null)     // the month whose numbers show next to the bars
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -112,23 +117,27 @@ export default function Performance() {
   }, [reloadKey])
 
   const retry = () => { setFailed(null); setData(null); setReloadKey(k => k + 1) }
-  const header = <PageHeader title="Performance" subtitle="What your covered calls actually made, after buybacks and fees." />
+  const header = <PageHeader title="Performance" />
 
-  if (failed) return <div className="fade-up">{header}<ServerDown onRetry={retry} message={typeof failed === 'string' ? failed : undefined} /></div>
-  if (!data) return <div className="fade-up">{header}<PerformanceSkeleton /></div>
+  if (failed) return <div className="page">{header}<ServerDown onRetry={retry} message={typeof failed === 'string' ? failed : undefined} /></div>
+  if (!data) return <div className="page">{header}<PerformanceSkeleton /></div>
 
   const s = data.summary
-  const year = new Date().getFullYear()
-  const monthName = new Date().toLocaleDateString('en-CA', { month: 'long' })
+  const year = s.month.slice(0, 4)
   // When every finished call closed this year, "this year" and "all time" are the same number
-  const allThisYear = data.trades.every(t => (t.closed_at || '').startsWith(String(year)))
-  // No commission at your broker: no Fees column
-  const anyFees = data.months.some(m => m.fees > 0)
+  const allThisYear = data.trades.every(t => (t.closed_at || '').startsWith(year))
+  const months = data.months.slice(0, 12).reverse()
+  // Show the latest full month first; this month is usually only partly done
+  const defaultMonth = (months.length > 1 && months[months.length - 1].month === s.month ? months[months.length - 2] : months[months.length - 1])?.month
+  const selected = months.find(m => m.month === (picked || defaultMonth))
+  const trades = data.trades.slice().sort((a, b) => (b.closed_at || '').localeCompare(a.closed_at || '') || b.id - a.id)
+  const shown = showAll ? trades : trades.slice(0, SHOWN)
+  const anyShareGain = trades.some(t => t.share_gain)
+  const v = s.vs_holding
 
   return (
-    <div className="fade-up">
+    <div className="page">
       {header}
-
       {s.calls_finished === 0 ? (
         <EmptyState icon={TrendingUp} title="No finished calls yet">
           Results show up here once a call is bought back, expires or is assigned.
@@ -137,106 +146,105 @@ export default function Performance() {
       ) : (
         <>
           {s.missing_costs > 0 && (
-            <div className="callout callout-amber" style={{ marginBottom: 20 }}>
-              <AlertTriangle size={18} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+            <p className="mb-6 flex items-start gap-2 text-15 text-fg-2">
+              <Dot tone="amber" className="mt-2" />
               <span>{plural(s.missing_costs, 'bought-back call')} {s.missing_costs === 1 ? 'has' : 'have'} no buyback cost entered, so {s.missing_costs === 1 ? "it's" : "they're"} left out of these totals.{' '}
-                <Link to="/positions?tab=history&scope=all" style={{ color: 'inherit', fontWeight: 700 }}>Add the cost{s.missing_costs === 1 ? '' : 's'}</Link>
+                <Link to="/positions?tab=history&scope=all" className="link">Add the cost{s.missing_costs === 1 ? '' : 's'}</Link>
               </span>
-            </div>
+            </p>
           )}
 
-          <Scorecard s={s} />
-
-          <div className={allThisYear ? 'grid-3' : 'grid-4'} style={{ marginBottom: 16 }}>
-            <Stat label={`Kept in ${monthName}`} tip={TIPS.realized} value={signed(s.realized_this_month)}
-              sub={goal > 0 ? `of ${money(goal, 0)} goal` : undefined} />
-            {allThisYear
-              ? <Stat label={`Kept in ${year}`} tip={TIPS.realized} value={signed(s.realized_this_year)}
-                  sub={`from ${plural(s.calls_finished, 'finished call')}, all this year`} />
-              : <>
-                  <Stat label={`Kept in ${year}`} tip={TIPS.realized} value={signed(s.realized_this_year)} />
-                  <Stat label="Kept all time" tip={TIPS.realized} value={signed(s.realized_all_time)} sub={`from ${plural(s.calls_finished, 'finished call')}`} />
-                </>}
-            <Stat label="Yearly return" tip={TIPS.annualized} value={s.annualized_return_pct == null ? '—' : pct(s.annualized_return_pct)}
-              sub="on the cost of the shares covered" />
-          </div>
-          <div className="grid-3" style={{ marginBottom: 32 }}>
-            <Stat label="Calls that made money" tip={TIPS.winRate} value={s.win_rate_pct == null ? '—' : pct(s.win_rate_pct, 0)} />
-            <Stat label="Still open" tip={TIPS.open} value={money(s.open_premium)}
-              sub={<>{plural(s.open_calls, 'open call')} · <Link to="/positions" style={{ color: 'var(--accent-light)' }}>manage</Link></>} />
-            <Stat label="Gains on shares called away" tip={TIPS.shareGains} value={signed(s.share_gains_all_time)} />
-          </div>
-
-          <div className="section-title" style={{ marginBottom: 12 }}>Month by month</div>
-          {s.missing_costs > 0 && <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>* Kept leaves out calls with no buyback cost entered.</div>}
-          {data.months.length > 1 && (
-            <div className="card" style={{ marginBottom: 16, padding: '20px 16px 12px' }}>
-              <MonthlyChart months={data.months} goal={goal} />
+          <section aria-labelledby="hero-h">
+            <h2 id="hero-h" className="text-15 font-medium text-fg-2">
+              {v == null ? 'Kept from covered calls' : <>Added by selling covered calls <InfoTip text={TIPS.vsHolding} /></>}
+            </h2>
+            <div className="hero-num mt-1.5" style={{ color: (v ?? s.realized_all_time) < 0 ? 'var(--loss)' : 'var(--accent)' }}>
+              {v == null ? money(s.realized_all_time) : signedMoney(v)}
             </div>
+            {v != null && (
+              <p className="mt-2.5 max-w-[640px] text-15 text-fg-2">
+                Compared with just holding the same shares: {money(s.realized_all_time)} of premium kept
+                {s.upside_given_up > 0 && <>, minus {money(s.upside_given_up)} of gains you gave up when shares were called away</>}
+                {s.upside_given_up < 0 && <>, plus {money(-s.upside_given_up)} from shares called away above their market price</>}
+                {!s.upside_given_up && ', and no gains given up on shares called away'}.
+                {s.upside_unknown > 0 && <> {plural(s.upside_unknown, 'assignment')} without a stock price for that day {s.upside_unknown === 1 ? 'is' : 'are'} left out.</>}
+              </p>
+            )}
+          </section>
+
+          {months.length > 0 && selected && (
+            <section aria-labelledby="months-h" className="mt-10">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id="months-h" className="text-20 font-semibold tracking-title">Month by month</h2>
+                <span className="hidden text-13 text-muted md:inline">Pick a month to see how it adds up</span>
+              </div>
+              <div className="mt-5 flex flex-col gap-8 md:flex-row md:items-start md:gap-14">
+                <div className="min-w-0 md:flex-[2]"><MonthBars months={months} goal={goal} selected={selected.month} onSelect={setPicked} thisMonth={s.month} /></div>
+                <div className="md:flex-1"><MonthDetail m={selected} goal={goal} thisMonth={s.month} /></div>
+              </div>
+            </section>
           )}
-          <div className="card" style={{ marginBottom: 24, padding: 8 }}>
-            <div className="table-scroll">
-              <table className="data-table">
+
+          <section aria-label="Totals" className="mt-10 grid grid-cols-2 border-t border-line md:grid-cols-5">
+            <Stat className="border-b border-line py-4 pr-3 md:py-5" label={`Kept in ${year}`} value={money(s.realized_this_year)}
+              sub={allThisYear ? `from ${plural(s.calls_finished, 'finished call')}` : `${money(s.realized_all_time)} all time`} />
+            <Stat className="border-b border-l border-line py-4 pl-4 md:px-5 md:py-5" label={<>Yearly return <InfoTip text={TIPS.annualized} size={12} /></>}
+              value={s.annualized_return_pct == null ? '—' : pct(s.annualized_return_pct)} sub="on what your shares cost" />
+            <Stat className="border-b border-line py-4 pr-3 md:border-l md:px-5 md:py-5" label="Calls that made money"
+              value={s.win_rate_pct == null ? '—' : pct(s.win_rate_pct, 0)} sub="after buybacks and fees" />
+            <Stat className="border-b border-l border-line py-4 pl-4 md:px-5 md:py-5" label="Gains on shares called away"
+              value={s.share_gains_all_time ? signedMoney(s.share_gains_all_time) : money(0)} sub="what you sold them for, over cost" />
+            <Stat className="border-b border-line py-4 pr-3 md:border-l md:px-5 md:py-5" label="Still open" value={money(s.open_premium)}
+              sub={<>{plural(s.open_calls, 'call')} · <Link to="/positions" className="link link-quiet">manage</Link></>} />
+          </section>
+
+          <section aria-labelledby="calls-h" className="mt-12">
+            <h2 id="calls-h" className="text-20 font-semibold tracking-title">Finished calls <span className="font-medium text-muted">{trades.length}</span></h2>
+            <div className="mt-2 hidden md:block">
+              <table className="dtable">
                 <thead>
                   <tr>
-                    <th>Month</th><th className="num">Calls finished</th><th className="num">Collected</th>
-                    <th className="num">Bought back</th>{anyFees && <th className="num">Fees</th>}<th className="num">Kept</th>
-                    <th className="num">Share gains</th>
+                    <th>Closed</th><th>Call</th><th>Result</th><th className="num">Days</th><th className="num">Kept</th>
+                    <th className="num">Return</th><th className="num">Per year</th>{anyShareGain && <th className="num">Share gain</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {data.months.map(m => (
-                    <tr key={m.month}>
-                      <td style={{ color: 'var(--text)', fontWeight: 600 }}>{fmtMonth(m.month)}</td>
-                      <td className="mono num">{m.calls}</td>
-                      <td className="mono num" style={{ color: 'var(--green)' }}>{money(m.premium)}</td>
-                      <td className="mono num">{money(m.buybacks)}</td>
-                      {anyFees && <td className="mono num">{money(m.fees)}</td>}
-                      <td className="mono num" style={{ fontWeight: 600 }}>
-                        {signed(m.option_net)}
-                        {m.missing_costs > 0 && (
-                          <span className="muted" style={{ fontWeight: 400 }} title={`Leaves out ${plural(m.missing_costs, 'call')} with no buyback cost entered`}> *</span>
-                        )}
-                      </td>
-                      <td className="mono num">{m.share_gains ? signed(m.share_gains) : <span className="muted">—</span>}</td>
+                  {shown.map(t => (
+                    <tr key={t.id}>
+                      <td className="text-fg-2">{fmtDate(t.closed_at)}</td>
+                      <td className="font-semibold">{t.ticker} {strike(t.strike)} × {t.contracts}</td>
+                      <td className="text-fg-2"><span className="inline-flex items-center gap-2">{t.status === 'ASSIGNED' && <Dot tone="amber" />}{resultText(t)}</span></td>
+                      <td className="num text-fg-2">{t.days_held}</td>
+                      <td className="num font-semibold" style={{ color: t.option_net < 0 ? 'var(--loss)' : undefined }}>{t.option_net == null ? <span className="text-muted" title="Buyback cost not entered">—</span> : signedMoney(t.option_net)}</td>
+                      <td className="num">{t.return_pct == null ? '—' : pct(t.return_pct, 2)}</td>
+                      <td className="num text-fg-2">{t.annualized_pct == null ? '—' : pct(t.annualized_pct)}</td>
+                      {anyShareGain && <td className="num">{t.share_gain == null ? <span className="text-muted">—</span> : signedMoney(t.share_gain)}</td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-
-          <div className="card">
-            <Collapsible label={`Every finished call (${data.trades.length})`} openLabel="Hide calls">
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Closed</th><th>Stock</th><th className="num">Strike</th><th className="num">Contracts</th><th>Result</th>
-                      <th className="num">Days</th><th className="num">Kept</th><th className="num">Return</th>
-                      <th className="num">Per year</th><th className="num">Share gain</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.trades.map(t => (
-                      <tr key={t.id}>
-                        <td className="nowrap">{fmtDate(t.closed_at)}</td>
-                        <td className="mono" style={{ color: 'var(--text)', fontWeight: 700 }}>{t.ticker}</td>
-                        <td className="mono num">{money(t.strike)}</td>
-                        <td className="mono num">{t.contracts}</td>
-                        <td>{resultLabel(t)}</td>
-                        <td className="mono num">{t.days_held}</td>
-                        <td className="mono num">{t.option_net == null ? <span className="muted" title="Buyback cost not entered">—</span> : signed(t.option_net)}</td>
-                        <td className="mono num">{t.return_pct == null ? '—' : pct(t.return_pct, 2)}</td>
-                        <td className="mono num">{t.annualized_pct == null ? '—' : pct(t.annualized_pct)}</td>
-                        <td className="mono num">{t.share_gain == null ? <span className="muted">—</span> : signed(t.share_gain)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Collapsible>
-          </div>
+            <ul className="mt-2 md:hidden">
+              {shown.map(t => (
+                <li key={t.id} className="flex items-center justify-between gap-3 border-b border-line py-3">
+                  <div className="min-w-0">
+                    <div className="text-15 font-semibold">{t.ticker} {strike(t.strike)} × {t.contracts}</div>
+                    <div className="flex items-center gap-1.5 text-13 text-muted">{t.status === 'ASSIGNED' && <Dot tone="amber" />}{resultText(t)} · {fmtDate(t.closed_at)} · {plural(t.days_held, 'day')}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-15 font-semibold" style={{ color: t.option_net < 0 ? 'var(--loss)' : undefined }}>{t.option_net == null ? '—' : signedMoney(t.option_net)}</div>
+                    <div className="text-13 text-muted">{t.annualized_pct == null ? '' : `${pct(t.annualized_pct)} a year`}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {trades.length > SHOWN && (
+              <button type="button" className="link link-quiet mt-2 min-h-11" onClick={() => setShowAll(o => !o)}>
+                {showAll ? 'Show fewer' : `Show all ${trades.length}`}
+              </button>
+            )}
+            <p className="mt-3 text-12 text-muted">Kept is premium collected minus the buyback and fees. Return is on what the covered shares cost you.</p>
+          </section>
         </>
       )}
     </div>

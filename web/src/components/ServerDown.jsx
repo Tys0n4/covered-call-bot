@@ -2,16 +2,20 @@
 import { CloudOff, RefreshCw } from 'lucide-react'
 
 export default function ServerDown({ onRetry, fullPage = false, message }) {
-  const card = (
-    <div className="card" role="alert" style={{ textAlign: 'center', padding: '48px 24px', maxWidth: 520, margin: '0 auto' }}>
-      <CloudOff size={30} strokeWidth={1.75} color="var(--red)" style={{ marginBottom: 12 }} />
-      <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>Can't reach the server</div>
-      <div className="hint" style={{ marginBottom: 20 }}>
-        {message || "Your data is safe, but it couldn't be loaded. If the server was asleep it can take up to a minute to wake up."}
-      </div>
-      <button className="btn-primary" onClick={onRetry}><RefreshCw size={15} strokeWidth={2} /> Try again</button>
+  const body = (
+    <div role="alert" className="mx-auto flex max-w-[420px] flex-col items-center px-6 py-16 text-center">
+      <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-surface text-fg-2">
+        <CloudOff size={28} strokeWidth={1.75} aria-hidden="true" />
+      </span>
+      <h2 className="mt-5 text-20 font-semibold tracking-title">Can't reach the server</h2>
+      <p className="mt-2 text-15 text-fg-2">
+        {message || 'Your data is safe. If the server was asleep, it can take up to a minute to wake up.'}
+      </p>
+      <button type="button" className="btn btn-primary mt-6" onClick={onRetry}>
+        <RefreshCw size={16} strokeWidth={2} /> Try again
+      </button>
     </div>
   )
-  if (!fullPage) return card
-  return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>{card}</div>
+  if (!fullPage) return body
+  return <div className="flex min-h-screen items-center justify-center p-4">{body}</div>
 }

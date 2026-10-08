@@ -1,16 +1,22 @@
 // src/components/dialogs/RollModal.jsx — buy back an open call and sell a new one in one step
 import { useState } from 'react'
 import { apiError, rollPosition } from '../../api/client'
-import Modal from './Modal'
-import MoneyInput from '../MoneyInput'
+import Modal, { DialogHead } from './Modal'
+import { Field, MoneyField, Spinner } from '../ui'
 import { useStrategy, chargesCommission } from '../../lib/useStrategy'
-import { fmtDate, money, plural } from '../../lib/format'
+import { fmtDate, money, plural, strike as strikeLabel } from '../../lib/format'
 import { moneyValue } from '../../lib/pnl'
 
 const todayIso = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
+const Step = ({ n, children }) => (
+  <h3 className="mt-6 flex items-center gap-2.5 text-15 font-semibold">
+    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-panel text-13 text-fg-2">{n}</span>{children}
+  </h3>
+)
 
 export default function RollModal({ position: p, evaluation, onDone, onCancel }) {
   const showFees = chargesCommission(useStrategy())
@@ -62,54 +68,42 @@ export default function RollModal({ position: p, evaluation, onDone, onCancel })
   }
 
   return (
-    <Modal onDismiss={() => { if (!busy) onCancel() }}>
-      <div className="card dialog-card" role="dialog" aria-modal="true" aria-label="Roll this call"
-        style={{ maxWidth: 520 }}>
-        <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 4 }}>Roll this call</div>
-        <div className="hint" style={{ marginBottom: 18 }}>
-          Buy back the {money(p.strike)} {p.ticker} call (expires {fmtDate(p.expiry)}, {plural(p.contracts, 'contract')}) and sell a new one on the same shares.
-          Enter what your broker filled.
-        </div>
+    <Modal onDismiss={() => { if (!busy) onCancel() }} labelledBy="roll-title" width={540}>
+      <DialogHead id="roll-title" title="Roll this call" onClose={onCancel} disabled={busy}
+        sub={`Buy back the ${p.ticker} ${strikeLabel(p.strike)} call (${fmtDate(p.expiry)}, ${plural(p.contracts, 'contract')}) and sell a new one on the same shares.`} />
 
-        <div className="section-title" style={{ fontSize: 15 }}>1. Buy back the current call</div>
-        <div className="form-grid" style={{ gap: 12, marginTop: 8, marginBottom: 18 }}>
-          <MoneyInput id="roll-cost" label="Paid to buy back (total)" value={costText} onChange={setCost} error={show('cost')}
-            hint={estimate != null ? `Latest price check: ${money(estimate)}` : null} />
-          {showFees && <MoneyInput id="roll-close-fees" label="Fees (total)" value={closeFees} onChange={setCloseFees} />}
-        </div>
+      <Step n={1}>Buy back the current call</Step>
+      <div className={`mt-3 grid gap-3 ${showFees ? 'grid-cols-2' : ''}`}>
+        <MoneyField id="roll-cost" label="Paid to buy back (total)" value={costText} onChange={setCost} error={show('cost')}
+          hint={estimate != null ? `Latest price check: ${money(estimate)}` : null} />
+        {showFees && <MoneyField id="roll-close-fees" label="Fees" value={closeFees} onChange={setCloseFees} />}
+      </div>
 
-        <div className="section-title" style={{ fontSize: 15 }}>2. Sell the new call</div>
-        <div className="form-grid" style={{ gap: 12, marginTop: 8 }}>
-          <div>
-            <label className="label" htmlFor="roll-expiry">New expiry</label>
-            <input id="roll-expiry" className="input" type="date" min={todayIso()} value={expiry} onChange={e => setExpiry(e.target.value)}
-              style={show('expiry') ? { borderColor: 'var(--red)' } : undefined} />
-            {show('expiry') && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 5 }}>{show('expiry')}</div>}
-          </div>
-          <MoneyInput id="roll-strike" label="New strike" value={strikeText} onChange={setStrike} error={show('strike')} />
-          <div>
-            <label className="label" htmlFor="roll-contracts">Contracts</label>
-            <input id="roll-contracts" className="input" type="text" inputMode="numeric" value={contractsText}
-              onChange={e => setContracts(e.target.value.replace(/[^0-9]/g, ''))}
-              style={show('contracts') ? { borderColor: 'var(--red)' } : undefined} />
-            {show('contracts') && <div style={{ color: 'var(--red)', fontSize: 12.5, marginTop: 5 }}>{show('contracts')}</div>}
-          </div>
-          <MoneyInput id="roll-fill" label="Sold for (per share)" value={fillText} onChange={setFill} error={show('fill')} />
-          {showFees && <MoneyInput id="roll-open-fees" label="Fees (total)" value={openFees} onChange={setOpenFees} />}
-        </div>
+      <Step n={2}>Sell the new call</Step>
+      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4">
+        <Field id="roll-expiry" label="New expiry" type="date" min={todayIso()} value={expiry} onChange={e => setExpiry(e.target.value)} error={show('expiry')} />
+        <MoneyField id="roll-strike" label="New strike" value={strikeText} onChange={setStrike} error={show('strike')} />
+        <Field id="roll-contracts" label="Contracts" type="text" inputMode="numeric" value={contractsText}
+          onChange={e => setContracts(e.target.value.replace(/[^0-9]/g, ''))} error={show('contracts')} />
+        <MoneyField id="roll-fill" label="Sold for (per share)" value={fillText} onChange={setFill} error={show('fill')} />
+        {showFees && <MoneyField id="roll-open-fees" label="Fees" value={openFees} onChange={setOpenFees} />}
+      </div>
 
-        <div style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 10, padding: '12px 14px', marginTop: 18, fontSize: 14, color: 'var(--text-dim)' }}>
-          New premium {money(premium)} − buyback {money(cost || 0)}{fees ? ` − fees ${money(fees)}` : ''} ={' '}
-          <strong style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>{net >= 0 ? 'net credit' : 'net debit'} {money(Math.abs(net))}</strong>
+      <dl className="mt-5 rounded-sm bg-panel px-4 py-1">
+        <div className="flex justify-between gap-3 border-b border-line-2 py-2"><dt className="text-fg-2">New premium</dt><dd>{money(premium)}</dd></div>
+        <div className="flex justify-between gap-3 border-b border-line-2 py-2"><dt className="text-fg-2">Buyback{fees ? ' and fees' : ''}</dt><dd>−{money((cost || 0) + fees)}</dd></div>
+        <div className="flex justify-between gap-3 py-2.5">
+          <dt className="font-semibold">{net >= 0 ? 'Net credit' : 'Net debit'}</dt>
+          <dd className="text-17 font-semibold" style={{ color: net >= 0 ? 'var(--accent)' : 'var(--loss)' }}>{money(Math.abs(net))}</dd>
         </div>
+      </dl>
 
-        {error && <div role="alert" style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
-        <div className="dialog-actions" style={{ marginTop: 20 }}>
-          <button className="btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button className="btn-primary" onClick={submit} disabled={busy}>
-            {busy ? <><span className="spinner" /> Saving…</> : 'Save roll'}
-          </button>
-        </div>
+      {error && <p role="alert" className="mt-3 text-13 text-loss">{error}</p>}
+      <div className="dialog-actions">
+        <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button type="button" className="btn btn-primary" onClick={submit} disabled={busy}>
+          {busy ? <><Spinner /> Saving…</> : 'Save roll'}
+        </button>
       </div>
     </Modal>
   )
