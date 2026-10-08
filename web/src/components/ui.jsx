@@ -3,6 +3,7 @@
 import { useId } from 'react'
 import { useMarket } from '../context/MarketContext'
 import { cleanMoney } from '../lib/pnl'
+import { money } from '../lib/format'
 
 // The mark: a covered call's payoff, rising then capped at the strike
 export function Logo({ size = 28 }) {
@@ -74,6 +75,16 @@ export function Field({ id, label, tip, error, hint, prefix, suffix, className =
 // "$ 12.50": digits and one dot, two decimals at most
 export function MoneyField({ onChange, placeholder = '0.00', ...rest }) {
   return <Field prefix="$" type="text" inputMode="decimal" placeholder={placeholder} onChange={e => onChange(cleanMoney(e.target.value))} {...rest} />
+}
+
+// Under a price box: a price CovCall knows, offered rather than filled in ("Price now $0.64 · Use")
+export function UseHint({ label, value, onUse }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5">
+      {label} {money(value)} <span aria-hidden="true">·</span>
+      <button type="button" className="link link-quiet text-13" onClick={() => onUse(value.toFixed(2))} aria-label={`Use ${money(value)}`}>Use</button>
+    </span>
+  )
 }
 
 export function Switch({ checked, onChange, label, disabled }) {

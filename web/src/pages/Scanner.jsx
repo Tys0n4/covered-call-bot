@@ -89,6 +89,21 @@ function cleanInput(raw, kind) {
   return t.replace(/^0+(?=\d)/, '')
 }
 
+// One heads-up from the scan: its first sentence carries the point, the rest is behind "More"
+function HeadsUp({ text }) {
+  const [open, setOpen] = useState(false)
+  const m = /^(.+?[.!?])\s+(\S[\s\S]*)$/.exec(text)
+  return (
+    <li className="flex items-start gap-2 text-15 text-fg-2">
+      <Dot tone="amber" className="mt-2" />
+      <span>
+        {m ? m[1] : text}
+        {m && (open ? <> {m[2]}</> : <> <button type="button" className="link link-quiet" onClick={() => setOpen(true)}>More</button></>)}
+      </span>
+    </li>
+  )
+}
+
 // The last scan of each stock stays on screen when you come back to it
 const lastScans = new Map()   // ticker -> { result, fills, fees, saved, at }
 const clock = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -140,7 +155,8 @@ export default function Scanner() {
       const res = await runScan({ ...config, ticker: selected })
       const next = {
         result: res.data,
-        fills: res.data.planned_positions.map(p => p.entry_price.toFixed(2)),
+        // Empty until you enter your broker's fills (or choose the quotes), so a guess is never saved as a trade
+        fills: res.data.planned_positions.map(() => ''),
         // Your usual commission for these contracts; edit it if your broker charged something else
         fees: res.data.estimated_fees > 0 ? res.data.estimated_fees.toFixed(2) : '',
         saved: false,
@@ -157,6 +173,7 @@ export default function Scanner() {
 
   const fillValues = fills.map(moneyValue)
   const fillsValid = fillValues.length > 0 && fillValues.every(v => v != null && v > 0)
+  const fillQuotes = () => update({ fills: (scan?.result.planned_positions || []).map((p, i) => fills[i] || p.entry_price.toFixed(2)) })
 
   const handleSave = async () => {
     if (!result?.planned_positions || !fillsValid) return
@@ -283,20 +300,8 @@ export default function Scanner() {
               <>
                 <div className="mt-4"><PremiumCheck check={result.premium_check} ticker={result.ticker} /></div>
 
-                {lastPrices && (
-                  <p className="mt-4 flex items-start gap-2 text-15 text-fg-2">
-                    <Dot tone="amber" className="mt-2" />
-                    <span>{liveAt
-                      ? <>Trading just opened, but option prices are 15 minutes behind, so these are still last-close prices. Scan again after {liveAt} to save a trade.</>
-                      : <>The market is closed, so these are last-close prices. Use them to plan; scan again{nextOpen ? ` after it opens (${nextOpen})` : ' when it opens'} to save a trade.</>}</span>
-                  </p>
-                )}
-                {result.warnings?.map((w, i) => (
-                  <p key={i} className="mt-3 flex items-start gap-2 text-15 text-fg-2"><Dot tone="amber" className="mt-2" />{w}</p>
-                ))}
-
                 {planned.length > 0 && (
-                  <section aria-labelledby="rec-h" className="mt-9">
+                  <section aria-labelledby="rec-h" className="mt-8">
                     <h2 id="rec-h" className="text-15 font-medium text-fg-2">Recommended trade</h2>
                     <div className="hero-num mt-1.5">{money(result.gross_premium)}</div>
                     <div className="mt-2.5 flex flex-wrap items-center gap-x-1.5 text-15 text-fg-2">
@@ -332,43 +337,64 @@ export default function Scanner() {
                       {result.estimated_fees > 0 ? ` and ${money(result.estimated_fees)} goes to fees` : ''}, so you keep {money(result.net_premium)}.
                       {!allEvents && result.earnings_date && planned.every(p => !optionFor(p).spans_earnings) ? ` ${planned.length > 1 ? 'Both calls expire' : 'It expires'} before ${result.ticker} reports on ${fmtDate(result.earnings_date)}.` : ''}
                     </p>
-
-                    <div className="mt-7 rounded-card bg-surface p-5 md:p-6">
-                      {saved ? (
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <span className="inline-flex items-center gap-2 text-17 font-semibold"><Check size={20} strokeWidth={2.4} className="text-accent" /> Saved</span>
-                          <Link to="/positions" className="btn btn-secondary btn-sm">View in Positions <ArrowRight size={15} strokeWidth={2.2} /></Link>
-                        </div>
-                      ) : lastPrices ? (
-                        <>
-                          <h3 className="text-17 font-semibold">Record what you sold at</h3>
-                          <p className="mt-1.5 text-15 text-fg-2">
-                            Saving opens {liveAt ? `when prices catch up at ${liveAt}` : 'when the market opens'}, so trades are never recorded at an out-of-date price.
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <h3 className="text-17 font-semibold">Record what you sold at <InfoTip text={TERMS.fill} /></h3>
-                            <span className="text-13 text-muted">Per share, from your broker</span>
-                          </div>
-                          <div className={`mt-4 grid gap-3 ${planned.length + (showFees ? 1 : 0) >= 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                            {planned.map((p, i) => (
-                              <MoneyField key={i} id={`fill-${i}`} label={<><span className="md:hidden">{p.allocation_type}</span><span className="hidden md:inline">{p.allocation_type} · {strike(p.strike)}</span></>}
-                                value={fills[i] ?? ''} onChange={v => update({ fills: fills.map((x, j) => (j === i ? v : x)) })}
-                                error={fillValues[i] == null || !(fillValues[i] > 0) ? 'Enter the price' : null} />
-                            ))}
-                            {showFees && <MoneyField id="fill-fees" label="Fees" value={feesText} onChange={v => update({ fees: v })} />}
-                          </div>
-                          <p className="mt-3 text-13 text-fg-2">{fillsValid ? `At these prices you collect ${money(fillTotal)}${showFees ? ' after fees' : ''}.` : 'Enter the price each call sold at.'}</p>
-                          <button type="button" className="btn btn-primary btn-block mt-4 md:w-auto md:inline-flex" onClick={handleSave} disabled={saving || !fillsValid}>
-                            {saving ? <><Spinner /> Saving…</> : 'Save trade'}
-                          </button>
-                          <p className="mt-3 text-12 text-muted">This records the trade in CovCall so you can track it. It doesn't place an order.</p>
-                        </>
-                      )}
-                    </div>
                   </section>
+                )}
+
+                {(lastPrices || result.warnings?.length > 0) && (
+                  <ul aria-label="Heads-up" className="mt-6 flex flex-col gap-2.5">
+                    {lastPrices && (
+                      <HeadsUp text={liveAt
+                        ? `Trading just opened and option prices are 15 minutes behind, so these are last-close prices until ${liveAt}. Scan again then to record a trade.`
+                        : `Market closed, so these are last-close prices. Plan with them now and scan again${nextOpen ? ` after it opens (${nextOpen})` : ' when it opens'} to record a trade.`} />
+                    )}
+                    {result.warnings?.map((w, i) => <HeadsUp key={i} text={w} />)}
+                  </ul>
+                )}
+
+                {planned.length > 0 && (
+                  <div className="mt-7 rounded-card bg-surface p-5 md:p-6">
+                    {saved ? (
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="inline-flex items-center gap-2 text-17 font-semibold"><Check size={20} strokeWidth={2.4} className="text-accent" /> Saved</span>
+                        <Link to="/positions" className="btn btn-secondary btn-sm">View in Positions <ArrowRight size={15} strokeWidth={2.2} /></Link>
+                      </div>
+                    ) : lastPrices ? (
+                      <>
+                        <h3 className="text-17 font-semibold">Record what you sold at</h3>
+                        <p className="mt-1.5 text-15 text-fg-2">
+                          Saving opens {liveAt ? `when prices catch up at ${liveAt}` : 'when the market opens'}, so trades are never recorded at an out-of-date price.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <h3 className="text-17 font-semibold">Record what you sold at <InfoTip text={TERMS.fill} /></h3>
+                          <span className="text-13 text-muted">Per share, from your broker</span>
+                        </div>
+                        <div className={`mt-4 grid gap-3 ${planned.length + (showFees ? 1 : 0) >= 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                          {planned.map((p, i) => (
+                            <MoneyField key={i} id={`fill-${i}`} label={<><span className="md:hidden">{p.allocation_type}</span><span className="hidden md:inline">{p.allocation_type} · {strike(p.strike)}</span></>}
+                              value={fills[i] ?? ''} onChange={v => update({ fills: fills.map((x, j) => (j === i ? v : x)) })}
+                              error={fills[i] && !(fillValues[i] > 0) ? 'Enter the price' : null} />
+                          ))}
+                          {showFees && <MoneyField id="fill-fees" label="Fees" value={feesText} onChange={v => update({ fees: v })} />}
+                        </div>
+                        {fillsValid ? (
+                          <p className="mt-3 text-13 text-fg-2">At these prices you collect {money(fillTotal)}{showFees ? ' after fees' : ''}.</p>
+                        ) : (
+                          <p className="mt-3 flex flex-wrap items-center gap-x-1.5 text-13 text-fg-2">
+                            <span>Quoted {planned.map(p => `${planned.length > 1 ? `${p.allocation_type} ` : ''}${money(p.entry_price)}`).join(' · ')}.</span>
+                            <button type="button" className="link text-13" onClick={fillQuotes}>Use {planned.length > 1 ? 'these' : 'it'}</button>
+                            <span>if your broker filled at {planned.length > 1 ? 'those prices' : 'that price'}.</span>
+                          </p>
+                        )}
+                        <button type="button" className="btn btn-primary btn-block mt-4 md:w-auto md:inline-flex" onClick={handleSave} disabled={saving || !fillsValid}>
+                          {saving ? <><Spinner /> Saving…</> : 'Save trade'}
+                        </button>
+                        <p className="mt-3 text-12 text-muted">This records the trade in CovCall so you can track it. It doesn't place an order.</p>
+                      </>
+                    )}
+                  </div>
                 )}
 
                 {planned.length === 0 && result.candidates.length > 0 && (

@@ -50,21 +50,21 @@ The same screen in the light theme:
 
 ![Home, light theme](docs/screenshots/dashboard-light.png)
 
-**Scanner** — pick a stock (each shows how many contracts are free), scan, and get one recommended trade: what you collect as the big number, the income and balanced calls with each one's chance of being called, whether it keeps you on pace for your monthly goal, and boxes for the price you actually sold at. A plain line says whether premiums are rich or thin right now, with the numbers behind it in the ⓘ. Your rules and filters sit beside it, and every option that matched is listed below. The last scan of each stock stays on screen when you come back to it.
+**Scanner** — pick a stock (each shows how many contracts are free), scan, and get one recommended trade: what you collect as the big number, the income and balanced calls with each one's chance of being called, whether it keeps you on pace for your monthly goal, and boxes for the price you actually sold at (empty until you enter your broker's fills, or tap "Use these" if they matched the quotes). Heads-ups about earnings or a Fed decision sit under the trade, one line each with the detail behind "More". A plain line says whether premiums are rich or thin right now, with the numbers behind it in the ⓘ. Your rules and filters sit beside it, and every option that matched is listed below. The last scan of each stock stays on screen when you come back to it.
 
 ![Scanner](docs/screenshots/scanner.png)
 
-**Positions** — every open call across your stocks, with prices checked automatically and grouped into **Ready to buy back**, **Going against you** and **Holding**. Calls that need something from you get a card with premium kept against the target, the buy-back limit price (with a Copy button), the price now and what buying back costs; calls you're just holding are one line each and open to the full card. Roll and Buy back sit on each card; Edit and Delete are in the ⋯ menu, and changes can be undone. On phones, every pop-up is a sheet that slides up from the bottom.
+**Positions** — every open call across your stocks, with prices checked automatically and grouped into **Ready to buy back**, **Going against you** and **Holding**. Calls that need something from you get a card with premium kept against the target, the price now (and whether it's today's or the last close), your target price and what buying back costs. A call that's ready also shows the order to place at your broker (buy to close, how many contracts, the limit price) with a Copy button. Calls you're just holding are one line each and open to the full card. "I rolled it" and "I bought it back" record what you did at your broker; Edit and Delete are in the ⋯ menu, and changes can be undone. On phones, every pop-up is a sheet that slides up from the bottom.
 
 **Strategy** — your monthly goal, then the trading rules (chance of being called, expiry window, buy-back targets, split, reserve) as a list with each value on the right; a rule opens in place on bigger screens and in a sheet on phones, and changes wait for Save. Then Discord alerts, your broker's commission, Appearance (light or dark) and CSV downloads of your data.
 
 ![Positions](docs/screenshots/positions.png)
 
-**Roll a call** — buy back and sell a new call in one step, with the net credit or debit worked out.
+**Record a roll** — the price you bought the old call back at and what the new one sold for, both per share as your broker shows them, with the net credit or debit worked out and your commission counted once for each trade.
 
-![Roll a call](docs/screenshots/roll.png)
+![Record a roll](docs/screenshots/roll.png)
 
-**Performance** — what you kept after buybacks and fees, yearly return on capital, gains on shares called away, and a month-by-month chart against your goal.
+**Performance** — what you kept after buybacks and fees, yearly return on capital, profit on shares sold when they're called away, and a month-by-month chart against your goal.
 
 ![Performance](docs/screenshots/performance.png)
 

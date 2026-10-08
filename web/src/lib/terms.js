@@ -31,5 +31,6 @@ export const TERMS = {
   earnings:   'The company reports earnings before this option expires. The stock can jump on the news, which raises the chance your shares are called away.',
   exDividend: 'The stock goes ex-dividend before this option expires. If it is above the strike, the buyer may exercise early to collect the dividend.',
   net:        'Premium collected minus what you paid to buy it back and any fees. Gains or losses on shares that were called away are on the Performance page.',
-  fill:       'The price your broker actually sold each option for. It starts at the quote shown here; change it if your fill was different.',
+  buyToClose: 'What your broker calls buying back a call you sold. Pick "buy to close", not "buy to open", so the order ends your call instead of opening a new one.',
+  fill:       "The price your broker actually sold each option for, from the order confirmation. If it matched the quote, \"Use these\" fills the quotes in.",
 }

@@ -7,7 +7,7 @@ import {
 } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import { ChevronRight, Copy, Layers, Pencil, Plus, RefreshCw, Repeat, ScanLine, Trash2, Undo2, UserCheck } from 'lucide-react'
+import { ChevronRight, Copy, Layers, Pencil, Plus, RefreshCw, ScanLine, Trash2, Undo2, UserCheck } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
@@ -21,10 +21,12 @@ import RollModal from '../components/dialogs/RollModal'
 import EditTradeModal from '../components/dialogs/EditTradeModal'
 import AddCallModal from '../components/dialogs/AddCallModal'
 import ConfirmDialog from '../components/dialogs/ConfirmDialog'
-import PriceStamp from '../components/PriceStamp'
+import PriceStamp, { priceAsOf } from '../components/PriceStamp'
+import InfoTip from '../components/InfoTip'
 import { Dot, KeptBar, Segmented, Spinner } from '../components/ui'
 import { fmtDate, daysUntil, money, plural, signedMoney, strike } from '../lib/format'
-import { againstYou, optionNet, resultLabel } from '../lib/pnl'
+import { againstYou, keptPct, optionNet, resultLabel } from '../lib/pnl'
+import { TERMS } from '../lib/terms'
 
 const SCOPE_KEY = 'positions_scope'
 const loadScope = () => { try { return localStorage.getItem(SCOPE_KEY) === 'stock' ? 'stock' : 'all' } catch { return 'all' } }
@@ -36,17 +38,36 @@ const daysLeft = p => {
   return d === 0 ? 'expires today' : d > 0 ? `${plural(d, 'day')} left` : 'expired'
 }
 
-// Copy the buy-back price, ready to paste into a limit order at your broker
+// Copy the limit price, ready to paste into the order at your broker
 function CopyPrice({ price }) {
   const toast = useToast()
   const copy = async () => {
     try { await navigator.clipboard.writeText(price.toFixed(2)); toast(`Copied ${money(price)}`) }
-    catch { toast(`Buy-back price: ${money(price)}`) }
+    catch { toast(`Limit price: ${money(price)}`) }
   }
   return (
-    <button type="button" className="icon-btn icon-btn-sm -my-2 -ml-0.5" onClick={copy} aria-label={`Copy the buy-back price, ${money(price)}`}>
-      <Copy size={15} strokeWidth={2} />
+    <button type="button" className="icon-btn icon-btn-sm -mr-2 shrink-0" onClick={copy} aria-label={`Copy the limit price, ${money(price)}`}>
+      <Copy size={16} strokeWidth={2} />
     </button>
+  )
+}
+
+// The order to place at your broker for a call that's ready to buy back. CovCall
+// only records trades, so this spells out what to enter there.
+function OrderTicket({ p, ev }) {
+  return (
+    <div className="mt-4 rounded-sm bg-panel px-4 py-3">
+      <div className="text-12 text-muted">Order to place at your broker</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-1.5 text-15 font-semibold">
+          <span className="inline-flex items-center gap-1">Buy to close <InfoTip text={TERMS.buyToClose} size={12} /></span>
+          <span aria-hidden="true" className="text-muted">·</span><span>{plural(p.contracts, 'contract')}</span>
+          <span aria-hidden="true" className="text-muted">·</span><span>Limit {money(ev.buyback_price)}</span>
+        </div>
+        <CopyPrice price={ev.buyback_price} />
+      </div>
+      <p className="mt-1 text-13 text-fg-2">A limit order fills at the market price and never pays more than {money(ev.buyback_price)} a share. Once it fills, record it below.</p>
+    </div>
   )
 }
 
@@ -93,7 +114,7 @@ function AgainstYou({ p, a }) {
 }
 
 // What the latest price check says about one call
-function Status({ p, ev, checking, failed, avgCost }) {
+function Status({ p, ev, checking, failed, avgCost, asOf }) {
   const withFees = chargesCommission(useStrategy()) ? ' with fees' : ''
   if (!ev) {
     return (
@@ -123,35 +144,43 @@ function Status({ p, ev, checking, failed, avgCost }) {
     <>
       <KeptBar className="mt-4" pct={ev.profit_capture_pct} target={target} event={!!ev.event} hot={buy || expire} />
       <div className="relative mt-1 h-4 text-11 text-muted" aria-hidden="true">
-        {target > 0 && <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${Math.min(Math.max(target, 12), 88)}%` }}>target {Math.round(target)}%</span>}
+        {target > 0 && <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${Math.min(Math.max(target, 12), 88)}%` }}>target {keptPct(target)}%</span>}
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-3">
         <div>
-          <dt className="text-12 text-muted">Limit price</dt>
-          <dd className="mt-0.5 flex items-center text-17 font-semibold">
-            {ev.buyback_price > 0 ? <>{money(ev.buyback_price)}<CopyPrice price={ev.buyback_price} /></> : '—'}
-          </dd>
+          <dt className="text-12 text-muted">Price now</dt>
+          <dd className="mt-0.5 text-17 font-semibold">{money(ev.current_option_price)}</dd>
+          {asOf && <dd className="text-12 text-muted">{asOf}</dd>}
         </div>
-        <div><dt className="text-12 text-muted">Price now</dt><dd className="mt-0.5 text-17 font-semibold">{money(ev.current_option_price)}</dd></div>
-        <div><dt className="text-12 text-muted">Costs about</dt><dd className="mt-0.5 text-17 font-semibold">{money(ev.cost_to_close)}</dd></div>
+        <div>
+          <dt className="text-12 text-muted">Target price</dt>
+          <dd className="mt-0.5 text-17 font-semibold">{ev.buyback_price > 0 ? money(ev.buyback_price) : '—'}</dd>
+          {target > 0 && <dd className="text-12 text-muted">{keptPct(target)}% kept</dd>}
+        </div>
+        <div>
+          <dt className="text-12 text-muted">To buy back</dt>
+          <dd className="mt-0.5 text-17 font-semibold">{money(ev.cost_to_close)}</dd>
+          <dd className="text-12 text-muted">{withFees ? 'total, with fees' : 'in total'}</dd>
+        </div>
       </dl>
-      <p className="mt-3 flex items-start gap-2 text-13 text-fg-2">
-        {ev.event && <Dot tone="amber" className="mt-1.5" />}
-        <span>
-          {buy && evText
-            ? <>{evText}, before this call expires, so the target drops to {ev.target_pct}%.</>
-            : buy
-              ? <>Buying back now locks in the gain{withFees ? `, including fees` : ''}.</>
+      {(!buy || evText) && (
+        <p className="mt-3 flex items-start gap-2 text-13 text-fg-2">
+          {ev.event && <Dot tone="amber" className="mt-1.5" />}
+          <span>
+            {buy
+              ? <>{evText}, before this call expires, so the target drops to {ev.target_pct}%.</>
               : expire
                 ? <>Expires in {plural(ev.days_left, 'day')} with the stock {below.toFixed(0)}% under the strike. Buying back would cost {money(ev.cost_to_close)}{withFees} for little benefit, so you can let it expire.</>
-                : <>Not worth buying back yet{evText ? <>. {evText} before expiry, so you'll be told to buy back at {ev.target_pct}%</> : ''}.</>}
-        </span>
-      </p>
+                : <>Not at your target yet{evText ? <>. {evText} before expiry, so the target drops to {ev.target_pct}% then</> : ''}.</>}
+          </span>
+        </p>
+      )}
+      {buy && ev.buyback_price > 0 && <OrderTicket p={p} ev={ev} />}
     </>
   )
 }
 
-function PositionCard({ p, showTicker, ev, checking, failed, avgCost, onClose, onRoll, onEdit, onDelete, onCollapse }) {
+function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onClose, onRoll, onEdit, onDelete, onCollapse }) {
   const buy = ev?.should_buy_back
   const against = againstYou(p, ev, avgCost)
   const priced = ev && ev.current_option_price > 0 && !against
@@ -159,7 +188,7 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, onClose, o
     <article aria-label={`${p.ticker} ${strike(p.strike)} call`} className="rounded-card bg-surface p-5">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-17 font-semibold">{callName(p, showTicker)}</h3>
-        {priced && <span className="text-17 font-semibold" style={{ color: buy || ev.action === 'let_expire' ? 'var(--accent)' : undefined }}>{Math.round(ev.profit_capture_pct)}%</span>}
+        {priced && <span className="text-17 font-semibold" style={{ color: buy || ev.action === 'let_expire' ? 'var(--accent)' : undefined }}>{keptPct(ev.profit_capture_pct)}%</span>}
       </div>
       <div className="mt-0.5 flex justify-between gap-3 text-13 text-muted">
         <span>{plural(p.contracts, 'contract')} · {fmtDate(p.expiry)} · {daysLeft(p)}</span>
@@ -169,15 +198,12 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, onClose, o
         {p.allocation_type}{p.rolled_from ? ' · rolled' : ''} · sold at {money(p.entry_price)} · collected {money(p.premium_total)}
       </div>
 
-      <Status p={p} ev={ev} checking={checking} failed={failed} avgCost={avgCost} />
+      <Status p={p} ev={ev} checking={checking} failed={failed} avgCost={avgCost} asOf={asOf} />
 
-      <div className="mt-5 flex items-center gap-2.5">
-        <button type="button" className="btn btn-secondary flex-1" onClick={() => onRoll(p)}>
-          <Repeat size={16} strokeWidth={2} /> Roll
-        </button>
-        <button type="button" className={`btn flex-[2] ${buy ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onClose(p)}>
-          {buy ? 'Buy back' : 'Close'}
-        </button>
+      {/* On the narrowest phones "I bought it back" takes its own row, above the rest */}
+      <div className="mt-5 flex flex-wrap items-center gap-2.5">
+        <button type="button" className="btn btn-secondary flex-1 px-4" onClick={() => onRoll(p)}>I rolled it</button>
+        <button type="button" className={`btn flex-[1.4] px-4 max-[360px]:order-first max-[360px]:basis-full ${buy ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onClose(p)}>I bought it back</button>
         <ActionMenu label={`More for the ${p.ticker} ${strike(p.strike)} call`} className="-mr-2" items={[
           onCollapse && { label: 'Show less', icon: ChevronRight, onClick: onCollapse },
           { label: 'Edit fill or fees', icon: Pencil, onClick: () => onEdit(p) },
@@ -196,14 +222,14 @@ function CallRow({ p, showTicker, ev, checking, failed, onExpand }) {
   return (
     <li className="border-b border-line last:border-b-0">
       <button type="button" className="flex w-full items-center gap-3 py-3.5 text-left" onClick={onExpand} aria-expanded="false"
-        aria-label={`${callName(p, true)}, ${priced ? `${Math.round(ev.profit_capture_pct)}% kept` : 'no current price'}. Show details`}>
+        aria-label={`${callName(p, true)}, ${priced ? `${keptPct(ev.profit_capture_pct)}% kept` : 'no current price'}. Show details`}>
         <span className="min-w-0 flex-1">
           <span className="block text-15 font-medium">{callName(p, showTicker)}</span>
           <span className="block text-13 text-muted">{plural(p.contracts, 'contract')} · {fmtDate(p.expiry)}{expire ? ' · let it expire' : ''}</span>
         </span>
         {priced ? (
           <span className="w-[76px] shrink-0">
-            <span className="block text-right text-15 font-semibold" style={{ color: expire ? 'var(--accent)' : undefined }}>{Math.round(ev.profit_capture_pct)}%</span>
+            <span className="block text-right text-15 font-semibold" style={{ color: expire ? 'var(--accent)' : undefined }}>{keptPct(ev.profit_capture_pct)}%</span>
             <KeptBar className="mt-1.5" height={4} pct={ev.profit_capture_pct} target={ev.buyback_kept_pct} event={!!ev.event} hot={expire} />
           </span>
         ) : (
@@ -353,7 +379,7 @@ export default function Positions() {
 
   const card = (p, onCollapse) => (
     <PositionCard key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={prices.failed}
-      avgCost={avgCostOf(p)} onCollapse={onCollapse}
+      avgCost={avgCostOf(p)} asOf={priceAsOf(prices.meta)} onCollapse={onCollapse}
       onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
   )
 

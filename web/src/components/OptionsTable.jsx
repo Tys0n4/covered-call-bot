@@ -68,6 +68,51 @@ function Cells({ c, picked }) {
 
 const EXPIRY = { key: 'expiry', label: 'Expires', first: 'asc' }
 
+// Phones get a list instead of the wide table: one row per option, grouped by expiry
+function PhoneList({ candidates, ticker, pick }) {
+  const groups = []
+  for (const c of candidates.slice().sort((a, b) => a.expiry.localeCompare(b.expiry) || a.strike - b.strike)) {
+    const g = groups[groups.length - 1]
+    if (g && g.expiry === c.expiry) g.items.push(c)
+    else groups.push({ expiry: c.expiry, dte: c.dte, items: [c] })
+  }
+  return (
+    <div className="md:hidden">
+      {groups.map(g => {
+        const ev = eventsText(g.items[0], ticker)
+        return (
+          <section key={g.expiry} aria-label={`Expiring ${fmtDate(g.expiry)}`}>
+            <h3 className="pt-5 pb-2 text-13 font-semibold text-fg-2">
+              {fmtDate(g.expiry)} · {plural(g.dte, 'day')}
+              {ev && <span className="mt-0.5 flex items-center gap-1.5 font-medium"><Dot tone="amber" />Expires {ev}</span>}
+            </h3>
+            <ul>
+              {g.items.map(c => (
+                <li key={c.strike} className="flex items-start justify-between gap-3 border-t border-line py-3 last:border-b">
+                  <div className="min-w-0">
+                    <div className="text-15 font-semibold">
+                      <span style={{ color: c.below_cost_basis ? 'var(--amber)' : undefined }}>{strike(c.strike)}</span>
+                      {pick(c) && <span className="ml-2 text-13 text-accent">{pick(c)}</span>}
+                      {c.below_cost_basis && <span className="ml-2 text-12 font-medium text-amber">below your cost</span>}
+                    </div>
+                    <div className="text-13 text-muted">
+                      {c.delta != null ? `${Math.round(c.delta * 100)}% chance called · ` : ''}{pct(c.upside_to_strike_pct)} to rise
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-15 font-semibold">{money(c.premium_price)}<QuoteNote c={c} /></div>
+                    <div className="text-13 text-muted">{pct(c.annualized_yield_pct)} a year</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
 // picked: Map of "expiry|strike" -> "Income" / "Balanced" for the recommended calls
 export default function OptionsTable({ candidates, ticker, picked = new Map() }) {
   const [sort, setSort] = useState({ key: 'expiry', dir: 'asc' })
@@ -99,8 +144,9 @@ export default function OptionsTable({ candidates, ticker, picked = new Map() })
 
   return (
     <>
-      <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <table className="dtable min-w-[600px]">
+      <PhoneList candidates={candidates} ticker={ticker} pick={pick} />
+      <div className="hidden md:block">
+        <table className="dtable">
           <thead>
             <tr>
               {!grouped && <SortHeader col={EXPIRY} sort={sort} onSort={onSort} num={false} />}
@@ -136,7 +182,7 @@ export default function OptionsTable({ candidates, ticker, picked = new Map() })
         </table>
       </div>
       <p className="mt-3 text-12 text-muted">
-        Premium is the midpoint, where sell orders usually fill. Calls that expire after earnings are only picked near the low end of your range.
+        Premium is the midpoint per share, where sell orders usually fill. Calls that expire after earnings are only picked near the low end of your range.
       </p>
     </>
   )

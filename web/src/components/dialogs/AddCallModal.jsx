@@ -5,7 +5,7 @@ import Modal, { DialogHead } from './Modal'
 import { Field, MoneyField, Segmented, Spinner } from '../ui'
 import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { money, plural } from '../../lib/format'
-import { moneyValue } from '../../lib/pnl'
+import { moneyValue, usualFees } from '../../lib/pnl'
 
 const isoToday = () => {
   const d = new Date()
@@ -15,14 +15,15 @@ const isoToday = () => {
 const TYPES = [{ value: 'Income', label: 'Income' }, { value: 'Balanced', label: 'Balanced' }]
 
 export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel }) {
-  const showFees = chargesCommission(useStrategy())
+  const strategy = useStrategy()
+  const showFees = chargesCommission(strategy)
   const [ticker, setTicker]   = useState(defaultTicker || tickers[0]?.ticker || '')
   const [type, setType]       = useState('Income')
   const [expiry, setExpiry]   = useState('')
   const [strike, setStrike]   = useState('')
   const [contractsText, setContracts] = useState('1')
   const [fill, setFill]       = useState('')
-  const [fees, setFees]       = useState('')
+  const [fees, setFees]       = useState(null)    // null until edited: your usual commission
   const [openedAt, setOpened] = useState(isoToday())
   const [busy, setBusy]       = useState(false)
   const [error, setError]     = useState(null)
@@ -33,6 +34,7 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
   const contracts = Number.parseInt(contractsText, 10)
   const strikeV   = moneyValue(strike)
   const fillV     = moneyValue(fill)
+  const feesShown = fees ?? (showFees ? usualFees(strategy, contracts) : '')
 
   const errors = {
     expiry:    !expiry ? 'Pick the expiry' : expiry < openedAt ? 'Must be on or after the day you sold it' : null,
@@ -51,7 +53,7 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
     try {
       await addPosition({
         ticker, expiry, strike: strikeV, contracts, entry_price: fillV,
-        fees: moneyValue(fees) || 0, allocation_type: type, opened_at: openedAt,
+        fees: moneyValue(feesShown) || 0, allocation_type: type, opened_at: openedAt,
       })
       onDone(ticker)
     } catch (e) {
@@ -79,9 +81,9 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
         <MoneyField id="add-strike" label="Strike" value={strike} onChange={setStrike} error={show('strike')} />
         <Field id="add-contracts" label="Contracts" type="text" inputMode="numeric" value={contractsText}
           onChange={e => setContracts(e.target.value.replace(/[^0-9]/g, ''))} error={show('contracts')} />
-        <MoneyField id="add-fill" label="Sold for (per share)" value={fill} onChange={setFill} error={show('fill')} />
+        <MoneyField id="add-fill" label="Sold per share" value={fill} onChange={setFill} error={show('fill')} />
         <Field id="add-opened" label="Sold on" type="date" max={isoToday()} value={openedAt} onChange={e => setOpened(e.target.value)} error={show('openedAt')} />
-        {showFees && <MoneyField id="add-fees" label="Fees" value={fees} onChange={setFees} />}
+        {showFees && <MoneyField id="add-fees" label="Fees" value={feesShown} onChange={setFees} hint={fees == null ? 'Your usual commission' : null} />}
       </div>
 
       <p className={`mt-4 rounded-sm bg-panel px-4 py-3 text-15 ${holding && free > 0 ? 'text-fg-2' : 'text-loss'}`}>

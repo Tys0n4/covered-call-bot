@@ -67,32 +67,42 @@ def _add_event_flags(df: pd.DataFrame, events: dict) -> pd.DataFrame:
 
 
 def _event_warnings(ticker: str, picks, events: dict) -> list[str]:
+    """
+    One heads-up per event before a pick expires. The first sentence carries the
+    point (the app shows it alone until you ask for more): picks that span earnings
+    or a Fed decision are deliberately kept near the safe end of your range.
+    """
     picks = [p for p in picks if p is not None]
+
+    def spanning(flag: str):
+        n = sum(1 for p in picks if bool(p.get(flag)))
+        if not n:
+            return None
+        return ("before both picks expire", "they're") if n > 1 else ("before your pick expires", "it's")
+
     out = []
-    if any(bool(p.get("spans_earnings")) for p in picks):
+    if hit := spanning("spans_earnings"):
         out.append(
-            f"{ticker} reports earnings on {_fmt_day(events['earnings_date'])}, before your pick's expiry. "
-            "The stock can jump on earnings, which raises the chance your shares are called away. "
-            "Turn on \"Skip expiries that span earnings\" to avoid it."
+            f"{ticker} reports earnings on {_fmt_day(events['earnings_date'])}, {hit[0]}, so {hit[1]} kept near "
+            "the safe end of your range. The stock can jump on earnings, which raises the chance your shares "
+            "are called away. Turn on \"Skip expiries that span earnings\" to avoid it."
         )
-    if any(bool(p.get("spans_fed")) for p in picks):
+    if hit := spanning("spans_fed"):
         out.append(
-            f"The Fed announces its rate decision on {_fmt_day(events['fed_dates'][0])}, before your pick's "
-            "expiry. Rate news can move the whole market, so the picks stay near the safe end of your range."
+            f"The Fed announces its rate decision on {_fmt_day(events['fed_dates'][0])}, {hit[0]}, so {hit[1]} "
+            "kept near the safe end of your range. Rate news can move the whole market."
         )
-    if any(bool(p.get("spans_industry")) for p in picks):
+    if hit := spanning("spans_industry"):
         first = events["industry_earnings"][0]
         names = ", ".join(e["ticker"] for e in events["industry_earnings"][:3])
         out.append(
-            f"Others in {ticker}'s industry report earnings before your pick's expiry ({names}; first on "
-            f"{_fmt_day(first['date'])}). Their results often move the whole industry, so the picks stay "
-            "near the safe end of your range."
+            f"Others in {ticker}'s industry report earnings {hit[0]} ({names}; first on {_fmt_day(first['date'])}), "
+            f"so {hit[1]} kept near the safe end of your range. Their results often move the whole industry."
         )
-    if any(bool(p.get("spans_ex_dividend")) for p in picks):
+    if hit := spanning("spans_ex_dividend"):
         out.append(
-            f"{ticker} goes ex-dividend on {_fmt_day(events['ex_dividend_date'])}, before your pick's expiry. "
-            "If the stock climbs above your strike, the buyer may exercise early (the day before) "
-            "to collect the dividend."
+            f"{ticker} goes ex-dividend on {_fmt_day(events['ex_dividend_date'])}, {hit[0]}. If the stock climbs "
+            "above your strike, the buyer may exercise early (the day before) to collect the dividend."
         )
     return out
 
