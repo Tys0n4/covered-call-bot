@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import auth
 from api.routes import alerts, scan, positions, manage, settings, portfolio, performance, upcoming
+from core.market_hours import is_market_open, next_market_open
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -46,3 +47,9 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+# The "Market open / closed" status in the app's header. Public, like /health: it's only the NYSE calendar.
+@app.get("/market")
+async def market():
+    open_now = is_market_open()
+    return {"market_open": open_now, "next_market_open": None if open_now else next_market_open().isoformat()}
