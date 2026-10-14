@@ -50,6 +50,7 @@ def evaluate_open_positions(ticker: Optional[str] = None):
             event=r.event,
             old_trade_date=r.old_trade_date,
             price_source=r.price_source,
+            early_exercise=r.early_exercise,
             allocation_type=pos.get("allocation_type", ""),
             opened_at=pos.get("opened_at", ""),
         )

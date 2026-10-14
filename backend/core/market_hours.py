@@ -141,6 +141,14 @@ def last_session(now: datetime | None = None) -> date:
     return day
 
 
+def previous_trading_day(day: str) -> str:
+    """The trading day before a date (YYYY-MM-DD), skipping weekends and NYSE holidays."""
+    d = date.fromisoformat(day) - timedelta(days=1)
+    while not is_trading_day(d):
+        d -= timedelta(days=1)
+    return d.isoformat()
+
+
 def has_expired(expiry: str, now: datetime | None = None) -> bool:
     """Options stop trading at the close (4:00pm, or 1:00pm on early-close days) on their expiry date."""
     n = _ny(now)

@@ -4,13 +4,15 @@ from fastapi import APIRouter, HTTPException
 
 from core.assignment import calls_to_review
 from core.models import PlannedCall
+from core.rolls import find_rolls
+from core.strategy import effective_config
 from core.positions import (
     CoverageError, PositionError, assign_position, close_position, delete_position, dismiss_assignment, edit_position,
     list_all_positions, load_open_positions, roll_position, save_positions, undo_position,
 )
 from api.schemas import (
     AssignRequest, AssignmentReviewItem, ClosePositionRequest, EditPositionRequest, PositionIn,
-    PositionOut, RollRequest,
+    PositionOut, RollOptions, RollRequest,
 )
 
 router = APIRouter(prefix="/positions", tags=["positions"])
@@ -76,6 +78,19 @@ def close_open_position(request: ClosePositionRequest):
     if not success:
         raise HTTPException(status_code=404, detail=f"No open position with id {request.position_id}.")
     return {"closed": request.position_id}
+
+
+@router.get("/{position_id}/rolls", response_model=RollOptions)
+def get_rolls(position_id: int):
+    """
+    Later calls to roll an open call into: at or above its strike, paying a
+    credit after both commissions, best first (see core/rolls.py). Plain `def`:
+    it fetches option prices over the network.
+    """
+    pos = next((p for p in load_open_positions() if p["id"] == position_id), None)
+    if pos is None:
+        raise HTTPException(status_code=404, detail=f"No open position with id {position_id}.")
+    return {"position_id": position_id, **find_rolls(pos, config=effective_config())}
 
 
 @router.post("/{position_id}/roll")

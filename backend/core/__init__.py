@@ -16,7 +16,8 @@ Scanning a stock
 
 Your calls and holdings
     positions.py     saving, closing, rolling, assigning, editing, undoing and deleting calls
-    buyback.py       "Check prices": is it time to buy back?
+    buyback.py       "Check prices": is it time to buy back? (and early exercise before a dividend)
+    rolls.py         later calls to roll an open call into, for a credit
     assignment.py    expired calls that were probably assigned
     performance.py   realized results and return on capital
     portfolio.py     your stock holdings

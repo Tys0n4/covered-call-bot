@@ -254,8 +254,19 @@ export default function Dashboard() {
     body: ready.length === 1 ? "You've kept your target share of the premium. Buying back locks it in." : `You've kept your target share of the premium on ${callList(ready)}.`,
     cta: { label: ready.length === 1 ? 'Review buy back' : 'Review buy backs', onClick: () => navigate('/positions') },
   })
-  // Calls with the stock above the strike: buy back at a loss, or let the shares go
+  // Calls with the stock above the strike: buy back at a loss, or let the shares go.
+  // One likely to be exercised early for the dividend says by when to act instead.
   positions.forEach(p => {
+    const early = evals[p.id]?.early_exercise
+    if (early) {
+      todo.push({
+        key: `early-${p.id}`, tone: 'loss',
+        title: `${p.ticker} ${money(p.strike, 0)} call may be exercised early`,
+        body: `${p.ticker} goes ex-dividend on ${fmtDate(early.ex_dividend_date)}, and the call has less time value left than the dividend. To keep your shares, buy back or roll by ${fmtDate(early.exercise_by)}.`,
+        cta: { label: 'Review', onClick: () => go(p.ticker, '/positions') },
+      })
+      return
+    }
     const a = againstYou(p, evals[p.id], portfolio.find(t => t.ticker === p.ticker)?.avg_cost)
     if (!a?.aboveStrike) return
     todo.push({

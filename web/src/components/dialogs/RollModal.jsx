@@ -1,4 +1,5 @@
-// src/components/dialogs/RollModal.jsx — record a roll: you bought back an open call and sold a new one on the same shares
+// src/components/dialogs/RollModal.jsx — record a roll: you bought back an open call and sold a new one on the same shares.
+// prefill (from Find a roll): { expiry, strike, price, buyback } fills in the new call and offers the quoted prices.
 import { useState } from 'react'
 import { apiError, rollPosition } from '../../api/client'
 import Modal, { DialogHead } from './Modal'
@@ -18,14 +19,15 @@ const Step = ({ n, children }) => (
   </h3>
 )
 
-export default function RollModal({ position: p, evaluation, onDone, onCancel }) {
+export default function RollModal({ position: p, evaluation, prefill = null, onDone, onCancel }) {
   const strategy = useStrategy()
   const showFees = chargesCommission(strategy)
-  const priceNow = evaluation?.current_option_price > 0 ? evaluation.current_option_price : null
+  const priceNow = evaluation?.current_option_price > 0 ? evaluation.current_option_price : prefill?.buyback || null
+  const quoted = prefill?.price > 0 ? prefill.price : null
   const [buyText, setBuy]         = useState('')
   const [closeFees, setCloseFees] = useState(null)     // null until edited: your usual commission
-  const [expiry, setExpiry]       = useState('')
-  const [strikeText, setStrike]   = useState(String(p.strike))
+  const [expiry, setExpiry]       = useState(prefill?.expiry || '')
+  const [strikeText, setStrike]   = useState(String(prefill?.strike ?? p.strike))
   const [contractsText, setContracts] = useState(String(p.contracts))
   const [fillText, setFill]       = useState('')
   const [openFees, setOpenFees]   = useState(null)
@@ -94,7 +96,8 @@ export default function RollModal({ position: p, evaluation, onDone, onCancel })
         <MoneyField id="roll-strike" label="New strike" value={strikeText} onChange={setStrike} error={show('strike')} />
         <Field id="roll-contracts" label="Contracts" type="text" inputMode="numeric" value={contractsText}
           onChange={e => setContracts(e.target.value.replace(/[^0-9]/g, ''))} error={show('contracts')} />
-        <MoneyField id="roll-fill" label="Sold per share" value={fillText} onChange={setFill} error={show('fill')} />
+        <MoneyField id="roll-fill" label="Sold per share" value={fillText} onChange={setFill} error={show('fill')}
+          hint={quoted != null && !fillText ? <UseHint label="Quoted" value={quoted} onUse={setFill} /> : null} />
         {showFees && <MoneyField id="roll-open-fees" label="New call fees" value={openFeesShown} onChange={setOpenFees}
           hint={openFees == null ? 'Your usual commission' : null} />}
       </div>
