@@ -8,12 +8,14 @@ import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformanc
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import AlertsSection from '../components/AlertsSection'
 import Modal from '../components/dialogs/Modal'
 import { Field, Segmented, Spinner } from '../components/ui'
 import { DEFAULT_STRATEGY, buybackPrice, splitContracts } from '../lib/strategy'
 import { forgetStrategy } from '../lib/useStrategy'
+import { forgetPriceChecks } from '../lib/usePriceCheck'
 import { useWide } from '../lib/useWide'
 import { money, plural } from '../lib/format'
 
@@ -98,7 +100,7 @@ export default function Strategy() {
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
   const [positions, setPositions] = useState([])
-  const [holdings, setHoldings] = useState([])
+  const { tickers: holdings } = useTicker()
   const [exporting, setExporting] = useState(false)
   const [perf, setPerf]         = useState(null)    // /performance summary + months
   const [open, setOpen]         = useState(null)    // the rule being edited, and the draft before it opened
@@ -108,7 +110,6 @@ export default function Strategy() {
       .then(r => { const s = { ...DEFAULT_STRATEGY, ...r.data }; setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)); setCommText(commToText(s.commission_per_contract)) })
       .catch(e => setLoadError(apiError(e, 'Could not load your strategy. Is the API running?')))
     getAllPositions().then(r => setPositions(r.data)).catch(() => {})
-    getPortfolio().then(r => setHoldings(r.data)).catch(() => {})
     getPerformance().then(r => setPerf(r.data)).catch(() => {})
   }, [])
 
@@ -149,6 +150,7 @@ export default function Strategy() {
       const s = { ...DEFAULT_STRATEGY, ...r.data }
       setSaved(s); setDraft(s); setGoalText(goalToText(s.monthly_goal)); setCommText(commToText(s.commission_per_contract))
       forgetStrategy(s)
+      forgetPriceChecks()   // the buy-back targets may have changed
       setOpen(null)
       toast('Strategy saved. It applies to your next scan and price check.')
     } catch (e) {

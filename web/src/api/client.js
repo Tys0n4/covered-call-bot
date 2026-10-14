@@ -37,6 +37,7 @@ export const login           = (password)    => api.post('/auth/login', { passwo
 export const getPortfolio    = ()            => api.get('/portfolio')
 export const getStrategy     = ()            => api.get('/settings')
 export const saveStrategy    = (data)        => api.put('/settings', data)
+export const getOpenPositions = ()            => api.get('/positions')
 export const getAllPositions  = (ticker)      => api.get('/positions/all', { params: ticker ? { ticker } : {} })
 export const addPosition     = (data)        => api.post('/positions', data)
 export const closePosition   = (id, closeCost = null, closeFees = null) =>

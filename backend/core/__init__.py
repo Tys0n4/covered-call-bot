@@ -28,6 +28,7 @@ Plumbing
     models.py        shared dataclasses
     market_hours.py  NYSE hours, holidays and early closes
     cache.py         short in-memory cache for market data
+    parallel.py      fetch several stocks' data side by side
     clock.py         "today" in your time zone
     ticker_check.py  does a ticker have listed options?
 """

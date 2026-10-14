@@ -15,6 +15,7 @@ from core.fees import typical_fee_per_contract
 from core.market_data import get_current_price, get_events
 from core.events import fed_meetings_between
 from core.market_hours import NEW_YORK, last_session, market_today
+from core.parallel import parallel_map
 
 log = logging.getLogger(__name__)
 
@@ -168,13 +169,17 @@ def evaluate_positions(
     """
     Batch evaluate open positions: what buying each call back costs now (the
     midpoint, see get_current_option_quote), the stock price, and your usual
-    commission.
-    """
-    results: list[OpenCoveredCall] = []
-    fee = typical_fee_per_contract()
-    stock_prices: dict[str, float | None] = {}
+    commission. One result per position, in the same order.
 
-    for pos in positions:
+    Stocks are fetched side by side (core/parallel.py): first each stock's
+    price, which also downloads its Cboe chain, then each call. Calls on the
+    same stock share one download through the cache.
+    """
+    fee = typical_fee_per_contract()
+    tickers = list(dict.fromkeys(pos["ticker"] for pos in positions))
+    stock_prices = dict(zip(tickers, parallel_map(get_current_price, tickers), strict=True))
+
+    def check(pos: dict) -> OpenCoveredCall:
         log.debug("Checking %s %s $%.2f", pos["ticker"], pos["expiry"], float(pos["strike"]))
         quote = get_current_option_quote(
             ticker=pos["ticker"],
@@ -183,13 +188,11 @@ def evaluate_positions(
             mode=price_mode,
             strike_tolerance=config.strike_match_tolerance,
         )
-        if pos["ticker"] not in stock_prices:
-            stock_prices[pos["ticker"]] = get_current_price(pos["ticker"])
         result = evaluate_position(pos, quote["price"], config=config,
                                    stock_price=stock_prices[pos["ticker"]], fee_per_contract=fee,
                                    event=next_event(pos["ticker"], pos["expiry"]))
         result.old_trade_date = quote["old_trade_date"]
         result.price_source = quote["source"]
-        results.append(result)
+        return result
 
-    return results
+    return parallel_map(check, positions)

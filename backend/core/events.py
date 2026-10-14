@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from core.market_data import get_events, get_info
 from core.market_hours import market_today
+from core.parallel import parallel_map
 
 # FOMC rate decision days (the second day of each meeting), from the Federal
 # Reserve's published calendar. The Fed publishes each year's dates the summer
@@ -73,12 +74,14 @@ def related_earnings(ticker: str, holdings: list[str], today: str | None = None)
     if not industry:
         return []
     related: dict[str, str] = {t: "leader" for t in INDUSTRY_LEADERS.get(industry, ()) if t != ticker}
-    for other in holdings:
-        if other != ticker and other not in related and industry_of(other) == industry:
+    others = [o for o in dict.fromkeys(holdings) if o != ticker and o not in related]
+    for other, theirs in zip(others, parallel_map(industry_of, others), strict=True):
+        if theirs == industry:
             related[other] = "yours"
-    out = []
-    for other, why in related.items():
-        when = get_events(other).get("earnings_date")
-        if when and when >= today:
-            out.append({"ticker": other, "date": when, "why": why})
+    dates = parallel_map(lambda other: get_events(other).get("earnings_date"), list(related))
+    out = [
+        {"ticker": other, "date": when, "why": why}
+        for (other, why), when in zip(related.items(), dates, strict=True)
+        if when and when >= today
+    ]
     return sorted(out, key=lambda e: (e["date"], e["ticker"]))
