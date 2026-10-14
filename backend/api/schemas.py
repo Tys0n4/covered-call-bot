@@ -26,9 +26,8 @@ def _iso_date(v: str) -> str:
         raise ValueError("must be a date like 2026-10-16") from None
 
 
-class ScanConfig(BaseModel):
+class ScanFilters(BaseModel):
     """Filters from the Scanner page. The split and buyback reserve come from your saved strategy."""
-    ticker: str
     # Expiry window: from your saved strategy unless given here
     min_dte: Optional[int] = Field(default=None, ge=0, le=365)
     max_dte: Optional[int] = Field(default=None, ge=1, le=730)
@@ -39,16 +38,21 @@ class ScanConfig(BaseModel):
     exclude_below_cost: bool = False   # skip strikes below your average cost per share
     avoid_earnings: bool = False       # skip expiries on or after the next earnings date
 
-    @field_validator("ticker")
-    @classmethod
-    def _norm_ticker(cls, v):
-        return _ticker(v)
-
     @model_validator(mode="after")
     def _dte_window(self):
         if self.min_dte is not None and self.max_dte is not None and self.max_dte < self.min_dte:
             raise ValueError("max_dte must be at least min_dte")
         return self
+
+
+class ScanConfig(ScanFilters):
+    """Scan one stock with the Scanner page's filters."""
+    ticker: str
+
+    @field_validator("ticker")
+    @classmethod
+    def _norm_ticker(cls, v):
+        return _ticker(v)
 
 
 class Candidate(BaseModel):
@@ -139,6 +143,19 @@ class ScanResponse(BaseModel):
     ex_dividend_date: Optional[str] = None   # next ex-dividend date, if known
     next_market_open: Optional[str] = None   # ISO time of the next open, when closed
     quotes_live_at: Optional[str] = None     # ISO time delayed quotes catch up, in the first 15 min after the open
+
+
+class ScanAllItem(BaseModel):
+    """One stock in a scan of every stock with free contracts."""
+    ticker: str
+    available: int                           # contracts free to sell
+    result: Optional[ScanResponse] = None    # the same scan as POST /scan
+    error: Optional[str] = None              # why this stock couldn't be scanned
+
+
+class ScanAllResponse(BaseModel):
+    scanned: list[ScanAllItem]               # most premium first; stocks without a trade last
+    covered: list[str]                       # every contract already has a call sold, so not scanned
 
 
 class TradeIn(BaseModel):

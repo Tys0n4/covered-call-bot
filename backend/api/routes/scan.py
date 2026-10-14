@@ -1,17 +1,24 @@
 # api/routes/scan.py
+import logging
 import math
 from fastapi import APIRouter, Body, HTTPException
 
 from dataclasses import replace
 
+from core.config import ScannerConfig
 from core.strategy import effective_config, load_strategy
 from core.market_hours import next_market_open, quotes_live_at
+from core.models import PlannedCall, PortfolioPosition
+from core.parallel import parallel_map
 from core.portfolio import load_portfolio
 from core.scanner import resolve_min_strike, scan_covered_calls
 from core.planner import build_plan, compute_buyback_budget, get_allocation_targets
 from core.positions import CoverageError, load_open_positions, save_positions
-from core.models import PlannedCall
-from api.schemas import ScanConfig, ScanResponse, Candidate, AllocationItem, TradeIn, GoalCheck
+from api.schemas import (
+    AllocationItem, Candidate, GoalCheck, ScanAllItem, ScanAllResponse, ScanConfig, ScanFilters, ScanResponse, TradeIn,
+)
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scan", tags=["scanner"])
 
@@ -59,44 +66,93 @@ def _row_to_candidate(row) -> Candidate:
 # Handlers are plain `def` so FastAPI runs them in a worker thread: a scan
 # makes slow network calls that would otherwise freeze every other request.
 
+def _config(filters: ScanFilters) -> ScannerConfig:
+    """
+    Your saved strategy (delta range, expiry window, split, buyback) plus the
+    Scanner page's filters; an expiry window sent with the scan overrides the strategy's.
+    """
+    strategy_config = effective_config()
+    return replace(
+        strategy_config,
+        min_dte=filters.min_dte if filters.min_dte is not None else strategy_config.min_dte,
+        max_dte=filters.max_dte if filters.max_dte is not None else strategy_config.max_dte,
+        min_strike_pct_above_current=filters.min_strike_pct,
+        min_premium=filters.min_premium,
+        min_volume=filters.min_volume,
+        min_open_interest=filters.min_open_interest,
+        exclude_below_cost=filters.exclude_below_cost,
+        avoid_earnings=filters.avoid_earnings,
+    )
+
+
 @router.post("", response_model=ScanResponse)
 def run_scan(scan_config: ScanConfig):
     """Run the covered call scanner for one stock in your portfolio."""
-    position = next((p for p in load_portfolio() if p.ticker == scan_config.ticker), None)
+    holdings = load_portfolio()
+    position = next((p for p in holdings if p.ticker == scan_config.ticker), None)
     if position is None:
         raise HTTPException(
             status_code=404,
             detail=f"{scan_config.ticker} is not in your portfolio. Add it on the Dashboard first.",
         )
+    return _scan_one(position, _config(scan_config), holdings, load_strategy()["monthly_goal"], load_open_positions())
 
-    # Your saved strategy (delta range, expiry window, split, buyback) plus the
-    # Scanner page's filters; an expiry window sent with the scan overrides the strategy's
-    strategy_config = effective_config()
-    config = replace(
-        strategy_config,
-        min_dte=scan_config.min_dte if scan_config.min_dte is not None else strategy_config.min_dte,
-        max_dte=scan_config.max_dte if scan_config.max_dte is not None else strategy_config.max_dte,
-        min_strike_pct_above_current=scan_config.min_strike_pct,
-        min_premium=scan_config.min_premium,
-        min_volume=scan_config.min_volume,
-        min_open_interest=scan_config.min_open_interest,
-        exclude_below_cost=scan_config.exclude_below_cost,
-        avoid_earnings=scan_config.avoid_earnings,
-    )
 
-    # Goal pace: monthly income each contract you own needs to reach your monthly goal
+@router.post("/all", response_model=ScanAllResponse)
+def scan_all(filters: ScanFilters):
+    """
+    Scan every stock that has contracts free to sell, with the same rules and
+    filters as scanning each one alone. A few stocks are scanned at a time; a
+    stock that fails says why instead of failing the rest.
+    """
     holdings = load_portfolio()
-    total_contracts = sum(h.total_contracts for h in holdings)
+    config = _config(filters)
     goal = load_strategy()["monthly_goal"]
+    all_open = load_open_positions()
+    free, covered = [], []
+    for h in holdings:
+        ticker_open = [p for p in all_open if p.get("ticker") == h.ticker]
+        available = get_allocation_targets(h.shares, ticker_open, config)["available"]
+        if available > 0:
+            free.append((h, available))
+        elif h.total_contracts > 0:
+            covered.append(h.ticker)
+
+    def scan(item: tuple[PortfolioPosition, int]) -> ScanAllItem:
+        holding, available = item
+        try:
+            result = _scan_one(holding, config, holdings, goal, all_open)
+            return ScanAllItem(ticker=holding.ticker, available=available, result=result)
+        except HTTPException as e:
+            return ScanAllItem(ticker=holding.ticker, available=available, error=str(e.detail))
+        except Exception:
+            log.exception("Scanning %s failed", holding.ticker)
+            return ScanAllItem(ticker=holding.ticker, available=available,
+                               error=f"Couldn't scan {holding.ticker} right now. Try again in a minute.")
+
+    scanned = parallel_map(scan, free, max_workers=4)
+    scanned.sort(key=lambda i: -(i.result.gross_premium if i.result and i.result.planned_positions else -1.0))
+    return ScanAllResponse(scanned=scanned, covered=covered)
+
+
+def _scan_one(
+    position: PortfolioPosition,
+    config: ScannerConfig,
+    holdings: list[PortfolioPosition],
+    goal: float,
+    all_open: list[dict],
+) -> ScanResponse:
+    """One stock's scan and the trade to place, for /scan and /scan/all. 503 when there's no stock price."""
+    # Goal pace: monthly income each contract you own needs to reach your monthly goal
+    total_contracts = sum(h.total_contracts for h in holdings)
     goal_pace = goal / total_contracts if goal > 0 and total_contracts else 0.0
 
     scan = scan_covered_calls(position, config=config, holdings=[h.ticker for h in holdings], goal_pace=goal_pace)
 
     if scan.current_price == 0.0:
-        raise HTTPException(status_code=503, detail="Could not fetch current price.")
+        raise HTTPException(status_code=503, detail=f"Could not fetch {position.ticker}'s current price.")
 
     # Only consider open positions for this ticker
-    all_open = load_open_positions()
     ticker_open = [p for p in all_open if p.get("ticker") == position.ticker]
 
     planned = build_plan(scan, config=config, open_positions=ticker_open)

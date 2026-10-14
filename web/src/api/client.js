@@ -50,6 +50,7 @@ export const editPosition    = (id, data)    => api.patch(`/positions/${id}`, da
 export const undoPosition    = (id)          => api.post(`/positions/${id}/undo`)
 export const deletePosition  = (id)          => api.delete(`/positions/${id}`)
 export const runScan         = (config)      => api.post('/scan', config)
+export const runScanAll      = (filters)     => api.post('/scan/all', filters)
 export const savePositions   = (data)        => api.post('/scan/save', data)
 export const getManagement   = (ticker)      => api.get('/manage',        { params: ticker ? { ticker } : {} })
 export const getPerformance  = ()            => api.get('/performance')
