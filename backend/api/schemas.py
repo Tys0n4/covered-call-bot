@@ -265,6 +265,14 @@ class AssignmentReviewItem(PositionOut):
     close_price: float                       # the stock's close on expiry day
 
 
+class EarlyExercise(BaseModel):
+    """An in-the-money call with less time value left than the coming dividend."""
+    ex_dividend_date: str
+    dividend: float          # per share, estimated from the last one
+    time_value: float        # what's left of the call's price above its in-the-money value, per share
+    exercise_by: str         # the trading day before the ex-dividend date, when it would happen
+
+
 class EvaluatedPosition(BaseModel):
     id: int
     ticker: str
@@ -285,8 +293,33 @@ class EvaluatedPosition(BaseModel):
     event: Optional[dict] = None             # {"kind": "earnings" | "fed", "date"} before expiry
     old_trade_date: Optional[str] = None     # no current price: the last trade is from before the latest session
     price_source: Optional[str] = None       # "cboe" | "yahoo"
+    early_exercise: Optional[EarlyExercise] = None   # likely exercised early for the dividend
     allocation_type: str
     opened_at: str
+
+
+class RollOption(BaseModel):
+    """A later call to roll into (core/rolls.py)."""
+    expiry: str
+    dte: int
+    strike: float
+    price: float                 # the new call, per share (midpoint)
+    net_per_share: float         # new price − buyback price
+    net_total: float             # credit for all contracts, after both commissions
+    strike_gain: float           # what the higher strike adds if your shares are called, $ total
+    delta: Optional[float] = None
+    above_range: bool = False    # more chance of being called than your strategy's highest
+    spans_earnings: bool = False
+    spans_fed: bool = False
+
+
+class RollOptions(BaseModel):
+    position_id: int
+    buyback_price: Optional[float] = None    # buying the open call back now, per share
+    stock_price: Optional[float] = None
+    quotes_live: bool = True
+    rolls: list[RollOption]                  # best first
+    note: Optional[str] = None               # why there are none
 
 
 class ManagementResponse(BaseModel):

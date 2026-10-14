@@ -52,6 +52,7 @@ class OpenCoveredCall:
     event: dict | None = None       # {"kind": "earnings" | "fed", "date"} before expiry, if any
     old_trade_date: str | None = None  # no live ask and the last trade is from before the latest session
     price_source: str | None = None    # "cboe" | "yahoo"
+    early_exercise: dict | None = None # likely exercised the day before the ex-dividend date (buyback.early_exercise_risk)
 
 
 @dataclass

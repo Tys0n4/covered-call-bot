@@ -242,6 +242,22 @@ def _save_close(ticker_symbol: str, day: str, close: float) -> None:
         log.warning("Saving %s's close on %s failed: %s", ticker_symbol, day, e)
 
 
+def get_dividend_amount(ticker_symbol: str) -> float | None:
+    """
+    The next dividend per share, estimated as the last one paid (Yahoo's
+    lastDividendValue, else the yearly rate ÷ 4), or None when unknown.
+    """
+    info = get_info(ticker_symbol)
+    for value in (info.get("lastDividendValue"), (info.get("dividendRate") or 0) / 4):
+        try:
+            amount = float(value or 0)
+        except (TypeError, ValueError):
+            continue
+        if amount > 0:
+            return round(amount, 4)
+    return None
+
+
 def get_close_on(ticker_symbol: str, day: str) -> float | None:
     """
     The stock's closing price on a past trading day (YYYY-MM-DD), or None.

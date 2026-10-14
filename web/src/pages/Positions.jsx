@@ -7,7 +7,7 @@ import {
 } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
-import { ChevronRight, Copy, Layers, Pencil, Plus, RefreshCw, ScanLine, Trash2, Undo2, UserCheck } from 'lucide-react'
+import { ChevronRight, Copy, Layers, Pencil, Plus, RefreshCw, Repeat, ScanLine, Trash2, Undo2, UserCheck } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
@@ -15,10 +15,12 @@ import { PositionsSkeleton } from '../components/Skeleton'
 import StockChips from '../components/StockChips'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
 import { forgetPriceChecks, usePriceCheck } from '../lib/usePriceCheck'
+import { forgetRolls, useRolls } from '../lib/useRolls'
 import ActionMenu from '../components/ActionMenu'
 import AssignmentReview from '../components/AssignmentReview'
 import CloseModal from '../components/dialogs/CloseModal'
 import RollModal from '../components/dialogs/RollModal'
+import RollOptionsModal from '../components/dialogs/RollOptionsModal'
 import EditTradeModal from '../components/dialogs/EditTradeModal'
 import AddCallModal from '../components/dialogs/AddCallModal'
 import ConfirmDialog from '../components/dialogs/ConfirmDialog'
@@ -72,8 +74,51 @@ function OrderTicket({ p, ev }) {
   )
 }
 
+// The third choice when a call goes against you: roll it up and out for a credit
+function RollChoice({ p, onFindRoll }) {
+  const { data, loading, error } = useRolls(p.id)
+  const best = data?.rolls?.[0]
+  return (
+    <div className="rounded-sm bg-inset p-4 sm:col-span-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-13 text-fg-2">Roll up and out</span>
+        {best && <span className="text-20 font-semibold tracking-title text-accent">{signedMoney(best.net_total, 0)}</span>}
+      </div>
+      <div className="mt-0.5 text-13 text-muted">
+        {loading ? <span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" /> Looking for a roll…</span>
+          : error || (best
+            ? <>Best roll: the {fmtDate(best.expiry)} {strike(best.strike)} call. Buy back at {money(data.buyback_price)}, sell at {money(best.price)}.
+                {best.strike_gain > 0 && <> The strike goes up {money(best.strike - p.strike)}, so {money(best.strike_gain, 0)} more if your shares are called later.</>}</>
+            : data?.note)}
+      </div>
+      {best && (
+        <button type="button" className="btn btn-secondary btn-sm mt-3" onClick={() => onFindRoll(p)}>
+          See {data.rolls.length === 1 ? 'it' : `${data.rolls.length} rolls`} <ChevronRight size={15} strokeWidth={2.2} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// In the money with less time value left than the coming dividend: the buyer may
+// exercise the day before the ex-dividend date to collect it
+function EarlyExercise({ p, e }) {
+  return (
+    <div className="mt-4 flex items-start gap-2 rounded-sm bg-inset p-4">
+      <Dot tone="amber" className="mt-2" />
+      <div>
+        <div className="text-15 font-semibold">Likely to be exercised early, on {fmtDate(e.exercise_by)}</div>
+        <p className="mt-1 text-13 text-fg-2">
+          {p.ticker} goes ex-dividend on {fmtDate(e.ex_dividend_date)} and pays about {money(e.dividend)} a share. The call has {money(e.time_value)} of
+          time value left, less than the dividend, so the buyer may exercise the day before to collect it. To keep your shares, buy back or roll by {fmtDate(e.exercise_by)}.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // The call costs more than you sold it for: the two real choices, in dollars
-function AgainstYou({ p, a }) {
+function AgainstYou({ p, a, onFindRoll }) {
   const tone = v => (v < 0 ? 'var(--loss)' : 'var(--accent)')
   return (
     <div className="mt-4">
@@ -104,10 +149,11 @@ function AgainstYou({ p, a }) {
             <div className="mt-1 text-13 text-muted">{a.shares.toLocaleString()} shares sold at {money(p.strike)}, and you keep the {money(a.collected)} premium. Add your average cost to the stock to see the total.</div>
           )}
         </div>
+        <RollChoice p={p} onFindRoll={onFindRoll} />
       </div>
       {a.aboveStrike && a.upsideGiven > 0 && (
         <p className="mt-2 text-13 text-muted">
-          At today's price, {money(a.upsideGiven, 0)} of {p.ticker}'s rise above {strike(p.strike)} goes to the buyer. Buying back keeps that upside.
+          At today's price, {money(a.upsideGiven, 0)} of {p.ticker}'s rise above {strike(p.strike)} goes to the buyer. Buying back or rolling keeps that upside.
         </p>
       )}
     </div>
@@ -115,7 +161,7 @@ function AgainstYou({ p, a }) {
 }
 
 // What the latest price check says about one call
-function Status({ p, ev, checking, failed, avgCost, asOf }) {
+function Status({ p, ev, checking, failed, avgCost, asOf, onFindRoll }) {
   const withFees = chargesCommission(useStrategy()) ? ' with fees' : ''
   if (!ev) {
     return (
@@ -134,7 +180,7 @@ function Status({ p, ev, checking, failed, avgCost, asOf }) {
     )
   }
   const against = againstYou(p, ev, avgCost)
-  if (against) return <AgainstYou p={p} a={against} />
+  if (against) return <AgainstYou p={p} a={against} onFindRoll={onFindRoll} />
 
   const buy = ev.should_buy_back
   const expire = ev.action === 'let_expire'
@@ -181,7 +227,7 @@ function Status({ p, ev, checking, failed, avgCost, asOf }) {
   )
 }
 
-function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onClose, onRoll, onEdit, onDelete, onCollapse }) {
+function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onClose, onRoll, onFindRoll, onEdit, onDelete, onCollapse }) {
   const buy = ev?.should_buy_back
   const against = againstYou(p, ev, avgCost)
   const priced = ev && ev.current_option_price > 0 && !against
@@ -199,7 +245,8 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onCl
         {p.allocation_type}{p.rolled_from ? ' · rolled' : ''} · sold at {money(p.entry_price)} · collected {money(p.premium_total)}
       </div>
 
-      <Status p={p} ev={ev} checking={checking} failed={failed} avgCost={avgCost} asOf={asOf} />
+      {ev?.early_exercise && <EarlyExercise p={p} e={ev.early_exercise} />}
+      <Status p={p} ev={ev} checking={checking} failed={failed} avgCost={avgCost} asOf={asOf} onFindRoll={onFindRoll} />
 
       {/* On the narrowest phones "I bought it back" takes its own row, above the rest */}
       <div className="mt-5 flex flex-wrap items-center gap-2.5">
@@ -207,6 +254,7 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onCl
         <button type="button" className={`btn flex-[1.4] px-4 max-[360px]:order-first max-[360px]:basis-full ${buy ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onClose(p)}>I bought it back</button>
         <ActionMenu label={`More for the ${p.ticker} ${strike(p.strike)} call`} className="-mr-2" items={[
           onCollapse && { label: 'Show less', icon: ChevronRight, onClick: onCollapse },
+          { label: 'Find a roll', icon: Repeat, onClick: () => onFindRoll(p) },
           { label: 'Edit fill or fees', icon: Pencil, onClick: () => onEdit(p) },
           // A rolled call is undone from History so the original call reopens
           !p.rolled_from && { label: 'Delete (entered by mistake)', icon: Trash2, danger: true, onClick: () => onDelete(p) },
@@ -257,6 +305,8 @@ export default function Positions() {
 
   const [closingPos, setClosingPos] = useState(null)   // Close dialog
   const [rollingPos, setRollingPos] = useState(null)   // Roll dialog
+  const [rollPrefill, setRollPrefill] = useState(null) // the roll picked in Find a roll, if any
+  const [rollsFor, setRollsFor]   = useState(null)     // Find a roll dialog
   const [editingPos, setEditingPos] = useState(null)   // Edit dialog
   const [adding, setAdding]       = useState(false)    // Add a call dialog
   const [confirm, setConfirm]     = useState(null)     // { title, body, confirmLabel, danger, run }
@@ -304,8 +354,9 @@ export default function Positions() {
 
   // After any change to a call: reload trades and the portfolio (contracts in use, shares)
   const afterChange = () => {
-    setClosingPos(null); setRollingPos(null); setEditingPos(null); setConfirm(null); setError(null)
+    setClosingPos(null); setRollingPos(null); setRollPrefill(null); setEditingPos(null); setConfirm(null); setError(null)
     forgetPriceChecks()
+    forgetRolls()
     prices.refresh()
     reload()
     refreshTickers().catch(() => {})
@@ -361,7 +412,7 @@ export default function Positions() {
   const groupOf = p => {
     const e = evals?.[p.id]
     if (!e) return 'hold'
-    if (againstYou(p, e, avgCostOf(p))) return 'against'
+    if (e.early_exercise || againstYou(p, e, avgCostOf(p))) return 'against'
     return e.should_buy_back ? 'ready' : 'hold'
   }
   const byExpiry = (a, b) => a.expiry.localeCompare(b.expiry) || a.ticker.localeCompare(b.ticker)
@@ -374,7 +425,8 @@ export default function Positions() {
   const card = (p, onCollapse) => (
     <PositionCard key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={pricesFailed}
       avgCost={avgCostOf(p)} asOf={priceAsOf(prices.data)} onCollapse={onCollapse}
-      onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
+      onClose={setClosingPos} onRoll={p => { setRollPrefill(null); setRollingPos(p) }} onFindRoll={setRollsFor}
+      onEdit={setEditingPos} onDelete={askDelete} />
   )
 
   return (
@@ -387,7 +439,15 @@ export default function Positions() {
             ? `Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`
             : `${p.ticker} ${strike(p.strike)} call closed`, p.id)
         }} />}
-      {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]} onCancel={() => setRollingPos(null)}
+      {rollsFor && <RollOptionsModal position={rollsFor} onCancel={() => setRollsFor(null)}
+        onUse={(roll, buyback) => {
+          const p = rollsFor
+          setRollsFor(null)
+          setRollPrefill({ expiry: roll.expiry, strike: roll.strike, price: roll.price, buyback })
+          setRollingPos(p)
+        }} />}
+      {rollingPos && <RollModal position={rollingPos} evaluation={evals?.[rollingPos.id]} prefill={rollPrefill}
+        onCancel={() => { setRollingPos(null); setRollPrefill(null) }}
         onDone={() => { const p = rollingPos; afterChange(); undoable(`${p.ticker} call rolled`, p.id) }} />}
       {editingPos && <EditTradeModal position={editingPos} onCancel={() => setEditingPos(null)}
         onDone={() => { afterChange(); toast('Trade updated') }} />}
@@ -450,7 +510,8 @@ export default function Positions() {
           ) : (
             <>
               {evals && <PriceStamp meta={prices.data} />}
-              {evals && readyCount === 0 && (
+              {/* "Nothing to do" only when no call is going against you either */}
+              {evals && readyCount === 0 && !groups.some(g => g.key === 'against') && (
                 <p className="mt-3 text-15 text-fg-2">
                   {expireCount > 0
                     ? <>Nothing to buy back. {expireCount === open.length ? (expireCount === 1 ? 'It' : 'They') : plural(expireCount, 'call')} can be left to expire.</>

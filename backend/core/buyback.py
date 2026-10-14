@@ -12,9 +12,9 @@ from core.quotes import select_quote, QuoteMode
 from core.models import OpenCoveredCall
 from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.fees import typical_fee_per_contract
-from core.market_data import get_current_price, get_events
+from core.market_data import get_current_price, get_dividend_amount, get_events
 from core.events import fed_meetings_between
-from core.market_hours import NEW_YORK, last_session, market_today
+from core.market_hours import NEW_YORK, last_session, market_today, previous_trading_day
 from core.parallel import parallel_map
 
 log = logging.getLogger(__name__)
@@ -150,6 +150,38 @@ def evaluate_position(
     )
 
 
+def early_exercise_risk(
+    strike: float,
+    stock_price: float | None,
+    option_price: float,
+    expiry: str,
+    ex_dividend_date: str | None,
+    dividend: float | None,
+    today: str,
+) -> dict | None:
+    """
+    A call in the money is often exercised early, on the trading day before the
+    stock goes ex-dividend, when its time value (price − (stock − strike)) is
+    less than the dividend: the buyer collects the dividend and gives up less
+    than that in time value. Then you'd lose the shares weeks before expiry.
+
+    {"ex_dividend_date", "dividend", "time_value", "exercise_by"} or None.
+    """
+    if not (ex_dividend_date and dividend and stock_price and option_price > 0):
+        return None
+    if not (today < ex_dividend_date <= expiry) or stock_price <= strike:
+        return None
+    time_value = option_price - (stock_price - strike)
+    if time_value >= dividend:
+        return None
+    return {
+        "ex_dividend_date": ex_dividend_date,
+        "dividend": round(dividend, 2),
+        "time_value": round(max(time_value, 0.0), 2),
+        "exercise_by": previous_trading_day(ex_dividend_date),
+    }
+
+
 def next_event(ticker: str, expiry: str, today: str | None = None) -> dict | None:
     """The first earnings or Fed decision from today until expiry: {"kind", "date"}, or None."""
     today = today or market_today()
@@ -193,6 +225,14 @@ def evaluate_positions(
                                    event=next_event(pos["ticker"], pos["expiry"]))
         result.old_trade_date = quote["old_trade_date"]
         result.price_source = quote["source"]
+        # Only in the money, with an ex-dividend date ahead, is the dividend worth looking up
+        stock = stock_prices[pos["ticker"]]
+        ex_div = get_events(pos["ticker"]).get("ex_dividend_date") if stock and stock > result.strike else None
+        if ex_div:
+            result.early_exercise = early_exercise_risk(
+                result.strike, stock, result.current_option_price, result.expiry, ex_div,
+                get_dividend_amount(pos["ticker"]), market_today(),
+            )
         return result
 
     return parallel_map(check, positions)

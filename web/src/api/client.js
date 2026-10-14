@@ -43,6 +43,7 @@ export const addPosition     = (data)        => api.post('/positions', data)
 export const closePosition   = (id, closeCost = null, closeFees = null) =>
   api.post('/positions/close', { position_id: id, close_cost: closeCost, close_fees: closeFees })
 export const rollPosition    = (id, data)    => api.post(`/positions/${id}/roll`, data)
+export const getRolls        = (id)          => api.get(`/positions/${id}/rolls`)
 export const assignPosition  = (id)          => api.post(`/positions/${id}/assign`, {})
 export const markNotAssigned = (id)          => api.post(`/positions/${id}/not-assigned`)
 export const getAssignmentReview = ()        => api.get('/positions/assignment-review')
