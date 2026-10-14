@@ -265,7 +265,15 @@ export default function Dashboard() {
       cta: { label: 'Review', onClick: () => go(p.ticker, '/positions') },
     })
   })
-  unsold.forEach(t => todo.push({
+  // Free contracts on several stocks: one step that scans them all
+  if (unsold.length > 1) todo.push({
+    key: 'unsold',
+    title: `${plural(unsold.reduce((s, t) => s + t.available, 0), 'contract')} free on ${unsold.length} stocks`,
+    body: unsold.map(t => `${t.ticker} ${t.available}`).join(' · '),
+    more: 'Scan them all at once for the recommended trade on each.',
+    cta: { label: 'Scan all', onClick: () => navigate('/scanner?all=1') },
+  })
+  else unsold.forEach(t => todo.push({
     key: `unsold-${t.ticker}`,
     title: t.open_total === 0 ? `${t.shares.toLocaleString()} ${t.ticker} shares aren't covered` : `${plural(t.available, `${t.ticker} contract`)} ${t.available === 1 ? 'is' : 'are'} free`,
     body: `Room for ${plural(t.available, 'call')}`,

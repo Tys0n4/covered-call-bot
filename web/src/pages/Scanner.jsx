@@ -1,8 +1,8 @@
 // src/pages/Scanner.jsx — find a covered call to sell on one of your stocks
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowRight, Check, RefreshCw, RotateCcw, ScanLine } from 'lucide-react'
-import { runScan, savePositions, apiError } from '../api/client'
+import { runScan, runScanAll, savePositions, apiError } from '../api/client'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
 import { useTicker } from '../context/TickerContext'
 import { usePageTitle } from '../components/PageHeader'
@@ -11,6 +11,7 @@ import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
 import OptionsTable, { eventsText } from '../components/OptionsTable'
 import PremiumCheck, { GoalCheck } from '../components/PremiumCheck'
+import ScanAll from '../components/ScanAll'
 import StockChips from '../components/StockChips'
 import { Dot, Field, MoneyField, Spinner } from '../components/ui'
 import { TERMS } from '../lib/terms'
@@ -106,12 +107,20 @@ function HeadsUp({ text }) {
 
 // The last scan of each stock stays on screen when you come back to it
 const lastScans = new Map()   // ticker -> { result, fills, fees, saved, at }
+// ...and so does the last scan of every stock ("All stocks"), and whether that was showing
+const lastAll = { on: false, scan: null }   // scan: { data, at }
 const clock = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 const wide = () => window.matchMedia?.('(min-width: 768px)').matches
 
 export default function Scanner() {
   usePageTitle('Scanner')
   const { selected, tickers, selectTicker, loaded, loadError, refresh } = useTicker()
+  const [params] = useSearchParams()
+  // "All stocks" (from Home's "Scan all", /scanner?all=1) or one stock
+  const [all, setAllState] = useState(() => params.get('all') === '1' || lastAll.on)
+  const setAll = on => { lastAll.on = on; setAllState(on) }
+  const [allScan, setAllScan] = useState(() => lastAll.scan)
+  const [allLoading, setAllLoading] = useState(false)
   const [form, setForm]       = useState(() => toForm(loadConfig()))   // boxes, exactly as typed
   const [scan, setScan]       = useState(() => lastScans.get(selected) || null)
   const [loading, setLoading] = useState(false)
@@ -171,6 +180,36 @@ export default function Scanner() {
     }
   }
 
+  const handleScanAll = async () => {
+    if (!filtersValid) return
+    setAllLoading(true); setError(null)
+    try {
+      const res = await runScanAll(config)
+      const next = { data: res.data, at: new Date().toISOString() }
+      lastAll.scan = next
+      setAllScan(next)
+    } catch (e) {
+      setError(apiError(e, 'Scan failed. Is the API running?'))
+    } finally {
+      setAllLoading(false)
+    }
+  }
+
+  // From "All stocks" to one stock's full scan, already loaded (unless you've scanned it since)
+  const review = item => {
+    const r = item.result
+    const existing = lastScans.get(item.ticker)
+    if (r && !(existing && existing.at >= allScan.at)) {
+      lastScans.set(item.ticker, {
+        result: r, fills: r.planned_positions.map(() => ''),
+        fees: r.estimated_fees > 0 ? r.estimated_fees.toFixed(2) : '', saved: false, at: allScan.at,
+      })
+    }
+    setAll(false); setError(null)
+    setScan(lastScans.get(item.ticker) || null); setScannedFor(item.ticker)
+    selectTicker(item.ticker)
+  }
+
   const fillValues = fills.map(moneyValue)
   const fillsValid = fillValues.length > 0 && fillValues.every(v => v != null && v > 0)
   const fillQuotes = () => update({ fills: (scan?.result.planned_positions || []).map((p, i) => fills[i] || p.entry_price.toFixed(2)) })
@@ -222,6 +261,38 @@ export default function Scanner() {
       + (config.exclude_below_cost ? ' Strikes below your cost are skipped.' : '')
       + (config.avoid_earnings ? ' Expiries after earnings are skipped.' : '')
 
+  const freeStocks = tickers.filter(t => t.available > 0)
+  const freeTotal = freeStocks.reduce((s, t) => s + t.available, 0)
+  const allColumn = (
+    <div className="min-w-0">
+      {error && <p role="alert" className="mb-5 flex items-start gap-2 text-15 text-loss"><Dot tone="loss" className="mt-2" />{error}</p>}
+      {allLoading ? (
+        <div className="flex items-center gap-4 rounded-card bg-surface p-6" role="status">
+          <Spinner className="h-6 w-6 text-accent" />
+          <div><div className="text-17 font-semibold">Checking {plural(freeStocks.length, 'stock')}…</div><div className="text-13 text-muted">A few at a time. This usually takes 15–45 seconds.</div></div>
+        </div>
+      ) : allScan ? (
+        <ScanAll data={allScan.data} tickers={tickers} onReview={review} />
+      ) : (
+        <section aria-labelledby="all-ready-h">
+          <h2 id="all-ready-h" className="text-22 font-semibold tracking-title">Find calls for every stock at once</h2>
+          <p className="mt-2 max-w-[560px] text-15 text-fg-2">
+            {freeStocks.length
+              ? `Scans ${freeStocks.map(t => t.ticker).join(', ')} with your rules and filters and lists the recommended trade for each, with what selling them all would collect.`
+              : 'Every contract already has a call sold, so there is nothing to scan.'}
+          </p>
+          {freeStocks.length > 0 && (
+            <div className="mt-6">
+              <button type="button" className="btn btn-primary" onClick={handleScanAll} disabled={!filtersValid}>
+                <ScanLine size={17} strokeWidth={2} /> Scan {plural(freeStocks.length, 'stock')}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  )
+
   const scanButton = (
     <button type="button" className="btn btn-primary" onClick={handleScan} disabled={loading || !filtersValid}>
       {loading ? <><Spinner /> Scanning…</> : <><ScanLine size={17} strokeWidth={2} /> Scan {selected}</>}
@@ -234,10 +305,23 @@ export default function Scanner() {
         <h1 className="page-title">Scanner</h1>
         {tickers.length > 0 && (
           <div className="order-last w-full md:order-none md:w-auto">
-            <StockChips label="Stock to scan" free tickers={tickers} value={selected} onChange={selectTicker} />
+            <StockChips label="Stock to scan" free tickers={tickers} value={all ? null : selected}
+              all={tickers.length > 1} allLabel={`All stocks${freeTotal ? ` · ${freeTotal} free` : ''}`}
+              onChange={t => { if (t == null) setAll(true); else { setAll(false); selectTicker(t) } }} />
           </div>
         )}
-        {result && !loading && (
+        {all && allScan && !allLoading && (
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-13 text-muted md:inline">Scanned {clock(allScan.at)}</span>
+            <button type="button" className="icon-btn -mr-2 md:hidden" onClick={handleScanAll} aria-label="Scan every stock again">
+              <RefreshCw size={19} strokeWidth={1.9} />
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm hidden md:inline-flex" onClick={handleScanAll} disabled={!filtersValid}>
+              <RefreshCw size={15} strokeWidth={2} /> Scan again
+            </button>
+          </div>
+        )}
+        {!all && result && !loading && (
           <div className="ml-auto flex items-center gap-3">
             <span className="hidden text-13 text-muted md:inline">Scanned {clock(scan.at)}</span>
             <button type="button" className="icon-btn -mr-2 md:hidden" onClick={handleScan} aria-label={`Scan ${selected} again`}>
@@ -260,7 +344,7 @@ export default function Scanner() {
 
       {selected && (
         <div className="md:grid md:grid-cols-[minmax(0,1fr)_300px] md:items-start md:gap-12">
-          <div className="min-w-0">
+          {all ? allColumn : <div className="min-w-0">
             <p className="flex flex-wrap gap-x-5 gap-y-1 text-15 text-fg-2">
               {result && <span>{result.ticker} <strong className="font-semibold text-fg">{money(result.current_price)}</strong>{lastPrices ? ' at the last close' : ''}</span>}
               {holding && <span>{holding.shares.toLocaleString()} shares · avg {money(holding.avg_cost)}</span>}
@@ -423,7 +507,7 @@ export default function Scanner() {
                 )}
               </>
             )}
-          </div>
+          </div>}
 
           <aside className="mt-12 flex flex-col gap-10 md:mt-0">
             {rules.length > 0 && (
