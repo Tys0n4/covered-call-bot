@@ -56,7 +56,7 @@ function CopyPrice({ price }) {
 // only records trades, so this spells out what to enter there.
 function OrderTicket({ p, ev }) {
   return (
-    <div className="mt-4 rounded-sm bg-panel px-4 py-3">
+    <div className="mt-4 rounded-sm bg-inset px-4 py-3">
       <div className="text-12 text-muted">Order to place at your broker</div>
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-x-1.5 text-15 font-semibold">
@@ -85,12 +85,12 @@ function AgainstYou({ p, a }) {
         </span>
       </p>
       <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-        <div className="rounded-sm bg-panel p-4">
+        <div className="rounded-sm bg-inset p-4">
           <div className="text-13 text-fg-2">Buy back now</div>
           <div className="mt-0.5 text-20 font-semibold tracking-title" style={{ color: tone(a.buybackPL) }}>{signedMoney(a.buybackPL, 0)}</div>
           <div className="mt-1 text-13 text-muted">Costs {money(a.buybackCost)} against the {money(a.collected)} collected. You keep your shares.</div>
         </div>
-        <div className="rounded-sm bg-panel p-4">
+        <div className="rounded-sm bg-inset p-4">
           <div className="text-13 text-fg-2">{a.aboveStrike ? 'Let it be called away' : `If it's called away at ${strike(p.strike)}`}</div>
           {a.calledPL != null ? (
             <>

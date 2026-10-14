@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 
 import pytest
-from conftest import EVENTS, INFO
+from conftest import EVENTS, INFO, REAL_FED_MEETINGS
 
 from core import cache, events
 from core.buyback import evaluate_position, next_event
@@ -156,6 +156,14 @@ def test_never_let_expire_through_an_event():
     earnings = {"kind": "earnings", "date": "2026-10-08"}
     r = evaluate_position(_pos(4, strike=110.0), 0.05, today=TODAY, stock_price=100.0, event=earnings)
     assert r.action == "buy_back"
+
+
+def test_fed_calendar_lists_decision_days_in_order():
+    """Each Fed date is a Wednesday (the second day of a two-day meeting), in order, with no repeats."""
+    days = [date.fromisoformat(d) for d in REAL_FED_MEETINGS]
+    assert days == sorted(set(days))
+    assert all(d.weekday() == 2 for d in days)
+    assert len([d for d in days if d.year == 2027]) == 8
 
 
 def test_next_event_finds_earnings_or_the_fed_before_expiry(monkeypatch):
