@@ -1,18 +1,44 @@
 # api/main.py
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from api import auth
 from api.routes import alerts, scan, positions, manage, settings, portfolio, performance, upcoming
+from core.db import get_engine
 from core.market_hours import is_market_open, next_market_open
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("api")
+
+
+def _warm_up() -> None:
+    """
+    Connect to the database as soon as the server starts. The server sleeps when
+    idle and so does a free Postgres plan, which takes a few seconds to wake; this
+    way the wake-up overlaps the app's first requests instead of following them.
+    """
+    try:
+        with get_engine().connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        log.warning("Database warm-up failed: %s", e)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    threading.Thread(target=_warm_up, name="db-warm-up", daemon=True).start()
+    yield
+
 
 app = FastAPI(
     title="Covered Call Scanner API",
     description="Scan, plan, and manage covered call positions.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

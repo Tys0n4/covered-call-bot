@@ -9,12 +9,13 @@ Database connection for holdings and covered call positions.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import threading
 from pathlib import Path
 
 from sqlalchemy import (
-    Column, Float, Integer, MetaData, String, Table, create_engine, inspect, text,
+    Column, Float, Integer, MetaData, String, Table, create_engine, delete, insert, inspect, select, text,
 )
 from sqlalchemy.engine import Engine
 
@@ -98,6 +99,13 @@ daily_closes = Table(
     Column("close",  Float, nullable=False),
 )
 
+# The schema_fingerprint() the database was last set up for (a single row, id = 1)
+schema_info = Table(
+    "schema_info", metadata,
+    Column("id",          Integer, primary_key=True),
+    Column("fingerprint", String(64), nullable=False),
+)
+
 
 def database_url() -> str:
     """DATABASE_URL if set (normalized for SQLAlchemy + psycopg), else the local SQLite file."""
@@ -131,10 +139,36 @@ def get_engine() -> Engine:
                     pool_recycle=300,
                     connect_args={"check_same_thread": False} if is_sqlite else {},
                 )
-                metadata.create_all(engine)
-                _add_missing_columns(engine)
+                # Checking every table and column takes a dozen catalog queries, each a round
+                # trip to the database, on every server start (and the server sleeps when idle).
+                # So it only runs when the tables defined here changed since the last time.
+                if not _schema_is_current(engine):
+                    metadata.create_all(engine)
+                    _add_missing_columns(engine)
+                    _mark_schema_current(engine)
                 _engine = engine
     return _engine
+
+
+def schema_fingerprint() -> str:
+    """A hash of every table and column defined in this file: it changes whenever they do."""
+    parts = sorted(f"{t.name}.{c.name}:{c.type}" for t in metadata.sorted_tables for c in t.columns)
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _schema_is_current(engine: Engine) -> bool:
+    try:
+        with engine.connect() as conn:
+            stored = conn.execute(select(schema_info.c.fingerprint).where(schema_info.c.id == 1)).scalar()
+    except Exception:   # no schema_info table: a new database, or one from before it existed
+        return False
+    return stored == schema_fingerprint()
+
+
+def _mark_schema_current(engine: Engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(delete(schema_info))
+        conn.execute(insert(schema_info).values(id=1, fingerprint=schema_fingerprint()))
 
 
 def _add_missing_columns(engine: Engine) -> None:

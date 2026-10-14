@@ -117,3 +117,19 @@ def test_todays_close_is_not_saved():
     CLOSES.clear()
     cache.clear()
     assert get_close_on("NVDA", today) is None
+
+
+def test_the_strategy_is_kept_in_memory_and_saving_updates_it(client):
+    from sqlalchemy import event
+    from core import db, strategy
+    client.get("/settings")
+    seen = []
+    event.listen(db.get_engine(), "before_cursor_execute", lambda *a, **k: seen.append(a[2]))
+    assert client.get("/settings").json()["monthly_goal"] == 0
+    assert seen == []                                     # from memory
+    body = {**client.get("/settings").json(), "monthly_goal": 1500}
+    assert client.put("/settings", json=body).status_code == 200
+    seen.clear()
+    assert strategy.load_strategy()["monthly_goal"] == 1500 and seen == []
+    strategy._kept["at"] -= strategy.STRATEGY_TTL         # a minute later: read again
+    assert strategy.load_strategy()["monthly_goal"] == 1500 and len(seen) == 1
