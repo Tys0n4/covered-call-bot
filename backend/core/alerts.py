@@ -120,7 +120,8 @@ def _plural(n: int, word: str) -> str:
 def _event_line(event: dict | None) -> str:
     if not event:
         return ""
-    day = datetime.strptime(event["date"], "%Y-%m-%d").strftime("%b %-d")
+    d = datetime.strptime(event["date"], "%Y-%m-%d")
+    day = f"{d:%b} {d.day}"   # "Oct 8"; "%-d" isn't supported on Windows
     what = "Earnings" if event["kind"] == "earnings" else "The Fed's rate decision"
     return f"{what} on {day} comes before expiry, so the earlier target applies.\n"
 

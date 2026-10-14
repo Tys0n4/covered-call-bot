@@ -39,6 +39,9 @@ IMPLIED_VOL: dict[str, float] = {}
 # Fake Cboe delayed-quote payloads per ticker (Cboe's JSON shape); none = Cboe has nothing, so Yahoo is used
 CBOE: dict[str, dict] = {}
 
+# The app's real Fed calendar (the fixture below replaces it with none in every test)
+REAL_FED_MEETINGS = events.FED_MEETINGS
+
 # Strikes whose last trade was this many days ago (ticker -> {strike: days}); the rest traded just now
 TRADED_DAYS_AGO: dict[str, dict[float, int]] = {}
 

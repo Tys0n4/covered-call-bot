@@ -14,7 +14,8 @@
   --surface: #15171B;       /* cards on the page */
   --surface-2: #1C1F24;     /* hover on a surface */
   --raised: #2A2E35;        /* selected segment */
-  --panel: #0A0B0D;         /* a box inside a card or dialog */
+  --panel: #0A0B0D;         /* a box inside a dialog */
+  --inset: #0A0B0D;         /* a box inside a card on the page */
   --sheet: #15171B;         /* dialogs, menus, toasts */
   --input: #0A0B0D;
   --line: #1A1D22;          /* hairlines on the page */
@@ -60,6 +61,7 @@
   --surface-2: #EDEDEA;
   --raised: #FFFFFF;
   --panel: #F4F4F1;
+  --inset: #FFFFFF;         /* the card is #F4F4F1, so its boxes are white */
   --sheet: #FFFFFF;
   --input: #FFFFFF;
   --line: #ECECE8;
@@ -107,6 +109,7 @@
   --color-surface-2: var(--surface-2);
   --color-raised: var(--raised);
   --color-panel: var(--panel);
+  --color-inset: var(--inset);
   --color-sheet: var(--sheet);
   --color-input: var(--input);
   --color-line: var(--line);
