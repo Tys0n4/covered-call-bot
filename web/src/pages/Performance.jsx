@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TrendingUp } from 'lucide-react'
-import { apiError, getPerformance, getStrategy } from '../api/client'
+import { apiError, getPerformance } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState'
 import { PerformanceSkeleton } from '../components/Skeleton'
 import { Dot, Stat } from '../components/ui'
 import { fmtDate, money, pct, plural, signedMoney, strike } from '../lib/format'
+import { useStrategy } from '../lib/useStrategy'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const monthName = ym => MONTHS[Number(ym.slice(5, 7)) - 1]
@@ -108,7 +109,7 @@ export default function Performance() {
   const [data, setData]       = useState(null)
   const [failed, setFailed]   = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [goal, setGoal]       = useState(0)        // monthly goal from the Strategy page (0 = off)
+  const goal = useStrategy()?.monthly_goal || 0   // from the Strategy page (0 = off)
   const [picked, setPicked]   = useState(null)     // the month whose numbers show next to the bars
   const [showAll, setShowAll] = useState(false)
 
@@ -117,7 +118,6 @@ export default function Performance() {
     getPerformance()
       .then(r => { if (!cancelled) { setData(r.data); setFailed(null) } })
       .catch(e => { if (!cancelled) setFailed(apiError(e, null) || true) })
-    getStrategy().then(r => { if (!cancelled) setGoal(r.data.monthly_goal || 0) }).catch(() => {})
     return () => { cancelled = true }
   }, [reloadKey])
 

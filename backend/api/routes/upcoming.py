@@ -8,6 +8,7 @@ from api.schemas import UpcomingEvents
 from core.events import fed_meetings_between, last_fed_meeting
 from core.market_data import get_events
 from core.market_hours import market_today
+from core.parallel import parallel_map
 from core.portfolio import load_portfolio
 
 router = APIRouter(prefix="/upcoming", tags=["upcoming"])
@@ -19,8 +20,8 @@ def upcoming(days: int = Query(30, ge=1, le=90)):
     today = market_today()
     end = (date.fromisoformat(today) + timedelta(days=days)).isoformat()
     earnings, unknown = [], []
-    for holding in load_portfolio():
-        found = get_events(holding.ticker)
+    holdings = load_portfolio()
+    for holding, found in zip(holdings, parallel_map(lambda h: get_events(h.ticker), holdings), strict=True):
         when = found.get("earnings_date")
         if when and today <= when <= end:
             earnings.append({"ticker": holding.ticker, "date": when})

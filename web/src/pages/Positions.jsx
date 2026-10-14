@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  apiError, assignPosition, deletePosition, getAllPositions, getAssignmentReview, getManagement, undoPosition,
+  apiError, assignPosition, deletePosition, getAllPositions, getAssignmentReview, undoPosition,
 } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
@@ -14,6 +14,7 @@ import EmptyState, { AddStockLink } from '../components/EmptyState'
 import { PositionsSkeleton } from '../components/Skeleton'
 import StockChips from '../components/StockChips'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
+import { forgetPriceChecks, usePriceCheck } from '../lib/usePriceCheck'
 import ActionMenu from '../components/ActionMenu'
 import AssignmentReview from '../components/AssignmentReview'
 import CloseModal from '../components/dialogs/CloseModal'
@@ -291,28 +292,21 @@ export default function Positions() {
   const rolledIds = new Set(positions.filter(p => p.rolled_from).map(p => p.rolled_from))
   const showTicker = scope === 'all'
 
-  // Prices are checked automatically whenever the open calls change; "Refresh" re-checks
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [prices, setPrices] = useState({ key: null, evals: null, failed: false, meta: null })
+  // Prices are checked automatically whenever the open calls change, and every 5 minutes
+  // while the market is open; "Refresh" re-checks. A check from Home is reused for a minute.
   const checkTicker = scope === 'all' ? null : selected
-  const priceKey = `${fetchKey}|${checkTicker}|${refreshKey}`
-  const hasOpen = !loading && open.length > 0
-  useEffect(() => {
-    if (!hasOpen) return
-    let cancelled = false
-    getManagement(checkTicker)
-      .then(r => { if (!cancelled) setPrices({ key: priceKey, evals: Object.fromEntries(r.data.positions.map(e => [e.id, e])), failed: false, meta: r.data }) })
-      .catch(e => { if (!cancelled) { setPrices({ key: priceKey, evals: null, failed: true }); setError(apiError(e, 'Could not check prices. Is the API running?')) } })
-    return () => { cancelled = true }
-  }, [priceKey, hasOpen, checkTicker])
-  const checking = hasOpen && prices.key !== priceKey
-  const evals = prices.key === priceKey ? prices.evals : null
+  const prices = usePriceCheck(loading ? [] : open.map(p => p.id), checkTicker)
+  const checking = prices.checking
+  const evals = prices.data ? Object.fromEntries(prices.data.positions.map(e => [e.id, e])) : null
+  const pricesFailed = !!prices.error
   const readyCount = evals ? open.filter(p => evals[p.id]?.should_buy_back).length : 0
   const expireCount = evals ? open.filter(p => evals[p.id]?.action === 'let_expire').length : 0
 
   // After any change to a call: reload trades and the portfolio (contracts in use, shares)
   const afterChange = () => {
     setClosingPos(null); setRollingPos(null); setEditingPos(null); setConfirm(null); setError(null)
+    forgetPriceChecks()
+    prices.refresh()
     reload()
     refreshTickers().catch(() => {})
   }
@@ -378,8 +372,8 @@ export default function Positions() {
   ].map(g => ({ ...g, calls: open.filter(p => groupOf(p) === g.key).sort(byExpiry) })).filter(g => g.calls.length > 0)
 
   const card = (p, onCollapse) => (
-    <PositionCard key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={prices.failed}
-      avgCost={avgCostOf(p)} asOf={priceAsOf(prices.meta)} onCollapse={onCollapse}
+    <PositionCard key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={pricesFailed}
+      avgCost={avgCostOf(p)} asOf={priceAsOf(prices.data)} onCollapse={onCollapse}
       onClose={setClosingPos} onRoll={setRollingPos} onEdit={setEditingPos} onDelete={askDelete} />
   )
 
@@ -406,10 +400,10 @@ export default function Positions() {
         title="Positions"
         actions={!fetched.failed && tickers.length > 0 && <>
           {open.length > 0 && <>
-            <button type="button" className="icon-btn md:hidden" onClick={() => setRefreshKey(k => k + 1)} disabled={checking} aria-label="Refresh prices">
+            <button type="button" className="icon-btn md:hidden" onClick={prices.refresh} disabled={checking} aria-label="Refresh prices">
               {checking ? <Spinner /> : <RefreshCw size={19} strokeWidth={1.9} />}
             </button>
-            <button type="button" className="btn btn-secondary btn-sm hidden md:inline-flex" onClick={() => setRefreshKey(k => k + 1)} disabled={checking}>
+            <button type="button" className="btn btn-secondary btn-sm hidden md:inline-flex" onClick={prices.refresh} disabled={checking}>
               {checking ? <Spinner /> : <RefreshCw size={15} strokeWidth={2} />} Refresh prices
             </button>
           </>}
@@ -422,7 +416,7 @@ export default function Positions() {
         </>}
       />
 
-      {error && <p role="alert" className="mb-4 flex items-start gap-2 text-15 text-loss"><Dot tone="loss" className="mt-2" />{error}</p>}
+      {(error || prices.error) && <p role="alert" className="mb-4 flex items-start gap-2 text-15 text-loss"><Dot tone="loss" className="mt-2" />{error || prices.error}</p>}
 
       {fetched.failed && !loading ? <ServerDown onRetry={reload} /> : <>
       <AssignmentReview items={review} onChanged={(kind, p) => {
@@ -455,7 +449,7 @@ export default function Positions() {
             </EmptyState>
           ) : (
             <>
-              {evals && <PriceStamp meta={prices.meta} />}
+              {evals && <PriceStamp meta={prices.data} />}
               {evals && readyCount === 0 && (
                 <p className="mt-3 text-15 text-fg-2">
                   {expireCount > 0
@@ -477,7 +471,7 @@ export default function Positions() {
                       )}
                       <ul>
                         {g.calls.filter(p => !expanded.has(p.id)).map(p => (
-                          <CallRow key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={prices.failed}
+                          <CallRow key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={pricesFailed}
                             onExpand={() => toggleExpanded(p.id)} />
                         ))}
                       </ul>

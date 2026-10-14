@@ -20,7 +20,7 @@ export default function PriceStamp({ meta, className = '' }) {
     ? `Trading just opened. Prices are 15 minutes behind, so these are last-close prices until ${time(meta.quotes_live_at)}.`
     : !meta.market_open
       ? `Market closed · last-close prices${meta.next_market_open ? ` until ${opens(meta.next_market_open)}` : ''}`
-      : `Prices checked ${time(meta.checked_at)}${meta.data_source === 'yahoo' ? ' from Yahoo (Cboe was unavailable)' : ''} · quotes run about 15 minutes behind`
+      : `Prices checked ${time(meta.checked_at)}${meta.data_source === 'yahoo' ? ' from Yahoo (Cboe was unavailable)' : ''}, again every 5 minutes · quotes run about 15 minutes behind`
   return (
     <p className={`flex items-center gap-2 text-12 text-muted ${className}`}>
       <Dot tone={meta.market_open && !meta.quotes_live_at ? 'accent' : undefined} />{text}

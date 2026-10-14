@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from sqlalchemy import update
 
 from core import db
+from core import positions as core_positions
 from conftest import CLOSES
 
 
@@ -33,6 +34,7 @@ def _expire(pid, days_ago=3):
     day = (date.today() - timedelta(days=days_ago)).isoformat()
     with db.get_engine().begin() as conn:
         conn.execute(update(db.positions).where(db.positions.c.id == pid).values(expiry=day))
+    core_positions._calls_changed()   # changed behind the app's back: check for expired calls again
     return day
 
 

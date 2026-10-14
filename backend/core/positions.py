@@ -5,6 +5,9 @@ Stores your covered call positions (open and closed) in the database
 """
 
 from __future__ import annotations
+
+import threading
+import time
 from collections import defaultdict
 
 from sqlalchemy import and_, delete, func, insert, or_, select, update
@@ -25,22 +28,45 @@ class CoverageError(PositionError):
     """Saving these calls would sell more contracts than your shares cover."""
 
 
-def expire_finished_positions() -> int:
+# expire_finished_positions() runs before every read. Its UPDATE is skipped when
+# it already ran for the same cutoff (the date, and whether today's close has
+# passed) within EXPIRE_EVERY seconds and no call was saved or reopened since.
+# The time limit covers changes made by another server process.
+EXPIRE_EVERY = 60
+_last_expire: dict = {"engine": None, "cutoff": None, "at": 0.0}
+_expire_lock = threading.Lock()
+
+
+def _calls_changed() -> None:
+    """A call was saved or reopened (it may already be past expiry): check again on the next read."""
+    with _expire_lock:
+        _last_expire["cutoff"] = None
+
+
+def expire_finished_positions(*, force: bool = False) -> int:
     """
     Mark OPEN calls whose expiry has passed (4pm New York on expiry day) as
     EXPIRED, closed on their expiry date with nothing paid to close.
-    Returns how many were updated.
+    Returns how many were updated (0 when skipped, see EXPIRE_EVERY).
     """
     today = market_today()
-    past = positions.c.expiry < today
-    if has_expired(today):            # after today's close, today's expiries are done too
-        past = positions.c.expiry <= today
-    with get_engine().begin() as conn:
+    after_close = has_expired(today)  # after today's close, today's expiries are done too
+    engine = get_engine()
+    cutoff = (today, after_close)
+    with _expire_lock:
+        last = _last_expire
+        if (not force and last["engine"] is engine and last["cutoff"] == cutoff
+                and time.monotonic() - last["at"] < EXPIRE_EVERY):
+            return 0
+    past = positions.c.expiry <= today if after_close else positions.c.expiry < today
+    with engine.begin() as conn:
         result = conn.execute(
             update(positions)
             .where(and_(positions.c.status == "OPEN", past))
             .values(status="EXPIRED", closed_at=positions.c.expiry, close_cost=0.0)
         )
+    with _expire_lock:
+        _last_expire.update(engine=engine, cutoff=cutoff, at=time.monotonic())
     return result.rowcount
 
 
@@ -164,7 +190,9 @@ def save_positions(
         return []
     expire_finished_positions()   # calls that have expired no longer use up shares
     with get_engine().begin() as conn:
-        return _insert_positions(conn, planned, opened_at or local_today(), income_weight)
+        ids = _insert_positions(conn, planned, opened_at or local_today(), income_weight)
+    _calls_changed()
+    return ids
 
 
 def _money(v: float | None) -> float | None:
@@ -215,7 +243,9 @@ def roll_position(
             update(positions).where(positions.c.id == position_id)
             .values(status="CLOSED", closed_at=today, close_cost=_money(close_cost), close_fees=_money(close_fees))
         )
-        return _insert_positions(conn, [new_call], today, None, rolled_from=position_id)[0]
+        new_id = _insert_positions(conn, [new_call], today, None, rolled_from=position_id)[0]
+    _calls_changed()
+    return new_id
 
 
 def assign_position(position_id: int, assigned_on: str | None = None) -> dict | None:
@@ -391,9 +421,10 @@ def undo_position(position_id: int) -> dict | None:
             update(positions).where(positions.c.id == position_id)
             .values(status="OPEN", closed_at=None, close_cost=None, close_fees=None)
         )
+    _calls_changed()
     status = "OPEN"
     if has_expired(pos["expiry"]):
-        expire_finished_positions()       # it had already expired: close it out properly
+        expire_finished_positions(force=True)   # it had already expired: close it out properly
         status = "EXPIRED"
     return {"undone": position_id, "status": status, "removed": child["id"] if child is not None else None,
             "shares_returned": 0}

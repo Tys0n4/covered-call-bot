@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRight, Check, Layers, Pencil, Plus, ScanLine } from 'lucide-react'
-import { getPortfolio, getAllPositions, getAssignmentReview, getManagement, getPerformance, getStrategy, getUpcoming } from '../api/client'
+import { getAssignmentReview, getOpenPositions, getPerformance, getUpcoming } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import { usePageTitle } from '../components/PageHeader'
@@ -16,6 +16,8 @@ import { DashboardSkeleton } from '../components/Skeleton'
 import { Bone, Dot, MarketStatus, Spinner, Stat } from '../components/ui'
 import { daysUntil, fmtDate, money, plural } from '../lib/format'
 import { againstYou } from '../lib/pnl'
+import { usePriceCheck } from '../lib/usePriceCheck'
+import { useStrategy } from '../lib/useStrategy'
 
 // First visit: what the app does, in three steps, and the one thing to do now
 function GettingStarted({ onAdd }) {
@@ -184,56 +186,44 @@ export default function Dashboard() {
   usePageTitle('Home')
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const { selectTicker, applyPortfolio } = useTicker()
+  // Your stocks come from the shared list (refreshed on every visit), the strategy from its shared copy
+  const { tickers: portfolio, loaded: portfolioLoaded, loadError: portfolioFailed, selectTicker, applyPortfolio, refresh: refreshPortfolio } = useTicker()
+  const strategy = useStrategy()
   const toast = useToast()
   // null | 'new' | a holding row; /?add=1 (from Scanner or Positions) opens 'Add a stock'
   const [editing,      setEditing]      = useState(() => (params.get('add') === '1' ? 'new' : null))
-  const [portfolio,    setPortfolio]    = useState([])
-  const [positions,    setPositions]    = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [loadFailed,   setLoadFailed]   = useState(false)
   const [reloadKey,    setReloadKey]    = useState(0)
+  const [openCalls,    setOpenCalls]    = useState({ key: -1, list: [], failed: false })
   const [reviewCount,  setReviewCount]  = useState(0)   // expired calls that may have been assigned
-  const [readyIds,     setReadyIds]     = useState(null) // ids of calls ready to buy back (null = not checked yet)
-  const [priceMeta,    setPriceMeta]    = useState(null) // when those prices were checked
-  const [evals,        setEvals]        = useState({})   // price check per open call, by id
-  const [goal,         setGoal]         = useState(0)    // monthly goal, 0 = off
   const [perf,         setPerf]         = useState(null) // /performance: finished calls for the chart
   const [upcoming,     setUpcoming]     = useState(null) // Fed decisions and earnings ahead
-  const [eventPct,     setEventPct]     = useState(null) // buy-back target before an event
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([getPortfolio(), getAllPositions()])
-      .then(([portRes, posRes]) => {
-        if (cancelled) return
-        setPortfolio(portRes.data)
-        setPositions(posRes.data.filter(p => p.status === 'OPEN'))
-        setLoadFailed(false)
-        applyPortfolio(portRes.data)
-      })
-      .catch(() => { if (!cancelled) setLoadFailed(true) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+    refreshPortfolio({ maxAge: 30000 }).catch(() => {})
+    getOpenPositions()
+      .then(r => { if (!cancelled) setOpenCalls({ key: reloadKey, list: r.data, failed: false }) })
+      .catch(() => { if (!cancelled) setOpenCalls({ key: reloadKey, list: [], failed: true }) })
     getAssignmentReview()
       .then(r => { if (!cancelled) setReviewCount(r.data.length) })
       .catch(() => {})
-    // Live option prices are slower, so they fill in after the page shows
-    getManagement()
-      .then(r => { if (!cancelled) { setReadyIds(new Set(r.data.positions.filter(e => e.should_buy_back).map(e => e.id))); setEvals(Object.fromEntries(r.data.positions.map(e => [e.id, e]))); setPriceMeta(r.data) } })
-      .catch(() => {})
-    Promise.all([getStrategy(), getPerformance()])
-      .then(([st, pf]) => {
-        if (cancelled) return
-        setEventPct(st.data.event_buyback_pct)
-        setGoal(st.data.monthly_goal > 0 ? st.data.monthly_goal : 0)
-        setPerf(pf.data)
-      })
-      .catch(() => {})
+    getPerformance().then(r => { if (!cancelled) setPerf(r.data) }).catch(() => {})
     getUpcoming().then(r => { if (!cancelled) setUpcoming(r.data) }).catch(() => {})
     return () => { cancelled = true }
-  }, [reloadKey, applyPortfolio])
+  }, [reloadKey, refreshPortfolio])
 
-  const retry = () => { setLoading(true); setReloadKey(k => k + 1) }
+  const positions  = openCalls.list
+  const loading    = openCalls.key !== reloadKey || !portfolioLoaded
+  const loadFailed = openCalls.failed || (portfolioFailed && portfolio.length === 0)
+  const retry = () => setReloadKey(k => k + 1)
+  const goal     = strategy?.monthly_goal > 0 ? strategy.monthly_goal : 0
+  const eventPct = strategy?.event_buyback_pct ?? null
+
+  // Live option prices are slower, so they fill in after the page shows (shared with Positions)
+  const prices    = usePriceCheck(loading ? [] : positions.map(p => p.id))
+  const priceMeta = prices.data
+  const evals     = useMemo(() => Object.fromEntries((prices.data?.positions || []).map(e => [e.id, e])), [prices.data])
+  const readyIds  = prices.data ? new Set(prices.data.positions.filter(e => e.should_buy_back).map(e => e.id)) : null
 
   // After opening fees, same as "Still open" on the Performance page
   const openPremium    = positions.reduce((s, p) => s + p.premium_total - (p.open_fees || 0), 0)
@@ -327,14 +317,13 @@ export default function Dashboard() {
 
   // The API returns the updated portfolio after every add/edit/remove
   const handleSaved = (rows, ticker) => {
-    setPortfolio(rows)
     applyPortfolio(rows)
     if (ticker && editing === 'new') selectTicker(ticker)
     toast(editing === 'new' ? `${ticker} added` : ticker ? `${ticker} updated` : `${editing.ticker} removed`)
     closeEditor()
   }
 
-  const checking = readyIds === null && positions.length > 0
+  const checking = prices.checking && !prices.data
   const nextStep = <NextStep items={todo} checking={checking} priceMeta={positions.length > 0 ? priceMeta : null} />
   const coming = <ComingUp items={comingUp} note={fedNote} warning={earningsWarning} />
   const yearly = perf?.summary?.annualized_return_pct

@@ -15,6 +15,7 @@ from pathlib import Path
 import requests
 import yfinance as yf
 from dotenv import load_dotenv
+from sqlalchemy import select
 
 from core import db
 from core.cboe import get_cboe_price
@@ -209,17 +210,52 @@ def get_dividend_yield(ticker_symbol: str, stock_price: float) -> float:
     return rate / stock_price if rate > 0 and stock_price > 0 else 0.0
 
 
+def _yahoo_close(ticker_symbol: str, day: str) -> float | None:
+    try:
+        start = date.fromisoformat(day)
+        hist = yf.Ticker(ticker_symbol).history(start=start.isoformat(), end=(start + timedelta(days=1)).isoformat())
+        closes = hist["Close"].dropna() if not hist.empty else []
+        return float(closes.iloc[-1]) if len(closes) else None
+    except Exception as e:
+        log.warning("Yahoo close for %s on %s failed: %s", ticker_symbol, day, e)
+        return None
+
+
+def _saved_close(ticker_symbol: str, day: str) -> float | None:
+    try:
+        with db.get_engine().connect() as c:
+            return c.execute(
+                select(db.daily_closes.c.close)
+                .where(db.daily_closes.c.ticker == ticker_symbol, db.daily_closes.c.day == day)
+            ).scalar()
+    except Exception as e:
+        log.warning("Reading %s's saved close on %s failed: %s", ticker_symbol, day, e)
+        return None
+
+
+def _save_close(ticker_symbol: str, day: str, close: float) -> None:
+    try:
+        with db.get_engine().begin() as c:
+            c.execute(db.daily_closes.delete().where(db.daily_closes.c.ticker == ticker_symbol, db.daily_closes.c.day == day))
+            c.execute(db.daily_closes.insert().values(ticker=ticker_symbol, day=day, close=close))
+    except Exception as e:
+        log.warning("Saving %s's close on %s failed: %s", ticker_symbol, day, e)
+
+
 def get_close_on(ticker_symbol: str, day: str) -> float | None:
-    """The stock's closing price on a past trading day (YYYY-MM-DD), or None."""
+    """
+    The stock's closing price on a past trading day (YYYY-MM-DD), or None.
+    Once Yahoo gives a finished day's close it's saved in the database, so it
+    isn't downloaded again after a restart. Today's isn't saved: it can still change.
+    """
     def fetch():
-        try:
-            start = date.fromisoformat(day)
-            hist = yf.Ticker(ticker_symbol).history(start=start.isoformat(), end=(start + timedelta(days=1)).isoformat())
-            closes = hist["Close"].dropna() if not hist.empty else []
-            return float(closes.iloc[-1]) if len(closes) else None
-        except Exception as e:
-            log.warning("Yahoo close for %s on %s failed: %s", ticker_symbol, day, e)
-            return None
+        saved = _saved_close(ticker_symbol, day)
+        if saved is not None:
+            return saved
+        close = _yahoo_close(ticker_symbol, day)
+        if close is not None and day < market_today():
+            _save_close(ticker_symbol, day, close)
+        return close
     return cached(("close", ticker_symbol, day), CLOSE_TTL, fetch)
 
 

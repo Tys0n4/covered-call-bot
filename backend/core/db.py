@@ -89,6 +89,15 @@ known_events = Table(
     Column("checked_at",       String(25), nullable=False),   # when Yahoo last answered
 )
 
+# A stock's close on a past day (the day shares were called away, an expiry
+# day), saved once Yahoo gives it: a finished day's close never changes
+daily_closes = Table(
+    "daily_closes", metadata,
+    Column("ticker", String(12), primary_key=True),
+    Column("day",    String(10), primary_key=True),
+    Column("close",  Float, nullable=False),
+)
+
 
 def database_url() -> str:
     """DATABASE_URL if set (normalized for SQLAlchemy + psycopg), else the local SQLite file."""
