@@ -134,8 +134,10 @@ def fresh_db(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_password(monkeypatch):
+    from api import auth
     monkeypatch.delenv("APP_PASSWORD", raising=False)
     monkeypatch.delenv("AUTH_SECRET", raising=False)
+    auth._failures.clear()
 
 
 @pytest.fixture

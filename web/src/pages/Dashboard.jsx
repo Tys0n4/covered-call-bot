@@ -284,7 +284,7 @@ export default function Dashboard() {
     title: `${plural(unsold.reduce((s, t) => s + t.available, 0), 'contract')} free on ${unsold.length} stocks`,
     body: unsold.map(t => `${t.ticker} ${t.available}`).join(' · '),
     more: 'Scan them all at once for the recommended trade on each.',
-    cta: { label: 'Scan all', onClick: () => navigate('/scanner?all=1') },
+    cta: { label: 'Scan all', onClick: () => navigate('/scanner?all=1&go=1') },
   })
   else unsold.forEach(t => todo.push({
     key: `unsold-${t.ticker}`,

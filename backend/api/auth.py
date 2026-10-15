@@ -10,6 +10,11 @@ one derived from the password, so changing the password logs everyone out).
 
 When APP_PASSWORD is not set the API stays open (handy for local development)
 and a warning is logged at startup.
+
+After MAX_FAILURES wrong passwords within LOCKOUT_SECONDS, logins are refused
+(429) until the oldest of them is that old. It's one limit for everyone: behind
+Railway's proxy every request comes from the same address. Devices already
+logged in keep working, since their tokens are still valid.
 """
 from __future__ import annotations
 
@@ -17,8 +22,11 @@ import base64
 import hashlib
 import hmac
 import logging
+import math
 import os
+import threading
 import time
+from collections import deque
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -27,6 +35,21 @@ from pydantic import BaseModel
 log = logging.getLogger(__name__)
 
 TOKEN_DAYS = float(os.environ.get("AUTH_TOKEN_DAYS", "30"))
+
+MAX_FAILURES = 10
+LOCKOUT_SECONDS = 15 * 60
+_failures: deque[float] = deque()     # when each recent wrong password was tried
+_failures_lock = threading.Lock()
+
+
+def _locked_for(now: float) -> int:
+    """Seconds until a login may be tried again (0: now)."""
+    with _failures_lock:
+        while _failures and now - _failures[0] >= LOCKOUT_SECONDS:
+            _failures.popleft()
+        if len(_failures) < MAX_FAILURES:
+            return 0
+        return math.ceil(LOCKOUT_SECONDS - (now - _failures[0]))
 
 
 def _password() -> str:
@@ -106,9 +129,23 @@ def login(body: LoginRequest):
     if not auth_required():
         token, expires = make_token()
         return LoginResponse(token=token, expires_at=expires)
+    now = time.time()
+    wait = _locked_for(now)
+    if wait:
+        minutes = math.ceil(wait / 60)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many wrong passwords. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
+            headers={"Retry-After": str(wait)},
+        )
     if not hmac.compare_digest(body.password.encode(), _password().encode()):
+        with _failures_lock:
+            _failures.append(now)
+        log.warning("Wrong password at login")
         time.sleep(1)  # slow down password guessing
         raise HTTPException(status_code=401, detail="Wrong password.")
+    with _failures_lock:
+        _failures.clear()
     token, expires = make_token()
     return LoginResponse(token=token, expires_at=expires)
 

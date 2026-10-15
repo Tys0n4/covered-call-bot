@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { daysUntil, fmtDate, money, pct, plural, signedMoney, strike } from './format'
+import { daysUntil, fmtDate, marketToday, money, pct, plural, signedMoney, strike } from './format'
 
 describe('money', () => {
   it('formats dollars and cents', () => {
@@ -35,5 +35,17 @@ describe('dates', () => {
     expect(daysUntil('2026-10-14')).toBe(0)
     expect(daysUntil('2026-10-30')).toBe(16)
     expect(daysUntil('2026-10-13')).toBe(-1)
+  })
+})
+
+describe('the market date', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it("is New York's date, not this computer's", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-15T05:00:00Z'))       // 11 pm Oct 14 in Alberta, 1 am Oct 15 in New York
+    expect(marketToday()).toBe('2026-10-15')
+    expect(daysUntil('2026-10-15')).toBe(0)                    // expires today, as the API says
+    expect(daysUntil('2026-10-16')).toBe(1)
   })
 })
