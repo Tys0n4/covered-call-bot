@@ -5,13 +5,8 @@ import { apiError, rollPosition } from '../../api/client'
 import Modal, { DialogHead } from './Modal'
 import { Field, MoneyField, Spinner, UseHint } from '../ui'
 import { useStrategy, chargesCommission } from '../../lib/useStrategy'
-import { fmtDate, money, plural, strike as strikeLabel } from '../../lib/format'
+import { fmtDate, marketToday, money, plural, strike as strikeLabel } from '../../lib/format'
 import { contractsTotal, moneyValue, usualFees } from '../../lib/pnl'
-
-const todayIso = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 const Step = ({ n, children }) => (
   <h3 className="mt-6 flex items-center gap-2.5 text-15 font-semibold">
@@ -44,7 +39,7 @@ export default function RollModal({ position: p, evaluation, prefill = null, onD
 
   const errors = {
     buy:       buy == null ? 'Enter the price you bought it back at' : null,
-    expiry:    !expiry ? 'Pick the new expiry' : expiry <= todayIso() ? 'Must be after today' : null,
+    expiry:    !expiry ? 'Pick the new expiry' : expiry <= marketToday() ? 'Must be after today' : null,
     strike:    !(strike > 0) ? 'Enter the new strike' : null,
     contracts: !(contracts >= 1) ? 'At least 1' : null,
     fill:      fill == null ? 'Enter the price you sold it at' : null,
@@ -92,7 +87,7 @@ export default function RollModal({ position: p, evaluation, prefill = null, onD
 
       <Step n={2}>The new call you sold</Step>
       <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4">
-        <Field id="roll-expiry" label="New expiry" type="date" min={todayIso()} value={expiry} onChange={e => setExpiry(e.target.value)} error={show('expiry')} />
+        <Field id="roll-expiry" label="New expiry" type="date" min={marketToday()} value={expiry} onChange={e => setExpiry(e.target.value)} error={show('expiry')} />
         <MoneyField id="roll-strike" label="New strike" value={strikeText} onChange={setStrike} error={show('strike')} />
         <Field id="roll-contracts" label="Contracts" type="text" inputMode="numeric" value={contractsText}
           onChange={e => setContracts(e.target.value.replace(/[^0-9]/g, ''))} error={show('contracts')} />

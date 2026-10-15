@@ -1,5 +1,5 @@
 // src/pages/Scanner.jsx — find a covered call to sell on one of your stocks
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowRight, Check, RefreshCw, RotateCcw, ScanLine } from 'lucide-react'
 import { runScan, runScanAll, savePositions, apiError } from '../api/client'
@@ -115,12 +115,14 @@ const wide = () => window.matchMedia?.('(min-width: 768px)').matches
 export default function Scanner() {
   usePageTitle('Scanner')
   const { selected, tickers, selectTicker, loaded, loadError, refresh } = useTicker()
-  const [params] = useSearchParams()
-  // "All stocks" (from Home's "Scan all", /scanner?all=1) or one stock
+  const [params, setParams] = useSearchParams()
+  // "All stocks" (/scanner?all=1) or one stock. Home's "Scan all" adds go=1: scan right away,
+  // unless every stock was already scanned
   const [all, setAllState] = useState(() => params.get('all') === '1' || lastAll.on)
   const setAll = on => { lastAll.on = on; setAllState(on) }
   const [allScan, setAllScan] = useState(() => lastAll.scan)
-  const [allLoading, setAllLoading] = useState(false)
+  const [autoScan] = useState(() => params.get('go') === '1' && !lastAll.scan)
+  const [allLoading, setAllLoading] = useState(autoScan)
   const [form, setForm]       = useState(() => toForm(loadConfig()))   // boxes, exactly as typed
   const [scan, setScan]       = useState(() => lastScans.get(selected) || null)
   const [loading, setLoading] = useState(false)
@@ -180,20 +182,27 @@ export default function Scanner() {
     }
   }
 
-  const handleScanAll = async () => {
-    if (!filtersValid) return
-    setAllLoading(true); setError(null)
-    try {
-      const res = await runScanAll(config)
+  const scanAll = () => runScanAll(config)
+    .then(res => {
       const next = { data: res.data, at: new Date().toISOString() }
       lastAll.scan = next
       setAllScan(next)
-    } catch (e) {
-      setError(apiError(e, 'Scan failed. Is the API running?'))
-    } finally {
-      setAllLoading(false)
-    }
+    })
+    .catch(e => setError(apiError(e, 'Scan failed. Is the API running?')))
+    .finally(() => setAllLoading(false))
+  const handleScanAll = () => {
+    if (!filtersValid) return
+    setAllLoading(true); setError(null)
+    scanAll()
   }
+  // Arriving from Home's "Scan all": start now (once), and drop go=1 so a reload doesn't scan again
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!autoScan || autoStarted.current) return
+    autoStarted.current = true
+    scanAll()
+    setParams({ all: '1' }, { replace: true })
+  }, [autoScan]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // From "All stocks" to one stock's full scan, already loaded (unless you've scanned it since)
   const review = item => {
@@ -269,7 +278,7 @@ export default function Scanner() {
       {allLoading ? (
         <div className="flex items-center gap-4 rounded-card bg-surface p-6" role="status">
           <Spinner className="h-6 w-6 text-accent" />
-          <div><div className="text-17 font-semibold">Checking {plural(freeStocks.length, 'stock')}…</div><div className="text-13 text-muted">A few at a time. This usually takes 15–45 seconds.</div></div>
+          <div><div className="text-17 font-semibold">Checking {plural(freeStocks.length, 'stock')}…</div><div className="text-13 text-muted">Up to four at a time. This usually takes 5–20 seconds.</div></div>
         </div>
       ) : allScan ? (
         <ScanAll data={allScan.data} tickers={tickers} onReview={review} />
@@ -357,7 +366,7 @@ export default function Scanner() {
             {loading && (
               <div className="mt-10 flex items-center gap-4 rounded-card bg-surface p-6" role="status">
                 <Spinner className="h-6 w-6 text-accent" />
-                <div><div className="text-17 font-semibold">Checking {selected} options…</div><div className="text-13 text-muted">This usually takes 15–30 seconds.</div></div>
+                <div><div className="text-17 font-semibold">Checking {selected} options…</div><div className="text-13 text-muted">This usually takes 5–10 seconds.</div></div>
               </div>
             )}
 

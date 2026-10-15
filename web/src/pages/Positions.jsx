@@ -27,7 +27,7 @@ import ConfirmDialog from '../components/dialogs/ConfirmDialog'
 import PriceStamp, { priceAsOf } from '../components/PriceStamp'
 import InfoTip from '../components/InfoTip'
 import { Dot, KeptBar, Segmented, Spinner } from '../components/ui'
-import { fmtDate, daysUntil, money, plural, signedMoney, strike } from '../lib/format'
+import { fmtDate, daysUntil, marketToday, money, plural, signedMoney, strike } from '../lib/format'
 import { againstYou, keptPct, optionNet, resultLabel } from '../lib/pnl'
 import { TERMS } from '../lib/terms'
 
@@ -382,7 +382,7 @@ export default function Positions() {
   const askUndo = p => {
     const rolled = rolledIds.has(p.id)
     const what = p.status === 'ASSIGNED'
-      ? <>Your {(p.contracts * 100).toLocaleString()} {p.ticker} shares go back into your holding and the call returns to {p.expiry < new Date().toISOString().slice(0, 10) ? 'expired' : 'open'}.</>
+      ? <>Your {(p.contracts * 100).toLocaleString()} {p.ticker} shares go back into your holding and the call returns to {p.expiry < marketToday() ? 'expired' : 'open'}.</>
       : rolled ? <>The new call from this roll is removed and this {strike(p.strike)} call is open again.</>
         : <>The {p.ticker} {strike(p.strike)} call is open again and its buyback cost is cleared.</>
     setConfirm({

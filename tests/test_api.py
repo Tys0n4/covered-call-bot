@@ -234,3 +234,27 @@ def test_scan_explains_when_every_expiry_spans_earnings(client, nvda):
     scan = client.post("/scan", json={"ticker": "NVDA", "avoid_earnings": True}).json()
     assert scan["candidates"] == []
     assert any("Every option in your expiry window" in w for w in scan["warnings"])
+
+
+def test_too_many_wrong_passwords_lock_logins_for_a_while(client, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "hunter2")
+    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
+    clock = [1_000_000.0]
+    monkeypatch.setattr(auth.time, "time", lambda: clock[0])
+    for _ in range(auth.MAX_FAILURES):
+        assert client.post("/auth/login", json={"password": "nope"}).status_code == 401
+    locked = client.post("/auth/login", json={"password": "hunter2"})        # even the right one, for now
+    assert locked.status_code == 429
+    assert locked.json()["detail"] == "Too many wrong passwords. Try again in 15 minutes."
+    assert locked.headers["Retry-After"] == str(auth.LOCKOUT_SECONDS)
+    clock[0] += auth.LOCKOUT_SECONDS
+    assert client.post("/auth/login", json={"password": "hunter2"}).status_code == 200
+
+
+def test_a_right_password_clears_earlier_mistakes(client, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "hunter2")
+    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
+    for _ in range(auth.MAX_FAILURES - 1):
+        client.post("/auth/login", json={"password": "nope"})
+    assert client.post("/auth/login", json={"password": "hunter2"}).status_code == 200
+    assert client.post("/auth/login", json={"password": "nope"}).status_code == 401   # not locked
