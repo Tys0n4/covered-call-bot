@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from conftest import EVENTS, INFO
+from conftest import EVENTS, INFO, fake_expiries
 from core import rolls
 from core.buyback import early_exercise_risk
 from core.market_hours import market_today, previous_trading_day
@@ -15,9 +15,13 @@ def _day(n: int) -> str:
 
 @pytest.fixture
 def call(client, nvda, monkeypatch):
-    """2 NVDA $110 calls expiring in 7 days (the fake market lists 7, 25, 32 and 60 days out)."""
+    """
+    2 NVDA $110 calls on the fake market's nearest expiry, about a week out (it lists
+    7, 25, 32 and 60 days from the machine's date). Its own dates, not ones worked out
+    here: between 8 pm and midnight in New York, a runner's UTC date is a day ahead.
+    """
     monkeypatch.setattr(rolls, "delayed_quotes_live", lambda: True)
-    r = client.post("/positions", json=dict(ticker="NVDA", expiry=_day(7), strike=110, contracts=2,
+    r = client.post("/positions", json=dict(ticker="NVDA", expiry=fake_expiries()[0], strike=110, contracts=2,
                                             entry_price=0.50, allocation_type="Income"))
     assert r.status_code == 201, r.text
     return client.get("/positions").json()[0]["id"]
@@ -40,7 +44,7 @@ def test_rolls_go_up_and_out_for_a_credit(client, call, monkeypatch):
         assert r["net_total"] > 0
         assert r["net_total"] == pytest.approx((r["price"] - 1.00) * 200, abs=0.02)
         assert r["strike_gain"] == pytest.approx((r["strike"] - 110) * 200)
-        assert r["expiry"] == _day(25)                 # the soonest later expiry that pays
+        assert r["expiry"] == fake_expiries()[1]       # the soonest later expiry that pays
         assert r["delta"] is not None
 
 
