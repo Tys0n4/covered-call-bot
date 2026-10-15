@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRight, Check, Layers, Pencil, Plus, ScanLine } from 'lucide-react'
-import { getAssignmentReview, getOpenPositions, getPerformance, getUpcoming } from '../api/client'
+import { getAlerts, getAssignmentReview, getOpenPositions, getPerformance, getUpcoming } from '../api/client'
 import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import { usePageTitle } from '../components/PageHeader'
@@ -197,6 +197,7 @@ export default function Dashboard() {
   const [reviewCount,  setReviewCount]  = useState(0)   // expired calls that may have been assigned
   const [perf,         setPerf]         = useState(null) // /performance: finished calls for the chart
   const [upcoming,     setUpcoming]     = useState(null) // Fed decisions and earnings ahead
+  const [alertsState,  setAlertsState]  = useState(null) // Discord alerts: stopped, or failing?
 
   useEffect(() => {
     let cancelled = false
@@ -209,6 +210,7 @@ export default function Dashboard() {
       .catch(() => {})
     getPerformance().then(r => { if (!cancelled) setPerf(r.data) }).catch(() => {})
     getUpcoming().then(r => { if (!cancelled) setUpcoming(r.data) }).catch(() => {})
+    getAlerts().then(r => { if (!cancelled) setAlertsState(r.data) }).catch(() => {})
     return () => { cancelled = true }
   }, [reloadKey, refreshPortfolio])
 
@@ -291,6 +293,13 @@ export default function Dashboard() {
     more: 'The Scanner finds one that fits your rules.',
     cta: { label: `Scan ${t.ticker}`, onClick: () => go(t.ticker, '/scanner') },
   }))
+  // Discord alerts that have quietly stopped working
+  if (alertsState?.enabled && (alertsState.last_error || alertsState.check_overdue)) todo.push({
+    key: 'alerts', tone: 'amber',
+    title: alertsState.last_error ? "Discord alerts aren't getting through" : 'Discord alerts have stopped checking',
+    body: alertsState.last_error ? alertsState.last_error : 'The scheduled check hasn\'t run lately, so no alerts can be sent.',
+    cta: { label: 'Check', onClick: () => navigate('/strategy') },
+  })
   if (expiring.length > 0) todo.push({
     key: 'expiring',
     title: `${plural(expiring.length, 'call')} ${expiring.length === 1 ? 'expires' : 'expire'} within a week`,

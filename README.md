@@ -97,7 +97,7 @@ Server settings (set these on Railway, or export them locally):
 | `AUTH_TOKEN_DAYS` | Optional. How long a login lasts (default 30). |
 | `DATABASE_URL`    | Postgres connection string. Leave unset to use a local SQLite file. |
 | `APP_TIMEZONE`    | Time zone for trade dates (default `America/Edmonton`). |
-| `ALERTS_KEY`      | Optional. Lets a scheduler run the buy-back alert check; see [Buy-back alerts](docs/how-it-works.md#buy-back-alerts-discord). |
+| `ALERTS_KEY`      | Optional. Lets a scheduler run the alert check; see [Alerts](docs/how-it-works.md#alerts-discord). |
 
 </details>
 
