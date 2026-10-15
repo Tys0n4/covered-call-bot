@@ -27,3 +27,44 @@ def test_old_positions_table_gets_new_columns(tmp_path, monkeypatch):
     with engine.connect() as conn:
         row = conn.execute(db.positions.select()).mappings().one()
     assert row["premium_total"] == 200 and row["open_fees"] is None
+
+
+def _statements_on_start(monkeypatch):
+    """SQL run while the engine starts up (a server restart)."""
+    from sqlalchemy import event
+    seen = []
+    real = db.create_engine
+
+    def counting(*a, **k):
+        engine = real(*a, **k)
+        event.listen(engine, "before_cursor_execute", lambda *x, **y: seen.append(x[2]))
+        return engine
+    monkeypatch.setattr(db, "create_engine", counting)
+    db._engine.dispose()
+    monkeypatch.setattr(db, "_engine", None)
+    db.get_engine()
+    return seen
+
+
+def test_a_restart_only_checks_the_schema_fingerprint(monkeypatch):
+    db.get_engine()                                  # first start: sets everything up
+    seen = _statements_on_start(monkeypatch)
+    assert len(seen) == 1 and "schema_info" in seen[0]
+
+
+def test_a_changed_schema_is_set_up_again(monkeypatch):
+    from sqlalchemy import text, update
+    engine = db.get_engine()
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE daily_closes"))
+        conn.execute(update(db.schema_info).values(fingerprint="from an older version"))
+    _statements_on_start(monkeypatch)
+    assert "daily_closes" in inspect(db.get_engine()).get_table_names()
+    with db.get_engine().connect() as conn:
+        assert conn.execute(db.schema_info.select()).mappings().one()["fingerprint"] == db.schema_fingerprint()
+
+
+def test_startup_warm_up_connects():
+    from api.main import _warm_up
+    _warm_up()
+    assert db._engine is not None

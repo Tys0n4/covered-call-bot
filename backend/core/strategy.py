@@ -16,6 +16,8 @@ Until you save something, the defaults from config.py are used.
 from __future__ import annotations
 
 import math
+import threading
+import time
 from dataclasses import replace
 
 from sqlalchemy import insert, select, update
@@ -28,6 +30,18 @@ FIELDS = (
     "delta_min", "delta_max", "min_dte", "max_dte", "event_buyback_pct", "commission_per_contract",
 )
 INT_FIELDS = ("min_dte", "max_dte")
+
+# Most requests read the strategy (a scan several times) and it only changes through
+# save_strategy(), so it's kept in memory. The time limit covers a change made by
+# another server process.
+STRATEGY_TTL = 60
+_kept: dict = {"engine": None, "at": 0.0, "value": None}
+_kept_lock = threading.Lock()
+
+
+def _keep(engine, value: dict) -> None:
+    with _kept_lock:
+        _kept.update(engine=engine, at=time.monotonic(), value=dict(value))
 
 
 def default_strategy() -> dict:
@@ -51,20 +65,28 @@ def _clean(values: dict) -> dict:
 
 def load_strategy() -> dict:
     """Saved strategy; anything not saved yet (or added after you saved) uses the default."""
-    with get_engine().connect() as conn:
+    engine = get_engine()
+    with _kept_lock:
+        if _kept["engine"] is engine and time.monotonic() - _kept["at"] < STRATEGY_TTL:
+            return dict(_kept["value"])
+    with engine.connect() as conn:
         row = conn.execute(select(strategy).where(strategy.c.id == 1)).mappings().first()
     out = default_strategy()
     if row is not None:
         out.update({k: row[k] for k in FIELDS if row[k] is not None})
-    return _clean(out)
+    value = _clean(out)
+    _keep(engine, value)
+    return value
 
 
 def save_strategy(values: dict) -> dict:
     """Save the strategy; fields left out keep their saved (or default) value. Returns what's stored."""
     row = _clean({**load_strategy(), **{k: v for k, v in values.items() if k in FIELDS and v is not None}})
-    with get_engine().begin() as conn:
+    engine = get_engine()
+    with engine.begin() as conn:
         if conn.execute(update(strategy).where(strategy.c.id == 1).values(**row)).rowcount == 0:
             conn.execute(insert(strategy).values(id=1, **row))
+    _keep(engine, row)
     return row
 
 
