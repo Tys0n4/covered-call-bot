@@ -1,0 +1,1077 @@
+{
+ "_about": "Rules the API (Python) and the web app (JavaScript) both implement. tests/test_shared_rules.py and web/src/lib/strategy.test.js check each side against these cases.",
+ "buyback_prices": [
+  {
+   "entry": 0.0,
+   "target": 50,
+   "price": 0.0
+  },
+  {
+   "entry": 0.0,
+   "target": 65,
+   "price": 0.0
+  },
+  {
+   "entry": 0.0,
+   "target": 70,
+   "price": 0.0
+  },
+  {
+   "entry": 0.0,
+   "target": 75,
+   "price": 0.0
+  },
+  {
+   "entry": 0.0,
+   "target": 80,
+   "price": 0.0
+  },
+  {
+   "entry": 0.0,
+   "target": 85,
+   "price": 0.0
+  },
+  {
+   "entry": 0.0,
+   "target": 90,
+   "price": 0.0
+  },
+  {
+   "entry": 0.0,
+   "target": 95,
+   "price": 0.0
+  },
+  {
+   "entry": 0.01,
+   "target": 50,
+   "price": 0.01
+  },
+  {
+   "entry": 0.01,
+   "target": 65,
+   "price": 0.01
+  },
+  {
+   "entry": 0.01,
+   "target": 70,
+   "price": 0.01
+  },
+  {
+   "entry": 0.01,
+   "target": 75,
+   "price": 0.01
+  },
+  {
+   "entry": 0.01,
+   "target": 80,
+   "price": 0.01
+  },
+  {
+   "entry": 0.01,
+   "target": 85,
+   "price": 0.01
+  },
+  {
+   "entry": 0.01,
+   "target": 90,
+   "price": 0.01
+  },
+  {
+   "entry": 0.01,
+   "target": 95,
+   "price": 0.01
+  },
+  {
+   "entry": 0.05,
+   "target": 50,
+   "price": 0.02
+  },
+  {
+   "entry": 0.05,
+   "target": 65,
+   "price": 0.02
+  },
+  {
+   "entry": 0.05,
+   "target": 70,
+   "price": 0.01
+  },
+  {
+   "entry": 0.05,
+   "target": 75,
+   "price": 0.01
+  },
+  {
+   "entry": 0.05,
+   "target": 80,
+   "price": 0.01
+  },
+  {
+   "entry": 0.05,
+   "target": 85,
+   "price": 0.01
+  },
+  {
+   "entry": 0.05,
+   "target": 90,
+   "price": 0.01
+  },
+  {
+   "entry": 0.05,
+   "target": 95,
+   "price": 0.01
+  },
+  {
+   "entry": 0.1,
+   "target": 50,
+   "price": 0.05
+  },
+  {
+   "entry": 0.1,
+   "target": 65,
+   "price": 0.03
+  },
+  {
+   "entry": 0.1,
+   "target": 70,
+   "price": 0.03
+  },
+  {
+   "entry": 0.1,
+   "target": 75,
+   "price": 0.02
+  },
+  {
+   "entry": 0.1,
+   "target": 80,
+   "price": 0.02
+  },
+  {
+   "entry": 0.1,
+   "target": 85,
+   "price": 0.01
+  },
+  {
+   "entry": 0.1,
+   "target": 90,
+   "price": 0.01
+  },
+  {
+   "entry": 0.1,
+   "target": 95,
+   "price": 0.01
+  },
+  {
+   "entry": 0.3,
+   "target": 50,
+   "price": 0.15
+  },
+  {
+   "entry": 0.3,
+   "target": 65,
+   "price": 0.1
+  },
+  {
+   "entry": 0.3,
+   "target": 70,
+   "price": 0.09
+  },
+  {
+   "entry": 0.3,
+   "target": 75,
+   "price": 0.07
+  },
+  {
+   "entry": 0.3,
+   "target": 80,
+   "price": 0.06
+  },
+  {
+   "entry": 0.3,
+   "target": 85,
+   "price": 0.04
+  },
+  {
+   "entry": 0.3,
+   "target": 90,
+   "price": 0.03
+  },
+  {
+   "entry": 0.3,
+   "target": 95,
+   "price": 0.01
+  },
+  {
+   "entry": 0.33,
+   "target": 50,
+   "price": 0.16
+  },
+  {
+   "entry": 0.33,
+   "target": 65,
+   "price": 0.12
+  },
+  {
+   "entry": 0.33,
+   "target": 70,
+   "price": 0.1
+  },
+  {
+   "entry": 0.33,
+   "target": 75,
+   "price": 0.08
+  },
+  {
+   "entry": 0.33,
+   "target": 80,
+   "price": 0.07
+  },
+  {
+   "entry": 0.33,
+   "target": 85,
+   "price": 0.05
+  },
+  {
+   "entry": 0.33,
+   "target": 90,
+   "price": 0.03
+  },
+  {
+   "entry": 0.33,
+   "target": 95,
+   "price": 0.02
+  },
+  {
+   "entry": 0.34,
+   "target": 50,
+   "price": 0.17
+  },
+  {
+   "entry": 0.34,
+   "target": 65,
+   "price": 0.12
+  },
+  {
+   "entry": 0.34,
+   "target": 70,
+   "price": 0.1
+  },
+  {
+   "entry": 0.34,
+   "target": 75,
+   "price": 0.08
+  },
+  {
+   "entry": 0.34,
+   "target": 80,
+   "price": 0.07
+  },
+  {
+   "entry": 0.34,
+   "target": 85,
+   "price": 0.05
+  },
+  {
+   "entry": 0.34,
+   "target": 90,
+   "price": 0.03
+  },
+  {
+   "entry": 0.34,
+   "target": 95,
+   "price": 0.02
+  },
+  {
+   "entry": 0.38,
+   "target": 50,
+   "price": 0.19
+  },
+  {
+   "entry": 0.38,
+   "target": 65,
+   "price": 0.13
+  },
+  {
+   "entry": 0.38,
+   "target": 70,
+   "price": 0.11
+  },
+  {
+   "entry": 0.38,
+   "target": 75,
+   "price": 0.09
+  },
+  {
+   "entry": 0.38,
+   "target": 80,
+   "price": 0.08
+  },
+  {
+   "entry": 0.38,
+   "target": 85,
+   "price": 0.06
+  },
+  {
+   "entry": 0.38,
+   "target": 90,
+   "price": 0.04
+  },
+  {
+   "entry": 0.38,
+   "target": 95,
+   "price": 0.02
+  },
+  {
+   "entry": 0.5,
+   "target": 50,
+   "price": 0.25
+  },
+  {
+   "entry": 0.5,
+   "target": 65,
+   "price": 0.17
+  },
+  {
+   "entry": 0.5,
+   "target": 70,
+   "price": 0.15
+  },
+  {
+   "entry": 0.5,
+   "target": 75,
+   "price": 0.12
+  },
+  {
+   "entry": 0.5,
+   "target": 80,
+   "price": 0.1
+  },
+  {
+   "entry": 0.5,
+   "target": 85,
+   "price": 0.07
+  },
+  {
+   "entry": 0.5,
+   "target": 90,
+   "price": 0.05
+  },
+  {
+   "entry": 0.5,
+   "target": 95,
+   "price": 0.02
+  },
+  {
+   "entry": 0.7,
+   "target": 50,
+   "price": 0.35
+  },
+  {
+   "entry": 0.7,
+   "target": 65,
+   "price": 0.24
+  },
+  {
+   "entry": 0.7,
+   "target": 70,
+   "price": 0.21
+  },
+  {
+   "entry": 0.7,
+   "target": 75,
+   "price": 0.17
+  },
+  {
+   "entry": 0.7,
+   "target": 80,
+   "price": 0.14
+  },
+  {
+   "entry": 0.7,
+   "target": 85,
+   "price": 0.1
+  },
+  {
+   "entry": 0.7,
+   "target": 90,
+   "price": 0.07
+  },
+  {
+   "entry": 0.7,
+   "target": 95,
+   "price": 0.03
+  },
+  {
+   "entry": 1.0,
+   "target": 50,
+   "price": 0.5
+  },
+  {
+   "entry": 1.0,
+   "target": 65,
+   "price": 0.35
+  },
+  {
+   "entry": 1.0,
+   "target": 70,
+   "price": 0.3
+  },
+  {
+   "entry": 1.0,
+   "target": 75,
+   "price": 0.25
+  },
+  {
+   "entry": 1.0,
+   "target": 80,
+   "price": 0.2
+  },
+  {
+   "entry": 1.0,
+   "target": 85,
+   "price": 0.15
+  },
+  {
+   "entry": 1.0,
+   "target": 90,
+   "price": 0.1
+  },
+  {
+   "entry": 1.0,
+   "target": 95,
+   "price": 0.05
+  },
+  {
+   "entry": 1.23,
+   "target": 50,
+   "price": 0.61
+  },
+  {
+   "entry": 1.23,
+   "target": 65,
+   "price": 0.43
+  },
+  {
+   "entry": 1.23,
+   "target": 70,
+   "price": 0.37
+  },
+  {
+   "entry": 1.23,
+   "target": 75,
+   "price": 0.31
+  },
+  {
+   "entry": 1.23,
+   "target": 80,
+   "price": 0.25
+  },
+  {
+   "entry": 1.23,
+   "target": 85,
+   "price": 0.18
+  },
+  {
+   "entry": 1.23,
+   "target": 90,
+   "price": 0.12
+  },
+  {
+   "entry": 1.23,
+   "target": 95,
+   "price": 0.06
+  },
+  {
+   "entry": 2.48,
+   "target": 50,
+   "price": 1.24
+  },
+  {
+   "entry": 2.48,
+   "target": 65,
+   "price": 0.87
+  },
+  {
+   "entry": 2.48,
+   "target": 70,
+   "price": 0.74
+  },
+  {
+   "entry": 2.48,
+   "target": 75,
+   "price": 0.62
+  },
+  {
+   "entry": 2.48,
+   "target": 80,
+   "price": 0.5
+  },
+  {
+   "entry": 2.48,
+   "target": 85,
+   "price": 0.37
+  },
+  {
+   "entry": 2.48,
+   "target": 90,
+   "price": 0.25
+  },
+  {
+   "entry": 2.48,
+   "target": 95,
+   "price": 0.12
+  },
+  {
+   "entry": 3.3,
+   "target": 50,
+   "price": 1.65
+  },
+  {
+   "entry": 3.3,
+   "target": 65,
+   "price": 1.15
+  },
+  {
+   "entry": 3.3,
+   "target": 70,
+   "price": 0.99
+  },
+  {
+   "entry": 3.3,
+   "target": 75,
+   "price": 0.82
+  },
+  {
+   "entry": 3.3,
+   "target": 80,
+   "price": 0.66
+  },
+  {
+   "entry": 3.3,
+   "target": 85,
+   "price": 0.49
+  },
+  {
+   "entry": 3.3,
+   "target": 90,
+   "price": 0.33
+  },
+  {
+   "entry": 3.3,
+   "target": 95,
+   "price": 0.16
+  },
+  {
+   "entry": 5.0,
+   "target": 50,
+   "price": 2.5
+  },
+  {
+   "entry": 5.0,
+   "target": 65,
+   "price": 1.75
+  },
+  {
+   "entry": 5.0,
+   "target": 70,
+   "price": 1.5
+  },
+  {
+   "entry": 5.0,
+   "target": 75,
+   "price": 1.25
+  },
+  {
+   "entry": 5.0,
+   "target": 80,
+   "price": 1.0
+  },
+  {
+   "entry": 5.0,
+   "target": 85,
+   "price": 0.75
+  },
+  {
+   "entry": 5.0,
+   "target": 90,
+   "price": 0.5
+  },
+  {
+   "entry": 5.0,
+   "target": 95,
+   "price": 0.25
+  },
+  {
+   "entry": 10.1,
+   "target": 50,
+   "price": 5.05
+  },
+  {
+   "entry": 10.1,
+   "target": 65,
+   "price": 3.53
+  },
+  {
+   "entry": 10.1,
+   "target": 70,
+   "price": 3.03
+  },
+  {
+   "entry": 10.1,
+   "target": 75,
+   "price": 2.52
+  },
+  {
+   "entry": 10.1,
+   "target": 80,
+   "price": 2.02
+  },
+  {
+   "entry": 10.1,
+   "target": 85,
+   "price": 1.51
+  },
+  {
+   "entry": 10.1,
+   "target": 90,
+   "price": 1.01
+  },
+  {
+   "entry": 10.1,
+   "target": 95,
+   "price": 0.5
+  },
+  {
+   "entry": 14.35,
+   "target": 50,
+   "price": 7.17
+  },
+  {
+   "entry": 14.35,
+   "target": 65,
+   "price": 5.02
+  },
+  {
+   "entry": 14.35,
+   "target": 70,
+   "price": 4.3
+  },
+  {
+   "entry": 14.35,
+   "target": 75,
+   "price": 3.59
+  },
+  {
+   "entry": 14.35,
+   "target": 80,
+   "price": 2.87
+  },
+  {
+   "entry": 14.35,
+   "target": 85,
+   "price": 2.15
+  },
+  {
+   "entry": 14.35,
+   "target": 90,
+   "price": 1.43
+  },
+  {
+   "entry": 14.35,
+   "target": 95,
+   "price": 0.72
+  }
+ ],
+ "splits": [
+  {
+   "total": 0,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 0
+  },
+  {
+   "total": 0,
+   "income_weight": 0.3,
+   "income": 0,
+   "balanced": 0
+  },
+  {
+   "total": 0,
+   "income_weight": 0.5,
+   "income": 0,
+   "balanced": 0
+  },
+  {
+   "total": 0,
+   "income_weight": 0.7,
+   "income": 0,
+   "balanced": 0
+  },
+  {
+   "total": 0,
+   "income_weight": 1.0,
+   "income": 0,
+   "balanced": 0
+  },
+  {
+   "total": 1,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 1
+  },
+  {
+   "total": 1,
+   "income_weight": 0.3,
+   "income": 0,
+   "balanced": 1
+  },
+  {
+   "total": 1,
+   "income_weight": 0.5,
+   "income": 1,
+   "balanced": 0
+  },
+  {
+   "total": 1,
+   "income_weight": 0.7,
+   "income": 1,
+   "balanced": 0
+  },
+  {
+   "total": 1,
+   "income_weight": 1.0,
+   "income": 1,
+   "balanced": 0
+  },
+  {
+   "total": 2,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 2
+  },
+  {
+   "total": 2,
+   "income_weight": 0.3,
+   "income": 1,
+   "balanced": 1
+  },
+  {
+   "total": 2,
+   "income_weight": 0.5,
+   "income": 1,
+   "balanced": 1
+  },
+  {
+   "total": 2,
+   "income_weight": 0.7,
+   "income": 1,
+   "balanced": 1
+  },
+  {
+   "total": 2,
+   "income_weight": 1.0,
+   "income": 2,
+   "balanced": 0
+  },
+  {
+   "total": 3,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 3
+  },
+  {
+   "total": 3,
+   "income_weight": 0.3,
+   "income": 1,
+   "balanced": 2
+  },
+  {
+   "total": 3,
+   "income_weight": 0.5,
+   "income": 2,
+   "balanced": 1
+  },
+  {
+   "total": 3,
+   "income_weight": 0.7,
+   "income": 2,
+   "balanced": 1
+  },
+  {
+   "total": 3,
+   "income_weight": 1.0,
+   "income": 3,
+   "balanced": 0
+  },
+  {
+   "total": 4,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 4
+  },
+  {
+   "total": 4,
+   "income_weight": 0.3,
+   "income": 1,
+   "balanced": 3
+  },
+  {
+   "total": 4,
+   "income_weight": 0.5,
+   "income": 2,
+   "balanced": 2
+  },
+  {
+   "total": 4,
+   "income_weight": 0.7,
+   "income": 3,
+   "balanced": 1
+  },
+  {
+   "total": 4,
+   "income_weight": 1.0,
+   "income": 4,
+   "balanced": 0
+  },
+  {
+   "total": 5,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 5
+  },
+  {
+   "total": 5,
+   "income_weight": 0.3,
+   "income": 2,
+   "balanced": 3
+  },
+  {
+   "total": 5,
+   "income_weight": 0.5,
+   "income": 3,
+   "balanced": 2
+  },
+  {
+   "total": 5,
+   "income_weight": 0.7,
+   "income": 4,
+   "balanced": 1
+  },
+  {
+   "total": 5,
+   "income_weight": 1.0,
+   "income": 5,
+   "balanced": 0
+  },
+  {
+   "total": 6,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 6
+  },
+  {
+   "total": 6,
+   "income_weight": 0.3,
+   "income": 2,
+   "balanced": 4
+  },
+  {
+   "total": 6,
+   "income_weight": 0.5,
+   "income": 3,
+   "balanced": 3
+  },
+  {
+   "total": 6,
+   "income_weight": 0.7,
+   "income": 4,
+   "balanced": 2
+  },
+  {
+   "total": 6,
+   "income_weight": 1.0,
+   "income": 6,
+   "balanced": 0
+  },
+  {
+   "total": 7,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 7
+  },
+  {
+   "total": 7,
+   "income_weight": 0.3,
+   "income": 2,
+   "balanced": 5
+  },
+  {
+   "total": 7,
+   "income_weight": 0.5,
+   "income": 4,
+   "balanced": 3
+  },
+  {
+   "total": 7,
+   "income_weight": 0.7,
+   "income": 5,
+   "balanced": 2
+  },
+  {
+   "total": 7,
+   "income_weight": 1.0,
+   "income": 7,
+   "balanced": 0
+  },
+  {
+   "total": 8,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 8
+  },
+  {
+   "total": 8,
+   "income_weight": 0.3,
+   "income": 2,
+   "balanced": 6
+  },
+  {
+   "total": 8,
+   "income_weight": 0.5,
+   "income": 4,
+   "balanced": 4
+  },
+  {
+   "total": 8,
+   "income_weight": 0.7,
+   "income": 6,
+   "balanced": 2
+  },
+  {
+   "total": 8,
+   "income_weight": 1.0,
+   "income": 8,
+   "balanced": 0
+  },
+  {
+   "total": 9,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 9
+  },
+  {
+   "total": 9,
+   "income_weight": 0.3,
+   "income": 3,
+   "balanced": 6
+  },
+  {
+   "total": 9,
+   "income_weight": 0.5,
+   "income": 5,
+   "balanced": 4
+  },
+  {
+   "total": 9,
+   "income_weight": 0.7,
+   "income": 6,
+   "balanced": 3
+  },
+  {
+   "total": 9,
+   "income_weight": 1.0,
+   "income": 9,
+   "balanced": 0
+  },
+  {
+   "total": 10,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 10
+  },
+  {
+   "total": 10,
+   "income_weight": 0.3,
+   "income": 3,
+   "balanced": 7
+  },
+  {
+   "total": 10,
+   "income_weight": 0.5,
+   "income": 5,
+   "balanced": 5
+  },
+  {
+   "total": 10,
+   "income_weight": 0.7,
+   "income": 7,
+   "balanced": 3
+  },
+  {
+   "total": 10,
+   "income_weight": 1.0,
+   "income": 10,
+   "balanced": 0
+  },
+  {
+   "total": 11,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 11
+  },
+  {
+   "total": 11,
+   "income_weight": 0.3,
+   "income": 3,
+   "balanced": 8
+  },
+  {
+   "total": 11,
+   "income_weight": 0.5,
+   "income": 6,
+   "balanced": 5
+  },
+  {
+   "total": 11,
+   "income_weight": 0.7,
+   "income": 8,
+   "balanced": 3
+  },
+  {
+   "total": 11,
+   "income_weight": 1.0,
+   "income": 11,
+   "balanced": 0
+  },
+  {
+   "total": 12,
+   "income_weight": 0.0,
+   "income": 0,
+   "balanced": 12
+  },
+  {
+   "total": 12,
+   "income_weight": 0.3,
+   "income": 4,
+   "balanced": 8
+  },
+  {
+   "total": 12,
+   "income_weight": 0.5,
+   "income": 6,
+   "balanced": 6
+  },
+  {
+   "total": 12,
+   "income_weight": 0.7,
+   "income": 8,
+   "balanced": 4
+  },
+  {
+   "total": 12,
+   "income_weight": 1.0,
+   "income": 12,
+   "balanced": 0
+  }
+ ]
+}

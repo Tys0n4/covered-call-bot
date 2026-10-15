@@ -1,5 +1,5 @@
 # Runs on every pull request and on pushes to main: backend tests + lint,
-# frontend lint + production build. Merge only when both jobs are green.
+# frontend lint + tests + production build. Merge only when both jobs are green.
 name: CI
 
 on:
@@ -41,4 +41,5 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
