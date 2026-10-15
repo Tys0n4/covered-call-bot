@@ -6,7 +6,7 @@ The details behind the [README](../README.md): what each screen shows, how calls
 - [Scanning](#scanning)
 - [Allocation](#allocation)
 - [Management](#management)
-- [Buy-back alerts (Discord)](#buy-back-alerts-discord)
+- [Alerts (Discord)](#alerts-discord)
 - [Performance](#performance)
 - [Configuration](#configuration)
 - [Design system](#design-system)
@@ -75,7 +75,7 @@ The management module prices each open call at what buying it back costs now: th
 - **When a call goes against you** (it now costs more than you sold it for), the card shows your two real choices in dollars instead: buy back now (the loss on the call; you keep your shares) or let it be called away at the strike (premium plus the gain or loss on your shares over your average cost). It's marked "Stock above strike" in red when the stock has passed the strike (Home lists these too), or "Call is up" in amber while it's still below. A third choice, **roll up and out**, shows the best roll: later expiries (up to 45 days past the current one) at the same or a higher strike that pay a credit after both commissions, the soonest expiry for each strike, ranked by how much higher the strike goes. "See rolls" lists them, and picking one opens Record a roll with its expiry and strike filled in (Find a roll is also in every call's ⋯ menu).
 - **Early exercise before a dividend**: a call in the money whose time value (its price minus what it's worth exercised now) is less than the coming dividend is often exercised the trading day before the ex-dividend date. The card and Home say so, with the date to buy back or roll by. The dividend is estimated from the last one Yahoo reports.
 
-Buyback costs include your usual commission. Discord alerts are only sent for "Buy back now".
+Buyback costs include your usual commission. Discord alerts are sent for "Buy back now", calls likely to be exercised early, and calls with the stock above the strike (see below).
 
 Outside market hours there's no ask, so a call is priced at its last trade, unless that trade is from before the latest session (a quiet strike that hasn't traded for days). Then Positions shows "Price unavailable" with the last trade date instead of a recommendation, until the market opens.
 
@@ -83,12 +83,14 @@ From the Positions page you can record a buyback (the price per share you paid, 
 
 ---
 
-## Buy-back alerts (Discord)
+## Alerts (Discord)
 
-When an open call reaches your buy-back target, the app can post a message to a Discord channel. Each call is alerted once.
+The app can post a message to a Discord channel when an open call needs you: it reached your buy-back target, it's likely to be exercised early for the dividend, or the stock went above its strike (early exercise is sent instead of "above the strike" when both apply). Each call is alerted once for each; the last two can be turned off on the Strategy page.
+
+If the scheduled check stops running during market hours (none for 50 minutes after it was due), or Discord refuses a message (for example, the webhook was deleted), the Strategy page and Home say so. A Discord error stays until a message goes through, including a test message.
 
 1. **Discord:** in the channel you want, open *Edit Channel → Integrations → Webhooks → New Webhook* and copy the webhook URL.
-2. **App:** paste it under *Buy-back alerts* on the Strategy page and click Connect. A test message is sent right away.
+2. **App:** paste it under *Discord alerts* on the Strategy page and click Connect. A test message is sent right away.
 3. **Railway:** add a variable `ALERTS_KEY` set to a long random string (for example the output of `python -c "import secrets; print(secrets.token_urlsafe(32))"`). It lets a scheduler run the check without your password, and can do nothing else.
 4. **[cron-job.org](https://cron-job.org)** (free): create a cron job that sends `POST https://covered-call-bot-production.up.railway.app/alerts/cron` with the header `X-Alerts-Key: <your ALERTS_KEY>`. Schedule: time zone *America/New_York*, Monday–Friday, hours 9–15, minutes 15 and 45 (every 30 minutes, 9:45 a.m. to 3:45 p.m.; the 9:15 call is skipped because prices are still the last session's). It answers right away and checks in the background.
 

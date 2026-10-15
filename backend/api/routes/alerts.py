@@ -6,7 +6,7 @@ import os
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 
-from core.alerts import AlertError, check_and_alert, load_alert_settings, save_alert_settings, send_test
+from core.alerts import AlertError, check_and_alert, check_overdue, load_alert_settings, save_alert_settings, send_test
 from api.schemas import AlertSettingsIn, AlertSettingsOut, AlertCheckResult
 
 log = logging.getLogger(__name__)
@@ -26,6 +26,10 @@ def _out(s: dict) -> AlertSettingsOut:
         webhook_set=bool(url),
         webhook_hint=f"…{url[-6:]}" if url else None,
         last_check_at=s["last_check_at"],
+        check_overdue=check_overdue(s),
+        last_error=s["last_error"] if s["enabled"] else None,
+        notify_early=s["notify_early"],
+        notify_strike=s["notify_strike"],
     )
 
 
@@ -38,7 +42,8 @@ def get_alerts():
 def update_alerts(body: AlertSettingsIn):
     """Save the webhook and/or turn alerts on or off. Only the fields you send change."""
     try:
-        return _out(save_alert_settings(discord_webhook=body.discord_webhook, enabled=body.enabled, clear_webhook=body.clear_webhook))
+        return _out(save_alert_settings(discord_webhook=body.discord_webhook, enabled=body.enabled, clear_webhook=body.clear_webhook,
+                                        notify_early=body.notify_early, notify_strike=body.notify_strike))
     except AlertError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
 

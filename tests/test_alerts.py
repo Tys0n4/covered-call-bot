@@ -42,7 +42,8 @@ def _turn_on(client):
 
 
 def test_settings_never_return_the_full_webhook(client):
-    assert client.get("/alerts").json() == {"enabled": False, "webhook_set": False, "webhook_hint": None, "last_check_at": None}
+    assert client.get("/alerts").json() == {"enabled": False, "webhook_set": False, "webhook_hint": None, "last_check_at": None,
+                                            "check_overdue": False, "last_error": None, "notify_early": True, "notify_strike": True}
     body = client.put("/alerts", json={"discord_webhook": HOOK, "enabled": True}).json()
     assert body["enabled"] and body["webhook_set"]
     assert body["webhook_hint"] == "…" + HOOK[-6:]
@@ -64,7 +65,7 @@ def test_cannot_turn_on_without_a_webhook(client):
 def test_clearing_the_webhook_turns_alerts_off(client):
     _turn_on(client)
     body = client.put("/alerts", json={"clear_webhook": True}).json()
-    assert body == {"enabled": False, "webhook_set": False, "webhook_hint": None, "last_check_at": None}
+    assert (body["enabled"], body["webhook_set"], body["webhook_hint"], body["last_check_at"]) == (False, False, None, None)
 
 
 def test_test_message_goes_to_the_saved_webhook(client, discord):
@@ -148,3 +149,90 @@ def test_scheduler_endpoint_runs_the_check_without_logging_in(client, nvda, disc
     assert r.status_code == 202 and r.json() == {"status": "started"}
     assert len(discord.sent) == 1                                 # the check ran (in the background)
     assert discord.sent[0][1]["embeds"][0]["title"] == "Buy back now: NVDA $125.00 call"
+
+
+# --- Early exercise and "above your strike" -----------------------------------------
+
+def test_a_stock_above_the_strike_is_alerted_once(client, nvda, discord):
+    _turn_on(client)
+    _call(client, entry_price=3.0, strike=95)                  # NVDA is $100: above the strike, call costs more than sold
+    assert client.post("/alerts/check").json()["sent"] == 1
+    msg = discord.sent[-1][1]
+    assert "stock above the strike" in msg["content"]
+    assert msg["embeds"][0]["title"] == "NVDA is above your $95.00 strike"
+    assert client.post("/alerts/check").json()["sent"] == 0    # once per call
+
+
+def test_above_strike_alerts_can_be_turned_off(client, nvda, discord):
+    _turn_on(client)
+    assert client.put("/alerts", json={"notify_strike": False}).json()["notify_strike"] is False
+    _call(client, entry_price=3.0, strike=95)
+    assert client.post("/alerts/check").json()["sent"] == 0
+
+
+def test_early_exercise_is_alerted_instead_of_above_strike(client, nvda, discord):
+    from conftest import EVENTS, INFO
+    EVENTS["NVDA"] = {"Earnings Date": [], "Ex-Dividend Date": date.today() + timedelta(days=5)}
+    INFO["NVDA"] = {"lastDividendValue": 2.0}
+    _turn_on(client)
+    _call(client, entry_price=3.0, strike=90)                  # $10 in the money, little time value
+    assert client.post("/alerts/check").json()["sent"] == 1
+    embed = discord.sent[-1][1]["embeds"][0]
+    assert embed["title"].startswith("May be exercised early: NVDA $90.00 call")
+    assert "buy back or roll by" in embed["description"]
+    assert client.post("/alerts/check").json()["sent"] == 0    # and not again as "above the strike"
+
+
+def test_a_refused_message_is_remembered_until_one_goes_through(client, nvda, discord):
+    _turn_on(client)
+    _call(client, entry_price=3.0, strike=95)
+    discord.status = 404
+    assert client.post("/alerts/check").status_code == 502
+    assert "doesn't exist" in client.get("/alerts").json()["last_error"]
+    discord.status = 204
+    assert client.post("/alerts/check").json()["sent"] == 1    # not marked sent before, so it's sent now
+    assert client.get("/alerts").json()["last_error"] is None
+
+
+# --- Has the scheduled check stopped? ---------------------------------------------------
+
+def _ny(hour, minute, day=14):
+    from datetime import datetime
+    from core.market_hours import NEW_YORK
+    return datetime(2026, 10, day, hour, minute, tzinfo=NEW_YORK)        # Oct 14, 2026 is a Wednesday
+
+
+@pytest.mark.parametrize("now, last, overdue", [
+    (_ny(11, 0), _ny(9, 45), True),            # 75 minutes without a check
+    (_ny(11, 0), _ny(10, 30), False),
+    (_ny(10, 0), _ny(15, 45, day=13), False),  # first check of the day was due at 9:45
+    (_ny(10, 40), _ny(15, 45, day=13), True),  # ... and still hasn't run
+    (_ny(11, 0, day=17), None, False),         # Saturday
+    (_ny(17, 0), _ny(15, 45), False),          # after the close
+])
+def test_check_overdue(now, last, overdue):
+    settings = {"enabled": True, "discord_webhook": HOOK, "last_check_at": last.isoformat() if last else None}
+    assert alerts.check_overdue(settings, now=now) is overdue
+
+
+def test_not_overdue_when_alerts_are_off():
+    settings = {"enabled": False, "discord_webhook": HOOK, "last_check_at": None}
+    assert alerts.check_overdue(settings, now=_ny(14, 0)) is False
+
+
+def test_the_error_stays_until_a_message_goes_through(client, nvda, discord):
+    _turn_on(client)
+    _call(client, entry_price=3.0, strike=95)
+    discord.status = 404
+    client.post("/alerts/check")
+    discord.status = 204
+    client.post("/alerts/check")                               # sends the alert: works again
+    assert client.get("/alerts").json()["last_error"] is None
+    discord.status = 404
+    _call(client, entry_price=3.0, strike=96)
+    client.post("/alerts/check")
+    assert client.post("/alerts/check").status_code == 502     # still failing
+    assert client.get("/alerts").json()["last_error"]
+    discord.status = 204
+    assert client.post("/alerts/test").status_code == 200      # a test message clears it
+    assert client.get("/alerts").json()["last_error"] is None

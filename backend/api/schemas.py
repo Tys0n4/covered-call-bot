@@ -387,6 +387,8 @@ class AlertSettingsIn(BaseModel):
     discord_webhook: Optional[str] = Field(default=None, max_length=300)
     enabled: Optional[bool] = None
     clear_webhook: bool = False          # remove the saved webhook (also turns alerts off)
+    notify_early: Optional[bool] = None  # also alert when a call may be exercised early for the dividend
+    notify_strike: Optional[bool] = None # also alert when a stock goes above your strike
 
 
 class AlertSettingsOut(BaseModel):
@@ -394,6 +396,10 @@ class AlertSettingsOut(BaseModel):
     webhook_set: bool
     webhook_hint: Optional[str] = None   # last few characters, so you can tell which one is saved
     last_check_at: Optional[str] = None  # ISO time (UTC) of the last scheduled check
+    check_overdue: bool = False          # alerts are on but the scheduled check has stopped running
+    last_error: Optional[str] = None     # why the last message couldn't be sent
+    notify_early: bool = True
+    notify_strike: bool = True
 
 
 class AlertCheckResult(BaseModel):

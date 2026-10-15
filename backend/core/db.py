@@ -52,6 +52,8 @@ positions = Table(
     Column("rolled_from",     Integer, nullable=True),   # id of the call this one replaced (a roll)
     Column("assignment_reviewed", Integer, nullable=True),  # 1 = you confirmed whether it was assigned
     Column("buyback_alerted_at",  String(25), nullable=True),  # when a "buy back now" alert was sent
+    Column("early_alerted_at",    String(25), nullable=True),  # when a "may be exercised early" alert was sent
+    Column("strike_alerted_at",   String(25), nullable=True),  # when a "stock above your strike" alert was sent
 )
 
 
@@ -79,6 +81,10 @@ alert_settings = Table(
     Column("discord_webhook", String(300), nullable=True),
     Column("enabled",         Integer, nullable=False, default=0),
     Column("last_check_at",   String(25), nullable=True),   # last time the scheduled check ran
+    Column("last_error",      String(300), nullable=True),  # why the last message couldn't be sent (None: it was)
+    # Alerts besides "buy back now" (empty = on)
+    Column("notify_early",    Integer, nullable=True),      # a call may be exercised early for the dividend
+    Column("notify_strike",   Integer, nullable=True),      # a stock went above your strike
 )
 
 # Last earnings / ex-dividend dates Yahoo gave per stock, used when Yahoo doesn't answer
@@ -182,7 +188,9 @@ def _add_missing_columns(engine: Engine) -> None:
     ], "positions": [
         positions.c.close_cost, positions.c.open_fees, positions.c.close_fees,
         positions.c.cost_basis, positions.c.rolled_from, positions.c.assignment_reviewed,
-        positions.c.buyback_alerted_at,
+        positions.c.buyback_alerted_at, positions.c.early_alerted_at, positions.c.strike_alerted_at,
+    ], "alert_settings": [
+        alert_settings.c.last_error, alert_settings.c.notify_early, alert_settings.c.notify_strike,
     ]}
     insp = inspect(engine)
     for table_name, cols in added_later.items():
