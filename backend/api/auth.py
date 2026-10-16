@@ -9,12 +9,26 @@ password to get a signed token. The app sends it as "Authorization: Bearer
 with AUTH_SECRET, or else with a key generated once and kept in the database.
 Passwords are stored as scrypt hashes (core/accounts.py).
 
-After MAX_FAILURES wrong passwords for an email within LOCKOUT_SECONDS, logins
-to it are refused (429) until the window passes; devices already logged in keep
-working. Wrong guesses at the old app password are limited the same way. Nothing
-here sleeps: a slow answer would hold one of the server's few worker threads, so
-a burst of wrong passwords would stall everyone (scrypt is already slow to guess).
-Sign-ups are capped per hour so a script can't flood the free database.
+Each token carries the account's token version. Changing the password, using a
+recovery code or "log out other devices" raises the version, so every older
+token stops working; the device that did it gets a new one. The version is
+looked up at most once a minute per account (VERSION_TTL), so a log-out reaches
+other devices within a minute.
+
+Forgot your password? There's no email, so each account has a recovery code,
+shown once at sign-up (or at the next login for older accounts) and stored
+only as a hash. POST /auth/recover sets a new password with it and returns a
+new code.
+
+Limits, kept in the database so they survive the server sleeping
+(db.auth_limits): after MAX_FAILURES wrong passwords (or recovery codes) for an
+email within LOCKOUT_SECONDS, that email is refused (429) until the window
+passes, and one network address gets MAX_IP_FAILURES across all emails.
+Devices already logged in keep working. Wrong guesses at the old app password
+are limited the same way. Sign-ups are capped per hour, overall and per
+address. Nothing here sleeps: a slow answer would hold one of the server's few
+worker threads, so a burst of wrong passwords would stall everyone (scrypt is
+already slow to guess).
 
 Data from before accounts existed (one shared APP_PASSWORD) stays unclaimed
 until someone signs up and enters that old password as claim_password; then
@@ -32,29 +46,25 @@ import os
 import secrets
 import threading
 import time
-from collections import deque
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import insert, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from core import accounts
-from core.db import app_settings, get_engine
+from core.db import app_settings, auth_limits, get_engine
 
 log = logging.getLogger(__name__)
 
 TOKEN_DAYS = float(os.environ.get("AUTH_TOKEN_DAYS", "30"))
-
-MAX_FAILURES = 10
+VERSION_TTL = 60                 # seconds an account's token version is trusted from memory
+MAX_FAILURES = 10                # wrong passwords per email in LOCKOUT_SECONDS
+MAX_IP_FAILURES = 50             # wrong passwords from one network address, across emails
 LOCKOUT_SECONDS = 15 * 60
 SIGNUPS_PER_HOUR = 30
-CLAIM_KEY = "(old app password)"   # wrong guesses at the old password count here, like an email
-
-_failures: dict[str, deque[float]] = {}   # email -> when each recent wrong password was tried
-_signups: deque[float] = deque()
-_limits_lock = threading.Lock()
+SIGNUPS_PER_IP_PER_HOUR = 5
 
 
 def _old_password() -> str:
@@ -95,23 +105,62 @@ def _sign(payload: str) -> str:
     return base64.urlsafe_b64encode(sig).decode().rstrip("=")
 
 
-def make_token(user_id: int, now: float | None = None) -> tuple[str, int]:
-    """A signed token for the account and its expiry (unix seconds)."""
+def make_token(user_id: int, version: int = 0, now: float | None = None) -> tuple[str, int]:
+    """A signed token for the account at its current token version, and its expiry (unix seconds)."""
     expires = int((now or time.time()) + TOKEN_DAYS * 86400)
-    payload = f"{user_id}.{expires}"
+    payload = f"{user_id}.{version}.{expires}"
     return f"{payload}.{_sign(payload)}", expires
 
 
-def token_user(token: str, now: float | None = None) -> int | None:
-    """The account a valid, unexpired token belongs to, else None."""
+def _read_token(token: str, now: float | None = None) -> tuple[int, int] | None:
+    """(account, token version) from a validly signed, unexpired token, else None. Tokens from
+    before versions ("id.expires.sig") count as version 0."""
     parts = (token or "").split(".")
-    if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit() or not parts[2]:
+    if len(parts) == 4:
+        user, version, expires, sig = parts
+    elif len(parts) == 3:
+        user, expires, sig = parts
+        version = "0"
+    else:
         return None
-    if not hmac.compare_digest(parts[2], _sign(f"{parts[0]}.{parts[1]}")):
+    if not (user.isdigit() and version.isdigit() and expires.isdigit() and sig):
         return None
-    if int(parts[1]) <= (now or time.time()):
+    payload = ".".join(parts[:-1])
+    if not hmac.compare_digest(sig, _sign(payload)):
         return None
-    return int(parts[0])
+    if int(expires) <= (now or time.time()):
+        return None
+    return int(user), int(version)
+
+
+_versions: dict[int, tuple[int | None, float]] = {}   # account -> (token version or None if gone, when read)
+_versions_lock = threading.Lock()
+
+
+def _current_version(user_id: int) -> int | None:
+    now = time.monotonic()
+    with _versions_lock:
+        hit = _versions.get(user_id)
+    if hit and now - hit[1] < VERSION_TTL:
+        return hit[0]
+    version = accounts.token_version(user_id)
+    with _versions_lock:
+        _versions[user_id] = (version, now)
+    return version
+
+
+def _remember_version(user_id: int, version: int | None) -> None:
+    with _versions_lock:
+        _versions[user_id] = (version, time.monotonic())
+
+
+def token_user(token: str, now: float | None = None) -> int | None:
+    """The account a valid, unexpired, current token belongs to, else None."""
+    read = _read_token(token, now)
+    if read is None:
+        return None
+    user_id, version = read
+    return user_id if _current_version(user_id) == version else None
 
 
 _bearer = HTTPBearer(auto_error=False)
@@ -129,48 +178,73 @@ def current_user(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) 
     return user_id
 
 
-# --- Limits -----------------------------------------------------------------------
-
-def _locked_for(email: str, now: float) -> int:
-    """Seconds until this email may try a password again (0: now)."""
-    with _limits_lock:
-        tries = _failures.get(email)
-        if not tries:
-            return 0
-        while tries and now - tries[0] >= LOCKOUT_SECONDS:
-            tries.popleft()
-        if not tries:
-            _failures.pop(email, None)
-            return 0
-        if len(tries) < MAX_FAILURES:
-            return 0
-        return math.ceil(LOCKOUT_SECONDS - (now - tries[0]))
+def _issue(user_id: int, email: str, version: int, recovery_code: str | None = None, claimed: bool = False) -> LoginResponse:
+    _remember_version(user_id, version)
+    token, expires = make_token(user_id, version)
+    return LoginResponse(token=token, expires_at=expires, email=email, claimed=claimed, recovery_code=recovery_code)
 
 
-def _failed(key: str, now: float) -> None:
-    with _limits_lock:
-        _failures.setdefault(key, deque()).append(now)
+# --- Limits (db.auth_limits: one row per wrong guess or sign-up) -------------------
+
+def _client_ip(request: Request) -> str:
+    """The visitor's address: Railway's edge puts it in X-Real-IP."""
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
 
 
-def _too_many(wait: int) -> HTTPException:
+def _wait(key: str, limit: int, window: int, now: float) -> int:
+    """Seconds until key may try again (0: now): it's had `limit` events in the last `window` seconds."""
+    with get_engine().connect() as conn:
+        times = conn.execute(
+            select(auth_limits.c.at).where(auth_limits.c.key == key, auth_limits.c.at > now - window).order_by(auth_limits.c.at)
+        ).scalars().all()
+    if len(times) < limit:
+        return 0
+    return max(1, math.ceil(window - (now - times[-limit])))
+
+
+def _record(now: float, *keys: str) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(insert(auth_limits), [{"key": k, "at": now} for k in keys])
+        conn.execute(delete(auth_limits).where(auth_limits.c.at < now - 3600))   # nothing looks back further
+
+
+def _clear(key: str) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(delete(auth_limits).where(auth_limits.c.key == key))
+
+
+def _too_many(wait: int, what: str = "Too many wrong passwords") -> HTTPException:
     minutes = math.ceil(wait / 60)
     return HTTPException(
         status_code=429,
-        detail=f"Too many wrong passwords. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
+        detail=f"{what}. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
         headers={"Retry-After": str(wait)},
     )
 
 
-def _take_signup_slot(now: float) -> None:
-    with _limits_lock:
-        while _signups and now - _signups[0] >= 3600:
-            _signups.popleft()
-        if len(_signups) >= SIGNUPS_PER_HOUR:
-            raise HTTPException(status_code=429, detail="Too many new accounts right now. Try again in an hour.")
-        _signups.append(now)
+def _guard(email: str, ip: str, now: float) -> None:
+    """Refuse (429) while this email or this address has had too many wrong guesses."""
+    wait = _wait(f"login:{email}", MAX_FAILURES, LOCKOUT_SECONDS, now)
+    if wait:
+        raise _too_many(wait)
+    wait = _wait(f"ip:{ip}", MAX_IP_FAILURES, LOCKOUT_SECONDS, now)
+    if wait:
+        raise _too_many(wait, "Too many wrong passwords from this network")
 
 
-# --- /auth routes (public, except /auth/me) ----------------------------------------
+def _wrong(email: str, ip: str, now: float) -> None:
+    _record(now, f"login:{email}", f"ip:{ip}")
+
+
+def _take_signup_slot(ip: str, now: float) -> None:
+    if _wait("signup", SIGNUPS_PER_HOUR, 3600, now):
+        raise HTTPException(status_code=429, detail="Too many new accounts right now. Try again in an hour.")
+    if _wait(f"signup:{ip}", SIGNUPS_PER_IP_PER_HOUR, 3600, now):
+        raise HTTPException(status_code=429, detail="Too many new accounts from this network. Try again in an hour.")
+    _record(now, "signup", f"signup:{ip}")
+
+
+# --- /auth routes (public, except the ones that take current_user) ---------------
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -184,11 +258,27 @@ class SignupRequest(LoginRequest):
     claim_password: str | None = Field(default=None, max_length=200)   # the old shared app password, to keep that data
 
 
+class RecoverRequest(BaseModel):
+    email: str = Field(max_length=254)
+    recovery_code: str = Field(max_length=40)
+    new_password: str = Field(max_length=200)
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(max_length=200)
+    new_password: str = Field(max_length=200)
+
+
+class PasswordConfirm(BaseModel):
+    password: str = Field(max_length=200)
+
+
 class LoginResponse(BaseModel):
     token: str
     expires_at: int
     email: str
-    claimed: bool = False    # took over the data from before accounts
+    claimed: bool = False               # took over the data from before accounts
+    recovery_code: str | None = None    # a new recovery code to show once (sign-up, first login, recovery)
 
 
 @router.get("/status")
@@ -198,18 +288,18 @@ def auth_status():
 
 
 @router.post("/signup", response_model=LoginResponse, status_code=201)
-def signup(body: SignupRequest):
+def signup(body: SignupRequest, request: Request):
     old = _old_password()
     wants_claim = bool(body.claim_password)
     now = time.time()
     if wants_claim:
-        wait = _locked_for(CLAIM_KEY, now)
+        wait = _wait("claim", MAX_FAILURES, LOCKOUT_SECONDS, now)
         if wait:
             raise _too_many(wait)
         if not (old and hmac.compare_digest(body.claim_password.encode(), old.encode())):
-            _failed(CLAIM_KEY, now)
+            _record(now, "claim")
             raise HTTPException(status_code=403, detail="That isn't the old app password. Leave it empty to start fresh.")
-    _take_signup_slot(now)
+    _take_signup_slot(_client_ip(request), now)
     try:
         user_id = accounts.create_user(body.email, body.password)
     except accounts.AccountExists as e:
@@ -221,26 +311,54 @@ def signup(body: SignupRequest):
     claimed = False
     if wants_claim or (not old and accounts.account_count() == 1):
         claimed = accounts.claim_unclaimed_data(user_id)
-    token, expires = make_token(user_id)
-    return LoginResponse(token=token, expires_at=expires, email=accounts.email_of(user_id), claimed=claimed)
+    code = accounts.new_recovery_code(user_id)
+    return _issue(user_id, accounts.email_of(user_id), 0, recovery_code=code, claimed=claimed)
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest):
+def login(body: LoginRequest, request: Request):
     email = (body.email or "").strip().lower()
-    now = time.time()
-    wait = _locked_for(email, now)
-    if wait:
-        raise _too_many(wait)
+    ip, now = _client_ip(request), time.time()
+    _guard(email, ip, now)
     user = accounts.find_user(email)
     if user is None or not accounts.password_matches(body.password, user["password_hash"]):
-        _failed(email, now)
+        _wrong(email, ip, now)
         log.info("Wrong email or password at login")
         raise HTTPException(status_code=401, detail="Wrong email or password.")
-    with _limits_lock:
-        _failures.pop(email, None)
-    token, expires = make_token(user["id"])
-    return LoginResponse(token=token, expires_at=expires, email=user["email"])
+    _clear(f"login:{email}")
+    # Accounts from before recovery codes get theirs now, shown once
+    code = None if user.get("recovery_hash") else accounts.new_recovery_code(user["id"])
+    return _issue(user["id"], user["email"], int(user.get("token_version") or 0), recovery_code=code)
+
+
+@router.post("/recover", response_model=LoginResponse)
+def recover(body: RecoverRequest, request: Request):
+    """Forgot your password: your recovery code sets a new one, logs out every other device and gives a new code."""
+    email = (body.email or "").strip().lower()
+    ip, now = _client_ip(request), time.time()
+    _guard(email, ip, now)
+    user = accounts.find_user(email)
+    if user is None or not accounts.recovery_matches(body.recovery_code, user.get("recovery_hash")):
+        _wrong(email, ip, now)
+        raise HTTPException(status_code=401, detail="That email and recovery code don't match.")
+    try:
+        version = accounts.set_password(user["id"], body.new_password)
+    except accounts.AccountError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
+    _clear(f"login:{email}")
+    return _issue(user["id"], user["email"], version, recovery_code=accounts.new_recovery_code(user["id"]))
+
+
+def _confirm_password(user_id: int, password: str, request: Request) -> dict:
+    """The logged-in account, once its password is confirmed (wrong guesses count like logins)."""
+    email = accounts.email_of(user_id) or ""
+    ip, now = _client_ip(request), time.time()
+    _guard(email, ip, now)
+    user = accounts.find_user(email)
+    if user is None or not accounts.password_matches(password, user["password_hash"]):
+        _wrong(email, ip, now)
+        raise HTTPException(status_code=403, detail="That password isn't right.")
+    return user
 
 
 @router.get("/me")
@@ -249,4 +367,39 @@ def me(user_id: int = Depends(current_user)):
     email = accounts.email_of(user_id)
     if email is None:
         raise HTTPException(status_code=401, detail="Please log in.")
-    return {"email": email}
+    return {"email": email, "has_recovery_code": accounts.has_recovery_code(user_id)}
+
+
+@router.post("/password", response_model=LoginResponse)
+def change_password(body: PasswordChange, request: Request, user_id: int = Depends(current_user)):
+    """A new password. Every other device is logged out; this one gets a new token."""
+    user = _confirm_password(user_id, body.current_password, request)
+    try:
+        version = accounts.set_password(user_id, body.new_password)
+    except accounts.AccountError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
+    return _issue(user_id, user["email"], version)
+
+
+@router.post("/logout-others", response_model=LoginResponse)
+def logout_others(user_id: int = Depends(current_user)):
+    """Log out every other device (a shared or lost one). This one gets a new token."""
+    email = accounts.email_of(user_id)
+    return _issue(user_id, email, accounts.bump_token_version(user_id))
+
+
+@router.post("/recovery-code")
+def make_recovery_code(body: PasswordConfirm, request: Request, user_id: int = Depends(current_user)):
+    """A new recovery code (the old one stops working). Needs the password, so a stolen login can't make one."""
+    _confirm_password(user_id, body.password, request)
+    return {"recovery_code": accounts.new_recovery_code(user_id)}
+
+
+@router.post("/account/delete")
+def delete_account(body: PasswordConfirm, request: Request, user_id: int = Depends(current_user)):
+    """Delete the account and everything in it: stocks, calls, strategy, alerts. Can't be undone."""
+    user = _confirm_password(user_id, body.password, request)
+    accounts.delete_account(user_id)
+    _remember_version(user_id, None)
+    _clear(f"login:{user['email']}")
+    return {"deleted": True}

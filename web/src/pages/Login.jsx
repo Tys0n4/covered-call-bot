@@ -1,9 +1,9 @@
 // src/pages/Login.jsx — create an account or log in (email and password). Each account has
 // its own portfolio. When there's a portfolio from before accounts, signing up with the old
-// app password keeps it.
+// app password keeps it. Forgot your password? Your recovery code sets a new one.
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react'
-import { apiError, login, setToken, signup } from '../api/client'
+import { apiError, login, recover, setToken, signup } from '../api/client'
 import { Logo, Spinner } from '../components/ui'
 
 const HAS_ACCOUNT = 'has_account'
@@ -14,23 +14,32 @@ export default function LoginPage({ canClaim, startWithLogin = false, onLoggedIn
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [claim, setClaim]       = useState('')
+  const [code, setCode]         = useState('')      // recovery code (mode 'recover')
   const [shown, setShown]       = useState(false)
   const [busy, setBusy]         = useState(false)
   const [error, setError]       = useState(null)
   const signingUp = mode === 'signup'
-  useEffect(() => { document.title = `${signingUp ? 'Create an account' : 'Log in'} · CovCall` }, [signingUp])
+  const recovering = mode === 'recover'
+  useEffect(() => {
+    document.title = `${signingUp ? 'Create an account' : recovering ? 'Set a new password' : 'Log in'} · CovCall`
+  }, [signingUp, recovering])
 
   const switchTo = m => { setMode(m); setError(null) }
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!email.trim() || !password) { setError('Enter your email and password.'); return }
+    if (!email.trim() || !password || (recovering && !code.trim())) {
+      setError(recovering ? 'Enter your email, recovery code and a new password.' : 'Enter your email and password.')
+      return
+    }
     setBusy(true); setError(null)
     try {
-      const r = signingUp ? await signup(email, password, claim || null) : await login(email, password)
+      const r = signingUp ? await signup(email, password, claim || null)
+        : recovering ? await recover(email, code, password)
+          : await login(email, password)
       setToken(r.data.token)
       try { localStorage.setItem(HAS_ACCOUNT, '1') } catch { /* storage unavailable */ }
-      onLoggedIn()
+      onLoggedIn(r.data, mode)
     } catch (err) {
       setError(apiError(err, "Couldn't reach the server. Try again in a moment."))
       setBusy(false)
@@ -42,22 +51,36 @@ export default function LoginPage({ canClaim, startWithLogin = false, onLoggedIn
       <form className="page flex w-full max-w-[380px] flex-col" onSubmit={submit} aria-labelledby="auth-h" noValidate>
         <Logo size={44} />
         <h1 id="auth-h" className="mt-6 text-28 font-semibold tracking-title">
-          {signingUp ? 'Get paid for shares you already own' : 'Log in to CovCall'}
+          {signingUp ? 'Get paid for shares you already own' : recovering ? 'Set a new password' : 'Log in to CovCall'}
         </h1>
         <p className="mt-2.5 text-15 text-fg-2">
           {signingUp
             ? 'CovCall finds a covered call for your stocks and tells you when to close it. You place the trades at your own broker.'
-            : 'Welcome back. Your stocks and calls are where you left them.'}
+            : recovering
+              ? 'Use the recovery code you saved when you made your account. Every other device is logged out.'
+              : 'Welcome back. Your stocks and calls are where you left them.'}
         </p>
 
         <label className="label mt-8" htmlFor="auth-email">Email</label>
         <input id="auth-email" className="input" type="email" autoComplete="email" inputMode="email" autoFocus
           placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} aria-invalid={error ? true : undefined} />
 
-        <label className="label mt-4" htmlFor="auth-password">Password</label>
+        {recovering && (
+          <>
+            <label className="label mt-4" htmlFor="auth-code">Recovery code</label>
+            <input id="auth-code" className="input font-mono tracking-[0.04em]" type="text" autoComplete="off" autoCapitalize="characters"
+              spellCheck={false} placeholder="XXXX-XXXX-XXXX-XXXX" value={code} onChange={e => setCode(e.target.value)}
+              aria-invalid={error ? true : undefined} />
+          </>
+        )}
+
+        <span className="mt-4 flex items-baseline justify-between gap-3">
+          <label className="label mb-0" htmlFor="auth-password">{recovering ? 'New password' : 'Password'}</label>
+          {mode === 'login' && <button type="button" className="link link-quiet text-13" onClick={() => switchTo('recover')}>Forgot password?</button>}
+        </span>
         <span className="relative block">
-          <input id="auth-password" className="input pr-14" type={shown ? 'text' : 'password'}
-            autoComplete={signingUp ? 'new-password' : 'current-password'} placeholder={signingUp ? 'At least 10 characters' : ''}
+          <input id="auth-password" className="input mt-1.5 pr-14" type={shown ? 'text' : 'password'}
+            autoComplete={signingUp || recovering ? 'new-password' : 'current-password'} placeholder={signingUp || recovering ? 'At least 10 characters' : ''}
             value={password} onChange={e => setPassword(e.target.value)} aria-invalid={error ? true : undefined}
             aria-describedby={error ? 'auth-err' : undefined} />
           <button type="button" className="icon-btn absolute top-0.5 right-0.5 rounded-sm" aria-label={shown ? 'Hide password' : 'Show password'}
@@ -78,14 +101,24 @@ export default function LoginPage({ canClaim, startWithLogin = false, onLoggedIn
         {error && <p id="auth-err" role="alert" className="field-error">{error}</p>}
 
         <button type="submit" className="btn btn-primary btn-block mt-6" disabled={busy}>
-          {busy ? <><Spinner /> {signingUp ? 'Creating your account…' : 'Checking…'}</> : signingUp ? 'Create account' : 'Log in'}
+          {busy ? <><Spinner /> {signingUp ? 'Creating your account…' : 'Checking…'}</>
+            : signingUp ? 'Create account' : recovering ? 'Set password and log in' : 'Log in'}
         </button>
-        <p className="mt-4 text-center text-15 text-fg-2">
-          {signingUp ? 'Already have an account? ' : 'New to CovCall? '}
-          <button type="button" className="link" onClick={() => switchTo(signingUp ? 'login' : 'signup')}>
-            {signingUp ? 'Log in' : 'Create an account'}
-          </button>
-        </p>
+        {recovering ? (
+          <>
+            <p className="mt-3 text-13 text-muted">No code? CovCall doesn't have your email address for messages, so there's no other way back in. That's why the code matters.</p>
+            <p className="mt-4 text-center text-15 text-fg-2">
+              Remembered it? <button type="button" className="link" onClick={() => switchTo('login')}>Log in</button>
+            </p>
+          </>
+        ) : (
+          <p className="mt-4 text-center text-15 text-fg-2">
+            {signingUp ? 'Already have an account? ' : 'New to CovCall? '}
+            <button type="button" className="link" onClick={() => switchTo(signingUp ? 'login' : 'signup')}>
+              {signingUp ? 'Log in' : 'Create an account'}
+            </button>
+          </p>
+        )}
 
         <ul className="mt-10 flex flex-col gap-2.5 border-t border-line pt-5 text-13 text-muted">
           <li className="flex gap-2.5"><LockKeyhole size={16} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />Your stocks and trades are private to your account.</li>

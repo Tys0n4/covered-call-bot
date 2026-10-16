@@ -141,8 +141,7 @@ def no_password(monkeypatch):
     monkeypatch.delenv("APP_PASSWORD", raising=False)
     monkeypatch.delenv("AUTH_SECRET", raising=False)
     monkeypatch.setattr(accounts, "_N", 2 ** 10)
-    auth._failures.clear()
-    auth._signups.clear()
+    auth._versions.clear()
     limits.reset_all()
     alert_routes._last_check["at"] = None
 

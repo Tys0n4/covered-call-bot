@@ -35,6 +35,17 @@ users = Table(
     Column("email",         String(254), nullable=False, unique=True),   # stored lower case
     Column("password_hash", String(200), nullable=False),
     Column("created_at",    String(25), nullable=False),
+    Column("token_version", Integer, nullable=True),       # raised to log out every device (NULL = 0)
+    Column("recovery_hash", String(200), nullable=True),   # scrypt hash of the recovery code (shown once)
+)
+
+# Wrong passwords and sign-ups, one row each, so login limits survive the server
+# sleeping (api/auth.py). Rows older than an hour are deleted as new ones arrive.
+auth_limits = Table(
+    "auth_limits", metadata,
+    Column("id",  Integer, primary_key=True, autoincrement=True),
+    Column("key", String(300), nullable=False, index=True),   # "login:<email>", "ip:<address>", "signup", ...
+    Column("at",  Float, nullable=False),                     # unix seconds
 )
 
 UNCLAIMED = 0   # owner of data from before accounts existed, until it's claimed
@@ -209,7 +220,9 @@ def _add_missing_columns(engine: Engine) -> None:
     create_all() makes missing tables but never changes existing ones, so add
     any column introduced after a table was first created (safe to re-run).
     """
-    added_later = {"strategy": [
+    added_later = {"users": [
+        users.c.token_version, users.c.recovery_hash,
+    ], "strategy": [
         strategy.c.delta_min, strategy.c.delta_max, strategy.c.min_dte, strategy.c.max_dte,
         strategy.c.event_buyback_pct, strategy.c.commission_per_contract,
     ], "positions": [

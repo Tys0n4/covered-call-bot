@@ -36,6 +36,14 @@ export const login           = (email, password) => api.post('/auth/login', { em
 export const signup          = (email, password, claimPassword = null) =>
   api.post('/auth/signup', { email, password, claim_password: claimPassword })
 export const getMe           = ()            => api.get('/auth/me')
+// Forgot your password: the recovery code sets a new one (there's no email)
+export const recover         = (email, recoveryCode, newPassword) =>
+  api.post('/auth/recover', { email, recovery_code: recoveryCode, new_password: newPassword })
+export const changePassword  = (currentPassword, newPassword) =>
+  api.post('/auth/password', { current_password: currentPassword, new_password: newPassword })
+export const logoutOthers    = ()            => api.post('/auth/logout-others')
+export const newRecoveryCode = (password)    => api.post('/auth/recovery-code', { password })
+export const deleteAccount   = (password)    => api.post('/auth/account/delete', { password })
 
 export const getPortfolio    = ()            => api.get('/portfolio')
 export const getStrategy     = ()            => api.get('/settings')

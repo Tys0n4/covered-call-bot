@@ -48,7 +48,7 @@ def test_sign_up_then_log_in(anonymous):
     assert r.status_code == 201
     assert r.json()["email"] == "you@example.com"
     token = r.json()["token"]
-    assert anonymous.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json() == {"email": "you@example.com"}
+    assert anonymous.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json() == {"email": "you@example.com", "has_recovery_code": True}
     again = anonymous.post("/auth/login", json={"email": "YOU@example.com", "password": "correct horse battery"})
     assert again.status_code == 200 and again.json()["email"] == "you@example.com"
 
@@ -169,7 +169,8 @@ def test_a_right_password_clears_earlier_mistakes(anonymous, monkeypatch):
     assert anonymous.post("/auth/login", json={"email": "you@example.com", "password": "nope"}).status_code == 401
 
 
-def test_new_accounts_are_capped_per_hour(anonymous):
+def test_new_accounts_are_capped_per_hour(anonymous, monkeypatch):
+    monkeypatch.setattr(auth, "SIGNUPS_PER_IP_PER_HOUR", 1000)
     for i in range(auth.SIGNUPS_PER_HOUR):
         assert anonymous.post("/auth/signup", json={"email": f"u{i}@example.com", "password": "correct horse battery"}).status_code == 201
     r = anonymous.post("/auth/signup", json={"email": "late@example.com", "password": "correct horse battery"})

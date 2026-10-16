@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import os
 import re
+import secrets
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, func, insert, select, update
@@ -24,6 +25,10 @@ MIN_PASSWORD = 10
 
 # scrypt settings: about 16 MB and a few tens of milliseconds per hash
 _N, _R, _P = 2 ** 14, 8, 1
+
+# Recovery codes: 16 characters from 32 that are hard to misread (no 0/O, 1/I), about
+# 80 bits, shown as XXXX-XXXX-XXXX-XXXX
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
 class AccountError(ValueError):
@@ -127,3 +132,61 @@ def claim_unclaimed_data(user_id: int) -> bool:
                 conn.execute(update(table).where(table.c.id == UNCLAIMED).values(id=user_id))
     forget_strategy(user_id)   # the in-memory copy of this account's strategy is out of date
     return True
+
+
+# --- Password changes, logging out everywhere, recovery codes, deleting ---------------
+
+def token_version(user_id: int) -> int | None:
+    """The account's token version (tokens with another one are refused), or None if there's no such account."""
+    with get_engine().connect() as conn:
+        row = conn.execute(select(users.c.token_version).where(users.c.id == user_id)).first()
+    return None if row is None else int(row[0] or 0)
+
+
+def bump_token_version(user_id: int) -> int:
+    """Log out every device: tokens made before this stop working. Returns the new version."""
+    with get_engine().begin() as conn:
+        current = conn.execute(select(users.c.token_version).where(users.c.id == user_id)).scalar() or 0
+        conn.execute(update(users).where(users.c.id == user_id).values(token_version=int(current) + 1))
+    return int(current) + 1
+
+
+def set_password(user_id: int, password: str) -> int:
+    """A new password; logs out every device. Raises AccountError for a password that's too short or long."""
+    check_new_password(password)
+    with get_engine().begin() as conn:
+        conn.execute(update(users).where(users.c.id == user_id).values(password_hash=hash_password(password)))
+    return bump_token_version(user_id)
+
+
+def _clean_code(code: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (code or "").upper())
+
+
+def new_recovery_code(user_id: int) -> str:
+    """A new recovery code for the account (the old one stops working). Only its hash is kept."""
+    raw = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(16))
+    with get_engine().begin() as conn:
+        conn.execute(update(users).where(users.c.id == user_id).values(recovery_hash=hash_password(raw)))
+    return "-".join(raw[i:i + 4] for i in range(0, 16, 4))
+
+
+def recovery_matches(code: str, stored: str | None) -> bool:
+    """Dashes, spaces and lower case don't matter."""
+    return bool(stored) and password_matches(_clean_code(code), stored)
+
+
+def has_recovery_code(user_id: int) -> bool:
+    with get_engine().connect() as conn:
+        return conn.execute(select(users.c.recovery_hash).where(users.c.id == user_id)).scalar() is not None
+
+
+def delete_account(user_id: int) -> None:
+    """Delete the account and everything in it: holdings, calls, strategy and alert settings."""
+    with get_engine().begin() as conn:
+        conn.execute(delete(positions).where(positions.c.user_id == user_id))
+        conn.execute(delete(holdings).where(holdings.c.user_id == user_id))
+        conn.execute(delete(strategy).where(strategy.c.id == user_id))
+        conn.execute(delete(alert_settings).where(alert_settings.c.id == user_id))
+        conn.execute(delete(users).where(users.c.id == user_id))
+    forget_strategy(user_id)
