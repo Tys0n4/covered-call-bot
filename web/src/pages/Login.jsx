@@ -4,10 +4,31 @@
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { apiError, login, recover, setToken, signup } from '../api/client'
+import WakingNotice from '../components/WakingNotice'
 import { Logo, Spinner } from '../components/ui'
 
 const HAS_ACCOUNT = 'has_account'
 const knownHere = () => { try { return localStorage.getItem(HAS_ACCOUNT) === '1' } catch { return false } }
+
+// What a scan looks like, from a real AAPL scan on Oct 15, 2026 (static: it shows before the server answers)
+function SampleScan() {
+  return (
+    <section aria-labelledby="sample-h" className="mt-6 rounded-card bg-surface p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="sample-h" className="text-13 font-semibold text-fg-2">What a scan looks like</h2>
+        <span className="text-12 text-muted">Sample · 300 AAPL</span>
+      </div>
+      <div className="mt-2.5 text-15 text-fg-2">Sell 3 calls, collect about</div>
+      <div className="text-44 font-semibold tracking-hero">$585</div>
+      <div className="mt-1 text-15 font-semibold">3 × $355 call · expires Oct 30</div>
+      <p className="mt-3 border-t border-line pt-3 text-13 text-fg-2">
+        <strong className="font-semibold text-fg">The catch:</strong> if AAPL closes above $355 on Oct 30, your 300 shares are sold
+        at $355. That has about a 22% chance. Otherwise you keep the $585 and your shares.
+      </p>
+      <p className="mt-2 text-12 text-muted">From a real scan on Oct 15. Yours uses today's prices and your own shares.</p>
+    </section>
+  )
+}
 
 export default function LoginPage({ canClaim, startWithLogin = false, onLoggedIn }) {
   const [mode, setMode]         = useState(() => (startWithLogin || knownHere() ? 'login' : 'signup'))
@@ -60,9 +81,11 @@ export default function LoginPage({ canClaim, startWithLogin = false, onLoggedIn
               ? 'Use the recovery code you saved when you made your account. Every other device is logged out.'
               : 'Welcome back. Your stocks and calls are where you left them.'}
         </p>
+        {signingUp && <SampleScan />}
 
-        <label className="label mt-8" htmlFor="auth-email">Email</label>
-        <input id="auth-email" className="input" type="email" autoComplete="email" inputMode="email" autoFocus
+        {signingUp && <h2 className="mt-8 text-17 font-semibold">Create your account</h2>}
+        <label className={`label ${signingUp ? 'mt-3' : 'mt-8'}`} htmlFor="auth-email">Email</label>
+        <input id="auth-email" className="input" type="email" autoComplete="email" inputMode="email" autoFocus={!signingUp}
           placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} aria-invalid={error ? true : undefined} />
 
         {recovering && (
@@ -119,6 +142,8 @@ export default function LoginPage({ canClaim, startWithLogin = false, onLoggedIn
             </button>
           </p>
         )}
+
+        <WakingNotice variant="box" className="mt-6" />
 
         <ul className="mt-10 flex flex-col gap-2.5 border-t border-line pt-5 text-13 text-muted">
           <li className="flex gap-2.5"><LockKeyhole size={16} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />Your stocks and trades are private to your account.</li>

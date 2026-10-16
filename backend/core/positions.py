@@ -167,6 +167,8 @@ def _insert_positions(
             "open_fees":        round(float(p.fees or 0), 2),
             "cost_basis":       avg_costs.get(p.ticker) or None,
             "rolled_from":      rolled_from,
+            "recommended_expiry": p.recommended_expiry,
+            "recommended_strike": p.recommended_strike,
         }
         ids.append(conn.execute(insert(positions).values(**record)).inserted_primary_key[0])
     return ids

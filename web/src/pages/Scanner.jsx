@@ -2,14 +2,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Check, RefreshCw, RotateCcw, ScanLine } from 'lucide-react'
-import { runScan, runScanAll, savePositions, apiError } from '../api/client'
-import { useStrategy, chargesCommission } from '../lib/useStrategy'
+import { runScan, runScanAll, savePositions, saveStrategy, apiError } from '../api/client'
+import { useStrategy, chargesCommission, forgetStrategy } from '../lib/useStrategy'
 import { useTicker } from '../context/TickerContext'
 import { usePageTitle } from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
-import OptionsTable from '../components/OptionsTable'
+import CallsList from '../components/CallsList'
 import ScanAll from '../components/ScanAll'
 import RecommendedTrade from '../components/RecommendedTrade'
 import StockChips from '../components/StockChips'
@@ -132,8 +132,18 @@ export default function Scanner() {
   const [saving, setSaving]   = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [tableOpen, setTableOpen] = useState(wide)
-  const strategy = useStrategy()          // delta range, expiry window and commission
+  const strategy = useStrategy()          // delta range, expiry window, commission and tax account
   const showFees = chargesCommission(strategy)
+  // Taxable or retirement account, for the tax line; changed right on the trade and saved to the strategy
+  const [taxChoice, setTaxChoice] = useState(null)
+  const taxAccount = taxChoice ?? strategy?.tax_account ?? 'taxable'
+  const changeTaxAccount = account => {
+    setTaxChoice(account)
+    if (!strategy) return
+    saveStrategy({ ...strategy, tax_account: account })
+      .then(r => forgetStrategy(r.data))
+      .catch(e => { setTaxChoice(null); setError(apiError(e, "Couldn't save the account type.")) })
+  }
 
   const { values: config, errors: fieldErrors, valid: filtersValid } = parseForm(form)
 
@@ -227,9 +237,12 @@ export default function Scanner() {
     if (!trade || !(price > 0)) return
     setSaving(true)
     try {
+      // With the call the Scanner recommended, so Performance can show whether following it helped
+      const pick = r.planned_positions[0]
       await savePositions([{
         ticker: r.ticker, expiry: trade.expiry, strike: trade.strike, contracts: trade.contracts,
         entry_price: price, allocation_type: trade.allocation_type, fees: moneyValue(scan.fees) || 0,
+        recommended_expiry: pick.expiry, recommended_strike: pick.strike,
       }])
       update({ saved: true })
       refresh().catch(() => {})
@@ -398,7 +411,7 @@ export default function Scanner() {
                   <RecommendedTrade result={result} useAlt={scan.useAlt} onToggleAlt={() => update({ useAlt: !scan.useAlt, fill: '' })}
                     fill={scan.fill} fees={scan.fees} showFees={showFees} saved={saved} saving={saving}
                     onFill={v => update({ fill: v })} onFees={v => update({ fees: v })} onSave={handleSave}
-                    lastPrices={lastPrices} nextOpen={nextOpen} />
+                    lastPrices={lastPrices} nextOpen={nextOpen} taxAccount={taxAccount} onTaxAccount={changeTaxAccount} />
                 )}
 
                 {planned.length === 0 && result.candidates.length > 0 && (
@@ -416,7 +429,12 @@ export default function Scanner() {
                         {tableOpen ? 'Hide' : 'Show'}
                       </button>
                     </div>
-                    {tableOpen && <div className="mt-2"><OptionsTable candidates={result.candidates} ticker={result.ticker} picked={picked} /></div>}
+                    {tableOpen && (
+                      <div className="mt-2">
+                        <CallsList candidates={result.candidates} ticker={result.ticker} price={result.current_price} picked={picked}
+                          contracts={planned[0]?.contracts || result.allocation_summary?.available || result.allocation_summary?.total_contracts || 1} />
+                      </div>
+                    )}
                   </section>
                 ) : (
                   <EmptyState title="No options matched">
@@ -427,7 +445,8 @@ export default function Scanner() {
                 )}
 
                 <p className="mt-8 text-12 text-muted">
-                  Not investment advice. CovCall shows calls that fit the rules you chose; you decide, and you place the trade at your broker.
+                  Not investment advice. CovCall shows the call that fits the rules you set, and what could happen. It doesn't know your whole
+                  situation; the decision and the trade are yours.
                 </p>
               </>
             )}

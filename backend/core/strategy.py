@@ -28,8 +28,10 @@ from core.db import get_engine, strategy
 FIELDS = (
     "income_weight", "profit_capture_target_pct", "buyback_budget_pct", "monthly_goal",
     "delta_min", "delta_max", "min_dte", "max_dte", "event_buyback_pct", "commission_per_contract",
+    "tax_account",
 )
 INT_FIELDS = ("min_dte", "max_dte")
+TEXT_FIELDS = ("tax_account",)
 
 # Most requests read the strategy (a scan several times) and it only changes through
 # save_strategy(), so each account's is kept in memory. The time limit covers a
@@ -62,11 +64,12 @@ def default_strategy() -> dict:
         "max_dte":                   DEFAULT_CONFIG.max_dte,
         "event_buyback_pct":         DEFAULT_CONFIG.event_buyback_pct,
         "commission_per_contract":   DEFAULT_CONFIG.commission_per_contract,
+        "tax_account":               "taxable",
     }
 
 
 def _clean(values: dict) -> dict:
-    return {k: (int(round(v)) if k in INT_FIELDS else float(v)) for k, v in values.items()}
+    return {k: (str(v) if k in TEXT_FIELDS else int(round(v)) if k in INT_FIELDS else float(v)) for k, v in values.items()}
 
 
 def load_strategy(user_id: int) -> dict:

@@ -53,6 +53,8 @@ def _row_to_candidate(row) -> Candidate:
         upside_to_strike_pct=float(row["upside_to_strike_pct"]),
         delta=_num(row.get("delta")),
         spread_pct=_num(row.get("spread_pct")),
+        bid=_num(row.get("bid")),
+        ask=_num(row.get("ask")),
         quote_quality=str(row["quote_quality"]),
         price_basis=_price_basis(row),
         last_trade_date=row.get("last_trade_date") if isinstance(row.get("last_trade_date"), str) else None,
@@ -245,6 +247,8 @@ def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_leng
             premium_total=t.premium,
             allocation_type=t.allocation_type,
             fees=t.fees,
+            recommended_expiry=t.recommended_expiry,
+            recommended_strike=t.recommended_strike,
         )
         for t in trades
     ]
