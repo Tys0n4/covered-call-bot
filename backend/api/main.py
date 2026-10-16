@@ -1,5 +1,7 @@
 # api/main.py
 import logging
+import os
+import sys
 import threading
 from contextlib import asynccontextmanager
 
@@ -11,8 +13,42 @@ from api.routes import alerts, scan, positions, manage, settings, portfolio, per
 from core.db import get_engine
 from core.market_hours import is_market_open, next_market_open
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+class _BelowWarning(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno < logging.WARNING
+
+
+def _logs_by_severity() -> None:
+    """
+    Railway marks every line on stderr as an error, so routine lines (requests,
+    "server started", scheduled checks) go to stdout and only warnings and
+    errors go to stderr. Applies to uvicorn's own loggers too.
+    """
+    fmt = logging.Formatter("%(levelname)s %(name)s: %(message)s")
+    out = logging.StreamHandler(sys.stdout)
+    out.addFilter(_BelowWarning())
+    out.setFormatter(fmt)
+    err = logging.StreamHandler(sys.stderr)
+    err.setLevel(logging.WARNING)
+    err.setFormatter(fmt)
+    logging.getLogger().handlers = [out, err]
+    logging.getLogger().setLevel(logging.INFO)
+    for name in ("uvicorn", "uvicorn.access"):
+        if logging.getLogger(name).handlers:   # set up by uvicorn; uvicorn.error passes its lines to "uvicorn"
+            logging.getLogger(name).handlers = [out, err]
+
+
+_logs_by_severity()
 log = logging.getLogger("api")
+
+
+def _show_docs(env=os.environ) -> bool:
+    """The interactive API docs (/docs) are for development: hidden on Railway unless API_DOCS=1."""
+    on_railway = any(env.get(k) for k in ("RAILWAY_ENVIRONMENT_NAME", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID"))
+    return env.get("API_DOCS") == "1" or not on_railway
+
+
+_SHOW_DOCS = _show_docs()
 
 
 def _warm_up() -> None:
@@ -39,6 +75,9 @@ app = FastAPI(
     description="Scan, plan, and manage covered call positions.",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if _SHOW_DOCS else None,
+    redoc_url="/redoc" if _SHOW_DOCS else None,
+    openapi_url="/openapi.json" if _SHOW_DOCS else None,
 )
 
 app.add_middleware(

@@ -3,6 +3,8 @@
 import hmac
 import logging
 import os
+import threading
+import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
@@ -17,6 +19,12 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 # Not behind the login: for an outside scheduler (cron-job.org), which can't
 # log in. It needs the ALERTS_KEY setting instead, and can only run the check.
 scheduler = APIRouter(prefix="/alerts", tags=["alerts"])
+
+# A scheduler set to fire every minute would download every account's option prices
+# each time; checks closer together than this are skipped (twice an hour is plenty)
+MIN_CHECK_GAP = 20 * 60
+_last_check = {"at": None}
+_check_lock = threading.Lock()
 
 
 def _out(s: dict) -> AlertSettingsOut:
@@ -92,5 +100,11 @@ def run_scheduled_check(background: BackgroundTasks, x_alerts_key: str | None = 
         raise HTTPException(status_code=404, detail="Not Found")
     if not x_alerts_key or not hmac.compare_digest(x_alerts_key.encode(), key.encode()):
         raise HTTPException(status_code=401, detail="Wrong or missing X-Alerts-Key")
+    now = time.monotonic()
+    with _check_lock:
+        last = _last_check["at"]
+        if last is not None and now - last < MIN_CHECK_GAP:
+            return {"status": "skipped", "minutes_since_last": int((now - last) // 60)}
+        _last_check["at"] = now
     background.add_task(_scheduled_check)
     return {"status": "started"}

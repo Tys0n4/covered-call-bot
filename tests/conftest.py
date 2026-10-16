@@ -134,14 +134,17 @@ def fresh_db(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_password(monkeypatch):
-    """No old shared password, fresh login limits, and quick password hashing (tests only)."""
-    from api import auth
+    """No old shared password, fresh login and scan limits, and quick password hashing (tests only)."""
+    from api import auth, limits
+    from api.routes import alerts as alert_routes
     from core import accounts
     monkeypatch.delenv("APP_PASSWORD", raising=False)
     monkeypatch.delenv("AUTH_SECRET", raising=False)
     monkeypatch.setattr(accounts, "_N", 2 ** 10)
     auth._failures.clear()
     auth._signups.clear()
+    limits.reset_all()
+    alert_routes._last_check["at"] = None
 
 
 def signed_up(email: str = "you@example.com", password: str = "correct horse battery"):

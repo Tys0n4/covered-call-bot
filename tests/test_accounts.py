@@ -69,7 +69,6 @@ def test_one_account_per_email(anonymous):
 
 
 def test_wrong_password_or_unknown_email(anonymous, monkeypatch):
-    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
     signed_up("you@example.com")
     for body in ({"email": "you@example.com", "password": "nope nope nope"}, {"email": "who@example.com", "password": "x"}):
         r = anonymous.post("/auth/login", json=body)
@@ -148,7 +147,6 @@ def test_strategy_and_alerts_are_per_account(two):
 def test_too_many_wrong_passwords_lock_that_email_for_a_while(anonymous, monkeypatch):
     signed_up("you@example.com")
     signed_up("other@example.com")
-    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
     clock = [1_000_000.0]
     monkeypatch.setattr(auth.time, "time", lambda: clock[0])
     for _ in range(auth.MAX_FAILURES):
@@ -165,7 +163,6 @@ def test_too_many_wrong_passwords_lock_that_email_for_a_while(anonymous, monkeyp
 
 def test_a_right_password_clears_earlier_mistakes(anonymous, monkeypatch):
     signed_up("you@example.com")
-    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
     for _ in range(auth.MAX_FAILURES - 1):
         anonymous.post("/auth/login", json={"email": "you@example.com", "password": "nope"})
     assert anonymous.post("/auth/login", json={"email": "you@example.com", "password": "correct horse battery"}).status_code == 200
@@ -214,7 +211,6 @@ def _mine(c):
 
 def test_old_data_waits_for_the_old_password(old_database, anonymous, monkeypatch):
     monkeypatch.setenv("APP_PASSWORD", "hunter2")
-    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
     assert anonymous.get("/auth/status").json()["can_claim"] is True
 
     stranger = signed_up("stranger@example.com")                       # signs up first: gets nothing
