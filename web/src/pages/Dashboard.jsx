@@ -1,5 +1,5 @@
-// src/pages/Dashboard.jsx — Home: what you've kept, the one thing to do next,
-// your stocks, and what's coming up.
+// src/pages/Dashboard.jsx — Home: the one thing to do next, what you've earned from calls
+// (once one has finished), your stocks, and what's coming up.
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRight, Check, Layers, Pencil, Plus, ScanLine } from 'lucide-react'
@@ -14,8 +14,8 @@ import HoldingModal from '../components/dialogs/HoldingModal'
 import ServerDown from '../components/ServerDown'
 import { DashboardSkeleton } from '../components/Skeleton'
 import { Bone, Dot, MarketStatus, Spinner, Stat } from '../components/ui'
-import { daysUntil, fmtDate, money, plural } from '../lib/format'
-import { againstYou } from '../lib/pnl'
+import { daysUntil, fmtDate, money, plural, strike } from '../lib/format'
+import { needsDecision } from '../lib/pnl'
 import { usePriceCheck } from '../lib/usePriceCheck'
 import { useStrategy } from '../lib/useStrategy'
 
@@ -156,16 +156,16 @@ function StockRow({ t, positions, onScan, onPositions, onEdit }) {
       <div className="min-w-0 flex-1 md:flex md:items-center md:gap-6">
         <div className="md:w-[220px] md:shrink-0">
           <div className="text-17 font-semibold">{t.ticker}</div>
-          <div className="hidden text-13 text-muted md:block">{t.shares.toLocaleString()} shares · avg {money(t.avg_cost)}</div>
+          <div className="hidden text-13 text-muted md:block">{t.shares.toLocaleString()} shares{t.avg_cost > 0 ? ` · bought at ${money(t.avg_cost)}` : ''}</div>
         </div>
         <div className="mt-1.5 flex items-center gap-2 md:mt-0 md:flex-1 md:gap-3">
           <Coverage total={total} working={t.open_total} />
-          <span className="text-13 text-muted md:text-fg-2">{total ? `${t.open_total} of ${total} covered` : 'Under 100 shares'}</span>
+          <span className="text-13 text-muted md:text-fg-2">{!total ? 'Under 100 shares' : t.open_total === 0 ? `${t.shares.toLocaleString()} shares · none covered yet` : `${t.open_total} of ${total} covered`}</span>
         </div>
       </div>
       {t.available > 0 ? (
         <button type="button" className="btn btn-primary btn-sm min-h-11 md:min-h-10" onClick={onScan}>
-          Find {t.available === 1 ? 'a call' : 'calls'}
+          Find a call
         </button>
       ) : (
         <div className="text-right">
@@ -208,7 +208,8 @@ export default function Dashboard() {
     getAssignmentReview()
       .then(r => { if (!cancelled) setReviewCount(r.data.length) })
       .catch(() => {})
-    getPerformance().then(r => { if (!cancelled) setPerf(r.data) }).catch(() => {})
+    // Without it there's no chart, but the next step still shows
+    getPerformance().then(r => { if (!cancelled) setPerf(r.data) }).catch(() => { if (!cancelled) setPerf({ trades: [] }) })
     getUpcoming().then(r => { if (!cancelled) setUpcoming(r.data) }).catch(() => {})
     getAlerts().then(r => { if (!cancelled) setAlertsState(r.data) }).catch(() => {})
     return () => { cancelled = true }
@@ -240,58 +241,58 @@ export default function Dashboard() {
   const expiring  = positions.filter(p => { const d = daysUntil(p.expiry); return d != null && d >= 0 && d <= 7 })
                       .sort((a, b) => a.expiry.localeCompare(b.expiry))
   const unsold    = portfolio.filter(t => t.available > 0)
-  const callList  = list => list.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)}`).join(' and ') + (list.length > 3 ? ` and ${list.length - 3} more` : '')
+  const callList  = list => list.slice(0, 3).map(p => `${p.ticker} ${strike(p.strike)}`).join(' and ') + (list.length > 3 ? ` and ${list.length - 3} more` : '')
 
   // Everything that needs you, most urgent first: the first is the Next step, the rest are listed under it
   const todo = []
   if (reviewCount > 0) todo.push({
     key: 'review', tone: 'amber',
     title: `Check ${reviewCount === 1 ? 'an expired call' : `${reviewCount} expired calls`}`,
-    body: `${reviewCount === 1 ? 'It' : 'They'} expired with the stock above the strike. Were your shares called away?`,
+    body: `${reviewCount === 1 ? 'It' : 'They'} expired with the stock above the strike. Were your shares sold?`,
     cta: { label: 'Review', onClick: () => navigate('/positions') },
   })
   if (ready.length > 0) todo.push({
     key: 'ready',
-    title: ready.length === 1 ? `${ready[0].ticker} ${money(ready[0].strike, 0)} call is ready to buy back` : `${ready.length} calls are ready to buy back`,
+    title: ready.length === 1 ? `${ready[0].ticker} ${strike(ready[0].strike)} call is ready to buy back` : `${ready.length} calls are ready to buy back`,
     body: ready.length === 1 ? "You've kept your target share of the premium. Buying back locks it in." : `You've kept your target share of the premium on ${callList(ready)}.`,
     cta: { label: ready.length === 1 ? 'Review buy back' : 'Review buy backs', onClick: () => navigate('/positions') },
   })
-  // Calls with the stock above the strike: buy back at a loss, or let the shares go.
-  // One likely to be exercised early for the dividend says by when to act instead.
+  // Calls that need a decision (the stock near or above the strike): buy back, roll or let the
+  // shares go. One likely to be exercised early for the dividend says by when to act instead.
   positions.forEach(p => {
     const early = evals[p.id]?.early_exercise
     if (early) {
       todo.push({
         key: `early-${p.id}`, tone: 'loss',
-        title: `${p.ticker} ${money(p.strike, 0)} call may be exercised early`,
+        title: `${p.ticker} ${strike(p.strike)} call may be exercised early`,
         body: `${p.ticker} goes ex-dividend on ${fmtDate(early.ex_dividend_date)}, and the call has less time value left than the dividend. To keep your shares, buy back or roll by ${fmtDate(early.exercise_by)}.`,
         cta: { label: 'Review', onClick: () => go(p.ticker, '/positions') },
       })
       return
     }
-    const a = againstYou(p, evals[p.id], portfolio.find(t => t.ticker === p.ticker)?.avg_cost)
-    if (!a?.aboveStrike) return
+    const d = needsDecision(p, evals[p.id], portfolio.find(t => t.ticker === p.ticker)?.avg_cost)
+    if (!d) return
     todo.push({
-      key: `above-${p.id}`, tone: 'loss',
-      title: `${p.ticker} is above your ${money(p.strike, 0)} strike`,
-      body: `Buy back for ${a.buybackPL < 0 ? '−' : '+'}${money(Math.abs(a.buybackPL), 0)}, or let ${a.shares.toLocaleString()} shares be called away at ${money(p.strike, 0)} on ${fmtDate(p.expiry)}.`,
-      cta: { label: 'Review', onClick: () => go(p.ticker, '/positions') },
+      key: `decide-${p.id}`, tone: d.aboveStrike ? 'loss' : 'amber',
+      title: `${p.ticker} is ${d.aboveStrike ? 'above' : 'near'} your ${strike(p.strike)} strike`,
+      body: `If it closes above ${strike(p.strike)} on ${fmtDate(p.expiry)}, your ${d.shares.toLocaleString()} shares are sold at ${strike(p.strike)}. Buy back, roll, or let them go.`,
+      cta: { label: 'Decide', onClick: () => go(p.ticker, '/positions') },
     })
   })
-  // Free contracts on several stocks: one step that scans them all
+  // Shares with no call sold on several stocks: one step that scans them all
   if (unsold.length > 1) todo.push({
     key: 'unsold',
-    title: `${plural(unsold.reduce((s, t) => s + t.available, 0), 'contract')} free on ${unsold.length} stocks`,
-    body: unsold.map(t => `${t.ticker} ${t.available}`).join(' · '),
-    more: 'Scan them all at once for the recommended trade on each.',
+    title: `Calls to sell on ${unsold.length} stocks`,
+    body: unsold.map(t => `${(t.available * 100).toLocaleString()} ${t.ticker} shares not covered`).join(' · '),
+    more: 'Scan them all at once for the trade on each.',
     cta: { label: 'Scan all', onClick: () => navigate('/scanner?all=1&go=1') },
   })
   else unsold.forEach(t => todo.push({
     key: `unsold-${t.ticker}`,
-    title: t.open_total === 0 ? `${t.shares.toLocaleString()} ${t.ticker} shares aren't covered` : `${plural(t.available, `${t.ticker} contract`)} ${t.available === 1 ? 'is' : 'are'} free`,
-    body: `Room for ${plural(t.available, 'call')}`,
-    more: 'The Scanner finds one that fits your rules.',
-    cta: { label: `Scan ${t.ticker}`, onClick: () => go(t.ticker, '/scanner') },
+    title: t.open_total === 0 ? `Sell a call on your ${t.ticker} shares` : `${(t.available * 100).toLocaleString()} ${t.ticker} shares not covered`,
+    body: t.open_total === 0 ? `${t.shares.toLocaleString()} shares, enough for ${plural(t.available, 'call')}` : `Enough for ${plural(t.available, 'more call')}`,
+    more: 'CovCall finds one that fits you and shows exactly what to enter at your broker.',
+    cta: { label: 'Find a call', onClick: () => go(t.ticker, '/scanner?go=1') },
   }))
   // Discord alerts that have quietly stopped working
   if (alertsState?.enabled && (alertsState.last_error || alertsState.check_overdue)) todo.push({
@@ -303,7 +304,7 @@ export default function Dashboard() {
   if (expiring.length > 0) todo.push({
     key: 'expiring',
     title: `${plural(expiring.length, 'call')} ${expiring.length === 1 ? 'expires' : 'expire'} within a week`,
-    body: expiring.slice(0, 3).map(p => `${p.ticker} ${money(p.strike, 0)} on ${fmtDate(p.expiry)}`).join(', ') + (expiring.length > 3 ? ` and ${expiring.length - 3} more` : ''),
+    body: expiring.slice(0, 3).map(p => `${p.ticker} ${strike(p.strike)} on ${fmtDate(p.expiry)}`).join(', ') + (expiring.length > 3 ? ` and ${expiring.length - 3} more` : ''),
     cta: { label: 'View', onClick: () => navigate('/positions') },
   })
 
@@ -317,7 +318,7 @@ export default function Dashboard() {
       const k = `${p.expiry}|${p.ticker}|${p.strike}`
       byCall.set(k, { ...(byCall.get(k) || { date: p.expiry, ticker: p.ticker, strike: p.strike, contracts: 0 }), contracts: (byCall.get(k)?.contracts || 0) + p.contracts })
     })
-    byCall.forEach((c, k) => out.push({ key: `exp-${k}`, date: c.date, title: `${c.ticker} ${money(c.strike, 0)} call expires`, sub: plural(c.contracts, 'contract') }))
+    byCall.forEach((c, k) => out.push({ key: `exp-${k}`, date: c.date, title: `${c.ticker} ${strike(c.strike)} call expires`, sub: plural(c.contracts, 'contract') }))
     ;(upcoming?.fed || []).forEach(day => {
       const after = positions.filter(p => p.expiry >= day).length
       out.push({ key: `fed-${day}`, date: day, event: true, title: 'Fed rate decision',
@@ -343,18 +344,27 @@ export default function Dashboard() {
     if (params.has('add')) setParams({}, { replace: true })
   }
 
-  // The API returns the updated portfolio after every add/edit/remove
+  // The API returns the updated portfolio after every add/edit/remove. A new stock with shares
+  // to cover goes straight to its scan.
   const handleSaved = (rows, ticker) => {
     applyPortfolio(rows)
-    if (ticker && editing === 'new') selectTicker(ticker)
     toast(editing === 'new' ? `${ticker} added` : ticker ? `${ticker} updated` : `${editing.ticker} removed`)
+    const added = editing === 'new' && ticker ? rows.find(t => t.ticker === ticker) : null
     closeEditor()
+    if (added) {
+      selectTicker(ticker)
+      if (added.available > 0) navigate('/scanner?go=1')
+    }
   }
 
   const checking = prices.checking && !prices.data
   const nextStep = <NextStep items={todo} checking={checking} priceMeta={positions.length > 0 ? priceMeta : null} />
   const coming = <ComingUp items={comingUp} note={fedNote} warning={earningsWarning} />
   const yearly = perf?.summary?.annualized_return_pct
+  // Until a call has finished there's nothing to chart, so the next step leads; the numbers
+  // under the chart wait for a call, and the options-approval note is for the very start
+  const finished = perf ? perf.trades.length > 0 : null
+  const anyCalls = positions.length > 0 || !!finished
 
   return (
     <div className="page">
@@ -371,24 +381,38 @@ export default function Dashboard() {
       ) : (
         <div className="md:grid md:grid-cols-[minmax(0,1fr)_320px] md:items-start md:gap-12">
           <div className="min-w-0">
-            {perf ? <KeptChart trades={perf.trades} goal={goal} /> : (
+            {finished === null ? (
               <div aria-hidden="true">
                 <Bone className="h-4 w-28" /><Bone className="mt-3 h-12 w-56" /><Bone className="mt-3 h-4 w-64" />
                 <div className="h-[260px] md:h-[318px]" />
               </div>
+            ) : finished ? (
+              <KeptChart trades={perf.trades} goal={goal} />
+            ) : (
+              <div className="md:max-w-[560px]">
+                {nextStep}
+                {!anyCalls && (
+                  <p className="mt-4 flex items-start gap-2.5 rounded-card border border-edge p-4 text-13 text-fg-2">
+                    <Dot tone="amber" className="mt-1.5" />
+                    <span><strong className="font-semibold text-fg">First time selling calls?</strong> Your broker has to approve you for options first, usually the lowest level ("covered calls"). Most approve it within a day.</span>
+                  </p>
+                )}
+              </div>
             )}
 
-            <div className="mt-8 md:hidden">{nextStep}</div>
+            {finished && <div className="mt-8 md:hidden">{nextStep}</div>}
 
-            <section aria-label="Open calls" className="mt-8 grid grid-cols-3 border-y border-line">
-              <Stat className="py-4 pr-3 md:py-5 md:pr-5" label="In open calls" value={money(openPremium)}
-                sub={`${plural(positions.length, 'call')}${positions.length ? ', after fees' : ''}`} />
-              <Stat className="border-l border-line py-4 px-3 md:p-5" label="Contracts working"
-                value={<>{working} <span className="font-medium text-muted">/ {totalContracts}</span></>}
-                sub={free > 0 ? `${free} not sold` : 'All covered'} />
-              <Stat className="border-l border-line py-4 pl-3 md:p-5" label="Yearly return"
-                value={yearly == null ? '—' : `${yearly.toFixed(1)}%`} sub="on what your shares cost" />
-            </section>
+            {anyCalls && (
+              <section aria-label="Open calls" className="mt-8 grid grid-cols-3 border-y border-line">
+                <Stat className="py-4 pr-3 md:py-5 md:pr-5" label="In open calls" value={money(openPremium)}
+                  sub={`${plural(positions.length, 'call')}${positions.length ? ', after fees' : ''}`} />
+                <Stat className="border-l border-line py-4 px-3 md:p-5" label="Contracts working"
+                  value={<>{working} <span className="font-medium text-muted">/ {totalContracts}</span></>}
+                  sub={free > 0 ? `${(free * 100).toLocaleString()} shares not covered` : 'All covered'} />
+                <Stat className="border-l border-line py-4 pl-3 md:p-5" label="Yearly return"
+                  value={yearly == null ? '—' : `${yearly.toFixed(1)}%`} sub="on what your shares cost" />
+              </section>
+            )}
 
             <section aria-labelledby="stocks-h" className="mt-10">
               <div className="flex items-center justify-between gap-3">
@@ -403,16 +427,17 @@ export default function Dashboard() {
               <ul className="mt-1">
                 {portfolio.map(t => (
                   <StockRow key={t.ticker} t={t} positions={positions.filter(p => p.ticker === t.ticker)}
-                    onScan={() => go(t.ticker, '/scanner')} onPositions={() => go(t.ticker, '/positions')} onEdit={() => setEditing(t)} />
+                    onScan={() => go(t.ticker, t.available > 0 ? '/scanner?go=1' : '/scanner')} onPositions={() => go(t.ticker, '/positions')} onEdit={() => setEditing(t)} />
                 ))}
               </ul>
             </section>
 
             <div className="mt-10 md:hidden">{coming}</div>
+            {finished === false && <p className="mt-8 text-13 text-muted">"Earned from calls" and its chart appear here once your first call finishes.</p>}
           </div>
 
           <aside className="hidden md:flex md:flex-col md:gap-10">
-            {nextStep}
+            {finished && nextStep}
             {coming}
           </aside>
         </div>

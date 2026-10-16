@@ -19,7 +19,7 @@ It doesn't place trades: you place them at your broker, and CovCall tells you wh
 - **Live option prices** — Cboe's delayed quotes (about 15 minutes behind), with Yahoo Finance as the fallback
 - **Buy-back guidance** — tells you when a call is ready to buy back and the order to place at your broker, with an optional Discord alert
 - **Event awareness** — earnings, Fed decisions, industry earnings and ex-dividend dates before expiry are flagged, and picks lean to the safe end of your range
-- **Real records** — what your broker actually filled, rolls in one step, and shares called away
+- **Real records** — what your broker actually filled, rolls in one step, and shares sold at the strike
 - **Honest results** — performance after buybacks and fees, compared with just holding the shares
 
 How each of these works, from the pick math to the buy-back rules, is in **[How it works](docs/how-it-works.md)**.
@@ -28,11 +28,11 @@ How each of these works, from the pick math to the buy-back rules, is in **[How 
 
 *Demo portfolio with simulated market data.*
 
-**Scanner** — one recommended trade for a stock, with the calls behind it and boxes for what you actually sold at.
+**Scanner** — one call for every share you can cover, the catch in plain words, the order to place at your broker, and a box for what you actually sold at.
 
 ![Scanner](docs/screenshots/scanner.png)
 
-**Positions** — open calls grouped into Ready to buy back, Going against you and Holding, with the order to place at your broker.
+**Positions** — open calls grouped into Needs a decision (the stock near or above your strike), Ready to buy back and On track, with the order to place at your broker.
 
 ![Positions](docs/screenshots/positions.png)
 

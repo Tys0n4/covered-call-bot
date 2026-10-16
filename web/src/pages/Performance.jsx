@@ -101,7 +101,7 @@ function MonthDetail({ m, goal, thisMonth }) {
 
 function resultText(t) {
   if (t.status === 'EXPIRED') return 'Expired'
-  if (t.status === 'ASSIGNED') return 'Called away'
+  if (t.status === 'ASSIGNED') return 'Shares sold'
   return t.rolled ? 'Rolled' : 'Bought back'
 }
 
@@ -198,7 +198,7 @@ export default function Performance() {
             <Stat className="border-b border-line py-4 pr-3 md:border-l md:px-5 md:py-5" label="Calls that made money"
               value={s.win_rate_pct == null ? '—' : pct(s.win_rate_pct, 0)} sub="after buybacks and fees" />
             <Stat className="border-b border-l border-line py-4 pl-4 md:px-5 md:py-5" label="Profit on shares sold"
-              value={s.share_gains_all_time ? signedMoney(s.share_gains_all_time) : money(0)} sub="called away at the strike, over your cost" />
+              value={s.share_gains_all_time ? signedMoney(s.share_gains_all_time) : money(0)} sub="shares sold at the strike, over your cost" />
             <Stat className="col-span-2 border-b border-line py-4 pr-3 md:col-span-1 md:border-l md:px-5 md:py-5" label="Still open" value={money(s.open_premium)}
               sub={<>{plural(s.open_calls, 'call')} · <Link to="/positions" className="link link-quiet">manage</Link></>} />
           </section>

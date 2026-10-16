@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  againstYou, cleanMoney, contractsTotal, keptPct, moneyValue, optionNet, resultLabel, totalFees, usualFees,
+  needsDecision, cleanMoney, contractsTotal, keptPct, moneyValue, optionNet, resultLabel, totalFees, usualFees,
 } from './pnl'
 
 describe('optionNet', () => {
@@ -52,20 +52,28 @@ describe('money boxes', () => {
   })
 })
 
-describe('againstYou', () => {
+describe('needsDecision', () => {
   const call = { strike: 110, contracts: 2, entry_price: 1.35, premium_total: 270, open_fees: 0 }
-  it('is nothing while the call costs less than it sold for', () => {
-    expect(againstYou(call, { current_option_price: 1.0, stock_price: 105, cost_to_close: 200 }, 96.5)).toBeNull()
+  it('is nothing while the stock is more than 2% under the strike, even if the call is up', () => {
+    // The call costs more than it sold for, but the stock is 3.4% under the strike
+    expect(needsDecision(call, { current_option_price: 1.5, stock_price: 106.26, cost_to_close: 300 }, 96.5)).toBeNull()
   })
-  it('works out both choices in dollars', () => {
-    const a = againstYou(call, { current_option_price: 5.4, stock_price: 114.2, cost_to_close: 1080 }, 96.5)
+  it('starts within 2% of the strike', () => {
+    const a = needsDecision(call, { current_option_price: 1.2, stock_price: 108, cost_to_close: 240 }, 96.5)
+    expect(a.aboveStrike).toBe(false)
+    expect(a.fromStrikePct).toBeCloseTo(1.82, 2)
+  })
+  it('works out the choices in dollars', () => {
+    const a = needsDecision(call, { current_option_price: 5.4, stock_price: 114.2, cost_to_close: 1080 }, 96.5)
     expect(a.aboveStrike).toBe(true)
     expect(a.buybackPL).toBeCloseTo(270 - 1080)
-    expect(a.calledPL).toBeCloseTo(270 + (110 - 96.5) * 200)
+    expect(a.saleTotal).toBe(22000)
+    expect(a.shareGain).toBeCloseTo((110 - 96.5) * 200)
     expect(a.upsideGiven).toBeCloseTo((114.2 - 110) * 200)
   })
-  it("can't total the called-away choice without your cost", () => {
-    const a = againstYou(call, { current_option_price: 5.4, stock_price: 114.2, cost_to_close: 1080 }, null)
-    expect(a.calledPL).toBeNull()
+  it("can't work out the gain without your cost, or the buyback without a price", () => {
+    const a = needsDecision(call, { current_option_price: 0, stock_price: 114.2, cost_to_close: 0 }, null)
+    expect(a.shareGain).toBeNull()
+    expect(a.buybackPL).toBeNull()
   })
 })
