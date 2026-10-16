@@ -1,5 +1,7 @@
 // src/pages/Positions.jsx
-// One place for your covered calls: what's open, whether to buy back, and history.
+// One place for your covered calls: what's open, whether to buy back, and history. A call
+// "needs a decision" only when its stock is near or above the strike (your shares may be
+// sold); the rest are on track.
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -24,11 +26,12 @@ import RollOptionsModal from '../components/dialogs/RollOptionsModal'
 import EditTradeModal from '../components/dialogs/EditTradeModal'
 import AddCallModal from '../components/dialogs/AddCallModal'
 import ConfirmDialog from '../components/dialogs/ConfirmDialog'
+import Modal, { DialogHead } from '../components/dialogs/Modal'
 import PriceStamp, { priceAsOf } from '../components/PriceStamp'
 import InfoTip from '../components/InfoTip'
 import { Dot, KeptBar, Segmented, Spinner } from '../components/ui'
 import { fmtDate, daysUntil, marketToday, money, plural, signedMoney, strike } from '../lib/format'
-import { againstYou, keptPct, optionNet, resultLabel } from '../lib/pnl'
+import { DECISION_PCT, keptPct, needsDecision, optionNet, resultLabel } from '../lib/pnl'
 import { TERMS } from '../lib/terms'
 
 const SCOPE_KEY = 'positions_scope'
@@ -74,21 +77,18 @@ function OrderTicket({ p, ev }) {
   )
 }
 
-// The third choice when a call goes against you: roll it up and out for a credit
+// The third choice when a call needs a decision: roll it later and higher, for a credit
 function RollChoice({ p, onFindRoll }) {
   const { data, loading, error } = useRolls(p.id)
   const best = data?.rolls?.[0]
   return (
-    <div className="rounded-sm bg-inset p-4 sm:col-span-2">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-13 text-fg-2">Roll up and out</span>
-        {best && <span className="text-20 font-semibold tracking-title text-accent">{signedMoney(best.net_total, 0)}</span>}
-      </div>
-      <div className="mt-0.5 text-13 text-muted">
-        {loading ? <span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" /> Looking for a roll…</span>
+    <div className="rounded-sm bg-inset p-4">
+      <div className="text-15 font-semibold">Roll it: later and higher</div>
+      <div className="mt-1 text-13 text-fg-2">
+        {loading ? <span className="inline-flex items-center gap-2 text-muted"><Spinner className="h-3.5 w-3.5" /> Looking for a roll…</span>
           : error || (best
-            ? <>Best roll: the {fmtDate(best.expiry)} {strike(best.strike)} call. Buy back at {money(data.buyback_price)}, sell at {money(best.price)}.
-                {best.strike_gain > 0 && <> The strike goes up {money(best.strike - p.strike)}, so {money(best.strike_gain, 0)} more if your shares are called later.</>}</>
+            ? <>Swap it for the {fmtDate(best.expiry)} {strike(best.strike)} call and collect <span className="font-semibold text-accent">{money(best.net_total, 0)} more</span>.
+                {best.strike > p.strike ? <> Your shares would sell at {strike(best.strike)} instead, if at all.</> : <> Same strike, more time.</>}</>
             : data?.note)}
       </div>
       {best && (
@@ -117,46 +117,73 @@ function EarlyExercise({ p, e }) {
   )
 }
 
-// The call costs more than you sold it for: the two real choices, in dollars
-function AgainstYou({ p, a, onFindRoll }) {
-  const tone = v => (v < 0 ? 'var(--loss)' : 'var(--accent)')
+// The stock is near or above the strike, so your shares may be sold: the three choices in
+// plain words, with the call money kept apart from the share sale (and its tax)
+function Decision({ p, d, onFindRoll }) {
+  const shares = d.shares.toLocaleString()
   return (
     <div className="mt-4">
-      <p className="flex items-start gap-2 text-13 text-fg-2">
-        <Dot tone={a.aboveStrike ? 'loss' : 'amber'} className="mt-1.5" />
+      <p className="flex items-start gap-2 text-15 text-fg-2">
+        <Dot tone={d.aboveStrike ? 'loss' : 'amber'} className="mt-2" />
         <span>
-          <strong className="font-semibold text-fg">{a.aboveStrike ? 'Stock above your strike.' : 'The call is up.'}</strong>{' '}
-          {p.ticker} {money(a.stock)}, {a.fromStrikePct.toFixed(1)}% {a.aboveStrike ? 'above' : 'below'} the strike. The call is {money(a.now)}; you sold it at {money(p.entry_price)}.
-          {!a.aboveStrike && <> If {p.ticker} stays under {strike(p.strike)} until {fmtDate(p.expiry)}, it expires worthless and you keep all {money(a.collected)}.</>}
+          <strong className="font-semibold text-fg">
+            {p.ticker} is {money(d.stock)}, {d.aboveStrike ? `above your ${strike(p.strike)} strike.` : `${d.fromStrikePct.toFixed(1)}% below your ${strike(p.strike)} strike.`}
+          </strong>{' '}
+          {d.aboveStrike
+            ? `If it stays there through ${fmtDate(p.expiry)}, your ${shares} shares are sold at ${strike(p.strike)}.`
+            : `If it closes above ${strike(p.strike)} on ${fmtDate(p.expiry)}, your ${shares} shares are sold at ${strike(p.strike)}.`}
         </span>
       </p>
-      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2.5">
         <div className="rounded-sm bg-inset p-4">
-          <div className="text-13 text-fg-2">Buy back now</div>
-          <div className="mt-0.5 text-20 font-semibold tracking-title" style={{ color: tone(a.buybackPL) }}>{signedMoney(a.buybackPL, 0)}</div>
-          <div className="mt-1 text-13 text-muted">Costs {money(a.buybackCost)} against the {money(a.collected)} collected. You keep your shares.</div>
+          <div className="text-15 font-semibold">Keep your shares: buy the call back</div>
+          <div className="mt-1 text-13 text-fg-2">
+            {d.buybackCost != null
+              ? <>Costs {money(d.buybackCost, 0)} now. On this call you'd be{' '}
+                  <span className={`font-semibold ${d.buybackPL < 0 ? 'text-loss' : 'text-accent'}`}>{money(Math.abs(d.buybackPL), 0)} {d.buybackPL < 0 ? 'down' : 'up'}</span>{' '}
+                  ({money(d.collected, 0)} in, {money(d.buybackCost, 0)} out).</>
+              : 'No current price for the call right now. Check again while the market is open.'}
+          </div>
         </div>
         <div className="rounded-sm bg-inset p-4">
-          <div className="text-13 text-fg-2">{a.aboveStrike ? 'Let it be called away' : `If it's called away at ${strike(p.strike)}`}</div>
-          {a.calledPL != null ? (
-            <>
-              <div className="mt-0.5 text-20 font-semibold tracking-title" style={{ color: tone(a.calledPL) }}>{signedMoney(a.calledPL, 0)}</div>
-              <div className="mt-1 text-13 text-muted">
-                {a.shares.toLocaleString()} shares sold at {money(p.strike)}: {money(a.collected)} premium {a.shareGain >= 0 ? '+' : '−'} {money(Math.abs(a.shareGain))} {a.shareGain >= 0 ? 'over' : 'under'} your {money(a.cost)} cost.
-              </div>
-            </>
-          ) : (
-            <div className="mt-1 text-13 text-muted">{a.shares.toLocaleString()} shares sold at {money(p.strike)}, and you keep the {money(a.collected)} premium. Add your average cost to the stock to see the total.</div>
-          )}
+          <div className="text-15 font-semibold">Let them be sold at {strike(p.strike)}</div>
+          <div className="mt-1 text-13 text-fg-2">
+            You keep the <span className="font-semibold text-accent">{money(d.collected, 0)}</span> from the call and sell {shares} shares for {money(d.saleTotal, 0)}.
+            {d.shareGain == null ? ' Add what you paid for the shares (Home, the stock’s ⋯ menu) to see the gain.'
+              : d.shareGain >= 0 ? ` You bought them at ${money(d.cost)}, so that's a taxable gain of about ${money(d.shareGain, 0)}.`
+                : ` You bought them at ${money(d.cost)}, so that's a loss of about ${money(-d.shareGain, 0)} on the shares.`}
+            {d.upsideGiven > 0 && ` The ${money(d.upsideGiven, 0)} rise above ${strike(p.strike)} goes to the buyer.`}
+          </div>
         </div>
         <RollChoice p={p} onFindRoll={onFindRoll} />
       </div>
-      {a.aboveStrike && a.upsideGiven > 0 && (
-        <p className="mt-2 text-13 text-muted">
-          At today's price, {money(a.upsideGiven, 0)} of {p.ticker}'s rise above {strike(p.strike)} goes to the buyer. Buying back or rolling keeps that upside.
-        </p>
-      )}
     </div>
+  )
+}
+
+// "Record what I did" on a call that needs a decision: which of the three it was
+function RecordChoice({ p, onPick, onCancel }) {
+  const choices = [
+    ['bought', 'I bought it back', 'You keep your shares.'],
+    ['rolled', 'I rolled it', 'Bought it back and sold a later call.'],
+    ['assigned', 'My shares were sold', `The call was exercised at ${strike(p.strike)}.`],
+  ]
+  return (
+    <Modal onDismiss={onCancel} labelledBy="record-title" width={440}>
+      <DialogHead id="record-title" title="What did you do?" onClose={onCancel}
+        sub={`${p.ticker} ${strike(p.strike)} call · ${fmtDate(p.expiry)} · ${plural(p.contracts, 'contract')}`} />
+      <div className="mt-5 flex flex-col gap-2.5">
+        {choices.map(([how, title, detail]) => (
+          <button key={how} type="button" className="flex w-full items-center gap-3 rounded-card bg-surface p-4 text-left ring-1 ring-edge" onClick={() => onPick(how)}>
+            <span className="min-w-0 flex-1">
+              <span className="block text-15 font-semibold">{title}</span>
+              <span className="block text-13 text-muted">{detail}</span>
+            </span>
+            <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-muted" aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+    </Modal>
   )
 }
 
@@ -170,6 +197,8 @@ function Status({ p, ev, checking, failed, avgCost, asOf, onFindRoll }) {
       </p>
     )
   }
+  const decision = needsDecision(p, ev, avgCost)
+  if (decision) return <Decision p={p} d={decision} onFindRoll={onFindRoll} />
   if (!(ev.current_option_price > 0)) {
     return (
       <p className="mt-4 text-13 text-muted">
@@ -179,8 +208,6 @@ function Status({ p, ev, checking, failed, avgCost, asOf, onFindRoll }) {
       </p>
     )
   }
-  const against = againstYou(p, ev, avgCost)
-  if (against) return <AgainstYou p={p} a={against} onFindRoll={onFindRoll} />
 
   const buy = ev.should_buy_back
   const expire = ev.action === 'let_expire'
@@ -227,10 +254,10 @@ function Status({ p, ev, checking, failed, avgCost, asOf, onFindRoll }) {
   )
 }
 
-function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onClose, onRoll, onFindRoll, onEdit, onDelete, onCollapse }) {
+function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onClose, onRoll, onRecord, onFindRoll, onEdit, onDelete, onCollapse }) {
   const buy = ev?.should_buy_back
-  const against = againstYou(p, ev, avgCost)
-  const priced = ev && ev.current_option_price > 0 && !against
+  const decision = needsDecision(p, ev, avgCost) || ev?.early_exercise
+  const priced = ev && ev.current_option_price > 0 && !decision
   return (
     <article aria-label={`${p.ticker} ${strike(p.strike)} call`} className="rounded-card bg-surface p-5">
       <div className="flex items-baseline justify-between gap-3">
@@ -242,7 +269,7 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onCl
         {priced && <span>kept</span>}
       </div>
       <div className="mt-0.5 text-13 text-muted">
-        {p.allocation_type}{p.rolled_from ? ' · rolled' : ''} · sold at {money(p.entry_price)} · collected {money(p.premium_total)}
+        {p.rolled_from ? 'Rolled · ' : ''}sold at {money(p.entry_price)} · you collected {money(p.premium_total)}
       </div>
 
       {ev?.early_exercise && <EarlyExercise p={p} e={ev.early_exercise} />}
@@ -250,8 +277,12 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onCl
 
       {/* On the narrowest phones "I bought it back" takes its own row, above the rest */}
       <div className="mt-5 flex flex-wrap items-center gap-2.5">
-        <button type="button" className="btn btn-secondary flex-1 px-4" onClick={() => onRoll(p)}>I rolled it</button>
-        <button type="button" className={`btn flex-[1.4] px-4 max-[360px]:order-first max-[360px]:basis-full ${buy ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onClose(p)}>I bought it back</button>
+        {decision ? (
+          <button type="button" className="btn btn-secondary flex-1 px-4" onClick={() => onRecord(p)}>Record what I did</button>
+        ) : <>
+          <button type="button" className="btn btn-secondary flex-1 px-4" onClick={() => onRoll(p)}>I rolled it</button>
+          <button type="button" className={`btn flex-[1.4] px-4 max-[360px]:order-first max-[360px]:basis-full ${buy ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onClose(p)}>I bought it back</button>
+        </>}
         <ActionMenu label={`More for the ${p.ticker} ${strike(p.strike)} call`} className="-mr-2" items={[
           onCollapse && { label: 'Show less', icon: ChevronRight, onClick: onCollapse },
           { label: 'Find a roll', icon: Repeat, onClick: () => onFindRoll(p) },
@@ -264,22 +295,33 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onCl
   )
 }
 
-// One line for a call that needs nothing from you right now: premium kept against the target
+// One line for a call that's on track: how far the stock is under the strike, what happens
+// if it stays there (or the price that locks in your target), and how much is earned so far
 function CallRow({ p, showTicker, ev, checking, failed, onExpand }) {
   const priced = ev && ev.current_option_price > 0
   const expire = ev?.action === 'let_expire'
+  const below = ev?.stock_price > 0 ? (1 - ev.stock_price / p.strike) * 100 : null
+  const collected = p.premium_total - (p.open_fees || 0)
+  const keep = !ev ? null
+    : expire ? 'Can be left to expire'
+      : priced && ev.profit_capture_pct >= 50 && ev.buyback_price > 0 ? `Buy back at ${money(ev.buyback_price)} or less to lock in ${keptPct(ev.buyback_kept_pct)}%`
+        : `If it stays below, you keep all ${money(collected, 0)}`
   return (
     <li className="border-b border-line last:border-b-0">
       <button type="button" className="flex w-full items-center gap-3 py-3.5 text-left" onClick={onExpand} aria-expanded="false"
-        aria-label={`${callName(p, true)}, ${priced ? `${keptPct(ev.profit_capture_pct)}% kept` : 'no current price'}. Show details`}>
+        aria-label={`${callName(p, true)}, ${priced ? `${Math.max(0, keptPct(ev.profit_capture_pct))}% earned so far` : 'no current price'}. Show details`}>
         <span className="min-w-0 flex-1">
-          <span className="block text-15 font-medium">{callName(p, showTicker)}</span>
-          <span className="block text-13 text-muted">{plural(p.contracts, 'contract')} · {fmtDate(p.expiry)}{expire ? ' · let it expire' : ''}</span>
+          <span className="block text-15 font-semibold">{callName(p, showTicker)}</span>
+          <span className="block text-13 text-muted">
+            {fmtDate(p.expiry)}{below != null ? ` · ${p.ticker} ${below.toFixed(1)}% below the strike` : ` · ${plural(p.contracts, 'contract')}`}
+          </span>
+          {keep && <span className="block text-13 text-fg-2" style={{ color: expire ? 'var(--accent)' : undefined }}>{keep}</span>}
         </span>
         {priced ? (
-          <span className="w-[76px] shrink-0">
-            <span className="block text-right text-15 font-semibold" style={{ color: expire ? 'var(--accent)' : undefined }}>{keptPct(ev.profit_capture_pct)}%</span>
-            <KeptBar className="mt-1.5" height={4} pct={ev.profit_capture_pct} target={ev.buyback_kept_pct} event={!!ev.event} hot={expire} />
+          <span className="shrink-0 text-right">
+            {/* A call a few cents above what you sold it for has earned nothing yet, not less */}
+            <span className="block text-17 font-semibold">{Math.max(0, keptPct(ev.profit_capture_pct))}%</span>
+            <span className="block text-12 text-muted">earned so far</span>
           </span>
         ) : (
           <span className="text-13 text-muted">{checking && !ev ? <Spinner className="h-3.5 w-3.5" /> : failed && !ev ? 'No price' : '—'}</span>
@@ -304,6 +346,8 @@ export default function Positions() {
   const [error, setError]         = useState(null)
 
   const [closingPos, setClosingPos] = useState(null)   // Close dialog
+  const [closeHow, setCloseHow]   = useState('bought') // ...opened as a buyback, or as shares sold
+  const [recording, setRecording] = useState(null)     // "What did you do?" for a call that needed a decision
   const [rollingPos, setRollingPos] = useState(null)   // Roll dialog
   const [rollPrefill, setRollPrefill] = useState(null) // the roll picked in Find a roll, if any
   const [rollsFor, setRollsFor]   = useState(null)     // Find a roll dialog
@@ -375,7 +419,7 @@ export default function Positions() {
 
   const askDelete = p => setConfirm({
     title: 'Delete this call?',
-    body: <>Only for a call entered by mistake. The {p.ticker} {strike(p.strike)} call ({plural(p.contracts, 'contract')}) is removed and its contracts are free again. This can't be undone.</>,
+    body: <>Only for a call entered by mistake. The {p.ticker} {strike(p.strike)} call ({plural(p.contracts, 'contract')}) is removed and those {(p.contracts * 100).toLocaleString()} shares are no longer covered. This can't be undone.</>,
     confirmLabel: 'Delete call', danger: true,
     run: async () => { await deletePosition(p.id); afterChange(); toast(`${p.ticker} ${strike(p.strike)} call deleted`) },
   })
@@ -396,7 +440,7 @@ export default function Positions() {
     })
   }
   const askCalledAway = p => setConfirm({
-    title: 'Were your shares called away?',
+    title: 'Were your shares sold?',
     body: <>Records that the {p.ticker} {strike(p.strike)} call was exercised: {(p.contracts * 100).toLocaleString()} shares leave your holding and you keep the full premium.</>,
     confirmLabel: 'Record assignment',
     run: async () => { await assignPosition(p.id); afterChange(); undoable(`Assignment recorded: ${(p.contracts * 100).toLocaleString()} ${p.ticker} shares removed`, p.id) },
@@ -406,32 +450,38 @@ export default function Positions() {
     try { await confirm.run() } catch (e) { throw new Error(apiError(e, 'Could not save that. Is the API running?'), { cause: e }) }
   }
 
-  // Ready to buy back and going against you get the full card (there's something
-  // to do); the rest are one line until opened. Soonest expiry first in each group.
+  // Needs a decision and ready to buy back get the full card (there's something to do);
+  // the rest are one line until opened. Soonest expiry first in each group.
   const avgCostOf = p => tickers.find(t => t.ticker === p.ticker)?.avg_cost
   const groupOf = p => {
     const e = evals?.[p.id]
     if (!e) return 'hold'
-    if (e.early_exercise || againstYou(p, e, avgCostOf(p))) return 'against'
+    if (e.early_exercise || needsDecision(p, e, avgCostOf(p))) return 'decide'
     return e.should_buy_back ? 'ready' : 'hold'
   }
   const byExpiry = (a, b) => a.expiry.localeCompare(b.expiry) || a.ticker.localeCompare(b.ticker)
   const groups = [
+    { key: 'decide',  title: 'Needs a decision' },
     { key: 'ready',   title: 'Ready to buy back' },
-    { key: 'against', title: 'Going against you' },
-    { key: 'hold',    title: evals ? 'Holding' : 'Open calls' },
+    { key: 'hold',    title: evals ? 'On track' : 'Open calls' },
   ].map(g => ({ ...g, calls: open.filter(p => groupOf(p) === g.key).sort(byExpiry) })).filter(g => g.calls.length > 0)
 
   const card = (p, onCollapse) => (
     <PositionCard key={p.id} p={p} showTicker={showTicker} ev={evals?.[p.id]} checking={checking} failed={pricesFailed}
       avgCost={avgCostOf(p)} asOf={priceAsOf(prices.data)} onCollapse={onCollapse}
-      onClose={setClosingPos} onRoll={p => { setRollPrefill(null); setRollingPos(p) }} onFindRoll={setRollsFor}
+      onClose={p => { setCloseHow('bought'); setClosingPos(p) }} onRoll={p => { setRollPrefill(null); setRollingPos(p) }} onRecord={setRecording} onFindRoll={setRollsFor}
       onEdit={setEditingPos} onDelete={askDelete} />
   )
 
   return (
     <div className="page">
-      {closingPos && <CloseModal position={closingPos} evaluation={evals?.[closingPos.id]} onCancel={() => setClosingPos(null)}
+      {recording && <RecordChoice p={recording} onCancel={() => setRecording(null)}
+        onPick={how => {
+          const p = recording
+          setRecording(null)
+          if (how === 'rolled') { setRollPrefill(null); setRollingPos(p) } else { setCloseHow(how); setClosingPos(p) }
+        }} />}
+      {closingPos && <CloseModal position={closingPos} how={closeHow} evaluation={evals?.[closingPos.id]} onCancel={() => setClosingPos(null)}
         onDone={how => {
           const p = closingPos
           afterChange()
@@ -510,8 +560,8 @@ export default function Positions() {
           ) : (
             <>
               {evals && <PriceStamp meta={prices.data} />}
-              {/* "Nothing to do" only when no call is going against you either */}
-              {evals && readyCount === 0 && !groups.some(g => g.key === 'against') && (
+              {/* "Nothing to do" only when no call needs a decision either */}
+              {evals && readyCount === 0 && !groups.some(g => g.key === 'decide') && (
                 <p className="mt-3 text-15 text-fg-2">
                   {expireCount > 0
                     ? <>Nothing to buy back. {expireCount === open.length ? (expireCount === 1 ? 'It' : 'They') : plural(expireCount, 'call')} can be left to expire.</>
@@ -540,7 +590,13 @@ export default function Positions() {
                   )}
                 </section>
               ))}
-              {evals && <p className="mt-6 text-12 text-muted">Kept is the share of the premium you'd keep if you bought the call back now. The mark on each bar is your target.</p>}
+              {groups.some(g => g.key === 'decide') && (
+                <p className="mt-6 text-12 text-muted">"Needs a decision" only when the stock is within {DECISION_PCT}% of your strike or above it. A call costing a few cents more than you sold it for is normal.</p>
+              )}
+              {/* The bars only show on full cards */}
+              {evals && open.some(p => groupOf(p) === 'ready' || (groupOf(p) === 'hold' && expanded.has(p.id))) && (
+                <p className="mt-2 text-12 text-muted">Kept is the share of the premium you'd keep if you bought the call back now. The mark on each bar is your target.</p>
+              )}
             </>
           )
         ) : closed.length === 0 ? (
@@ -557,7 +613,7 @@ export default function Positions() {
                     <div className="min-w-0 flex-1">
                       <div className="text-15 font-semibold">{p.ticker} {strike(p.strike)} × {p.contracts}</div>
                       <div className="flex items-center gap-1.5 text-13 text-muted">
-                        {label === 'Assigned' && <Dot tone="amber" />}{label === 'Assigned' ? 'Called away' : label} · {fmtDate(p.closed_at)} · {p.allocation_type}
+                        {label === 'Assigned' && <Dot tone="amber" />}{label === 'Assigned' ? `Shares sold at ${strike(p.strike)}` : label} · {fmtDate(p.closed_at)}
                       </div>
                     </div>
                     <div className="text-right">
@@ -569,7 +625,7 @@ export default function Positions() {
                     <ActionMenu label={`Actions for the ${p.ticker} ${strike(p.strike)} call`} className="-mr-2" items={[
                       { label: 'Edit', icon: Pencil, onClick: () => setEditingPos(p) },
                       p.status === 'EXPIRED'
-                        ? { label: 'Shares were called away', icon: UserCheck, onClick: () => askCalledAway(p) }
+                        ? { label: 'My shares were sold', icon: UserCheck, onClick: () => askCalledAway(p) }
                         : { label: rolledIds.has(p.id) ? 'Undo roll' : p.status === 'ASSIGNED' ? 'Undo assignment' : 'Reopen (undo close)', icon: Undo2, onClick: () => askUndo(p) },
                     ]} />
                   </li>

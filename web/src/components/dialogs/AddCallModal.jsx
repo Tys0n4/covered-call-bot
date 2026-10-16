@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { addPosition, apiError } from '../../api/client'
 import Modal, { DialogHead } from './Modal'
-import { Field, MoneyField, Segmented, Spinner } from '../ui'
+import { Field, MoneyField, Spinner } from '../ui'
 import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { money, plural } from '../../lib/format'
 import { moneyValue, usualFees } from '../../lib/pnl'
@@ -12,13 +12,10 @@ const isoToday = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const TYPES = [{ value: 'Income', label: 'Income' }, { value: 'Balanced', label: 'Balanced' }]
-
 export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel }) {
   const strategy = useStrategy()
   const showFees = chargesCommission(strategy)
   const [ticker, setTicker]   = useState(defaultTicker || tickers[0]?.ticker || '')
-  const [type, setType]       = useState('Income')
   const [expiry, setExpiry]   = useState('')
   const [strike, setStrike]   = useState('')
   const [contractsText, setContracts] = useState('1')
@@ -39,7 +36,7 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
   const errors = {
     expiry:    !expiry ? 'Pick the expiry' : expiry < openedAt ? 'Must be on or after the day you sold it' : null,
     strike:    !(strikeV > 0) ? 'Enter the strike' : null,
-    contracts: !(contracts >= 1) ? 'At least 1' : contracts > free ? `Only ${free} free` : null,
+    contracts: !(contracts >= 1) ? 'At least 1' : contracts > free ? `Only ${free} left to cover` : null,
     fill:      !(fillV > 0) ? 'Enter the price you sold at' : null,
     openedAt:  !openedAt ? 'Pick a date' : openedAt > isoToday() ? "Can't be in the future" : null,
   }
@@ -53,7 +50,7 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
     try {
       await addPosition({
         ticker, expiry, strike: strikeV, contracts, entry_price: fillV,
-        fees: moneyValue(feesShown) || 0, allocation_type: type, opened_at: openedAt,
+        fees: moneyValue(feesShown) || 0, allocation_type: 'Income', opened_at: openedAt,
       })
       onDone(ticker)
     } catch (e) {
@@ -73,10 +70,6 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
             {tickers.map(t => <option key={t.ticker} value={t.ticker}>{t.ticker}</option>)}
           </select>
         </div>
-        <div>
-          <span className="label" id="add-type">Type</span>
-          <Segmented label="Type" options={TYPES} value={type} onChange={setType} />
-        </div>
         <Field id="add-expiry" label="Expiry" type="date" value={expiry} onChange={e => setExpiry(e.target.value)} error={show('expiry')} />
         <MoneyField id="add-strike" label="Strike" value={strike} onChange={setStrike} error={show('strike')} />
         <Field id="add-contracts" label="Contracts" type="text" inputMode="numeric" value={contractsText}
@@ -88,8 +81,8 @@ export default function AddCallModal({ tickers, defaultTicker, onDone, onCancel 
 
       <p className={`mt-4 rounded-sm bg-panel px-4 py-3 text-15 ${holding && free > 0 ? 'text-fg-2' : 'text-loss'}`}>
         {!holding ? 'Add the stock on Home first.'
-          : free === 0 ? `${ticker} has no free contracts. Every share is already covered.`
-          : <>{ticker}: {plural(free, 'contract')} free{fillV > 0 && contracts >= 1 ? <> · premium {money(fillV * contracts * 100)}</> : null}</>}
+          : free === 0 ? `Every ${ticker} share is already covered.`
+          : <>{(free * 100).toLocaleString()} {ticker} shares not covered, room for {plural(free, 'call')}{fillV > 0 && contracts >= 1 ? <> · premium {money(fillV * contracts * 100)}</> : null}</>}
       </p>
       {error && <p role="alert" className="mt-3 text-13 text-loss">{error}</p>}
       <div className="dialog-actions">

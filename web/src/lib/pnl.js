@@ -43,28 +43,32 @@ export function usualFees(strategy, contracts) {
   return fee > 0 ? fee.toFixed(2) : ''
 }
 
-// A call that's gone against you: it now costs more to buy back than you sold
-// it for. Returns null otherwise (or without a current price for the call and
-// the stock). The two real choices, in dollars:
-//   buybackPL - buy it back now (premium kept minus the cost to close)
-//   calledPL  - let it be called away at the strike: premium kept plus the gain
-//               (or loss) on the shares over your cost; null if the cost is unknown
-export function againstYou(p, evaluation, avgCost) {
-  const now = evaluation?.current_option_price
+// The stock this close under the strike (or above it) puts your shares at risk of being sold
+export const DECISION_PCT = 2
+
+// A call that needs a decision: the stock is within 2% of the strike or above it, so your
+// shares may be sold. A call costing a few cents more than you sold it for is normal and
+// isn't one. Returns null otherwise (or without a stock price). The choices, in dollars:
+//   buybackPL - buy it back now and keep your shares (premium kept minus the cost to close;
+//               null without a current price for the call)
+//   shareGain - let the shares be sold at the strike: the gain (or loss) on them over your
+//               cost, which is taxable; null if the cost is unknown. The premium is yours either way.
+export function needsDecision(p, evaluation, avgCost) {
   const stock = evaluation?.stock_price
-  if (!(now > 0) || !(stock > 0) || !(now > p.entry_price)) return null
+  if (!(stock > 0) || stock < p.strike * (1 - DECISION_PCT / 100)) return null
+  const now = evaluation.current_option_price > 0 ? evaluation.current_option_price : null
   const shares = p.contracts * 100
   const collected = p.premium_total - n(p.open_fees)
   const cost = p.cost_basis ?? avgCost ?? null
+  const buybackCost = now != null ? evaluation.cost_to_close : null
   return {
     aboveStrike: stock > p.strike,
-    stock, now, shares, collected,
+    stock, now, shares, collected, cost,
     fromStrikePct: Math.abs(stock / p.strike - 1) * 100,
-    buybackCost: evaluation.cost_to_close,
-    buybackPL: collected - evaluation.cost_to_close,
+    buybackCost,
+    buybackPL: buybackCost != null ? collected - buybackCost : null,
+    saleTotal: p.strike * shares,
     shareGain: cost > 0 ? (p.strike - cost) * shares : null,
-    calledPL: cost > 0 ? collected + (p.strike - cost) * shares : null,
-    cost,
     upsideGiven: stock > p.strike ? (stock - p.strike) * shares : 0,
   }
 }

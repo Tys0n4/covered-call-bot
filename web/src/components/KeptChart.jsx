@@ -19,15 +19,15 @@ const whole = v => `${v < 0 ? '−' : ''}$${Math.round(Math.abs(v)).toLocaleStri
 // The days a range covers, and how it's labelled
 function windowFor(range, today, firstClose) {
   const [y, m] = parts(today)
-  if (range === 'month') return { start: Date.UTC(y, m, 1), end: Date.UTC(y, m + 1, 0), label: `Kept in ${MONTHS[m]}` }
+  if (range === 'month') return { start: Date.UTC(y, m, 1), end: Date.UTC(y, m + 1, 0), label: `Earned from calls in ${MONTHS[m]}` }
   if (range === '3m') {
     const start = Date.UTC(y, m - 2, 1)
-    return { start, end: today, label: `Kept since ${shortDate(start)}` }
+    return { start, end: today, label: `Earned from calls since ${shortDate(start)}` }
   }
   // The year so far, from your first finished call if that came later than January
   const jan = Date.UTC(y, 0, 1)
   const start = firstClose > jan ? Date.UTC(...parts(firstClose).slice(0, 2), 1) : jan
-  return { start, end: today, label: `Kept in ${y}` }
+  return { start, end: today, label: `Earned from calls in ${y}` }
 }
 
 function ticksFor(range, start, end) {

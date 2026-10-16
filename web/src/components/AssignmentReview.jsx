@@ -1,4 +1,4 @@
-// src/components/AssignmentReview.jsx — "this call expired in the money: were your shares called away?"
+// src/components/AssignmentReview.jsx — "this call expired in the money: were your shares sold?"
 import { useState } from 'react'
 import { apiError, assignPosition, markNotAssigned } from '../api/client'
 import { Dot, Spinner } from './ui'
@@ -21,10 +21,10 @@ export default function AssignmentReview({ items, onChanged }) {
     <section aria-label="Calls to check" className="mb-6 flex flex-col gap-3">
       {items.map(p => (
         <div key={p.id} className="rounded-card bg-surface p-5">
-          <h2 className="flex items-center gap-2.5 text-17 font-semibold"><Dot tone="amber" />Were your {p.ticker} shares called away?</h2>
+          <h2 className="flex items-center gap-2.5 text-17 font-semibold"><Dot tone="amber" />Were your {p.ticker} shares sold?</h2>
           <p className="mt-2 text-15 text-fg-2">
             Your {p.ticker} {strike(p.strike)} call expired {fmtDate(p.expiry)} with {p.ticker} at {money(p.close_price)}, so your{' '}
-            {(p.contracts * 100).toLocaleString()} shares ({plural(p.contracts, 'contract')}) were probably sold at {money(p.strike)}. Check with your broker.
+            {(p.contracts * 100).toLocaleString()} shares ({plural(p.contracts, 'contract')}) were probably sold at {strike(p.strike)}. Check with your broker.
           </p>
           <div className="mt-4 flex flex-wrap gap-2.5">
             <button type="button" className="btn btn-primary btn-sm min-h-11" disabled={busy != null} onClick={() => act(p, assignPosition)}>

@@ -1,4 +1,4 @@
-// src/components/dialogs/CloseModal.jsx — record how an open call ended: you bought it back, or shares were called away
+// src/components/dialogs/CloseModal.jsx — record how an open call ended: you bought it back, or your shares were sold
 import { useState } from 'react'
 import { apiError, assignPosition, closePosition } from '../../api/client'
 import Modal, { DialogHead } from './Modal'
@@ -7,14 +7,14 @@ import { useStrategy, chargesCommission } from '../../lib/useStrategy'
 import { fmtDate, money, plural, strike } from '../../lib/format'
 import { contractsTotal, moneyValue, usualFees } from '../../lib/pnl'
 
-const HOW = [{ value: 'bought', label: 'Bought it back' }, { value: 'assigned', label: 'Shares called away' }]
+const HOW = [{ value: 'bought', label: 'Bought it back' }, { value: 'assigned', label: 'Shares were sold' }]
 
-export default function CloseModal({ position: p, evaluation, onDone, onCancel }) {
+export default function CloseModal({ position: p, how: startHow = 'bought', evaluation, onDone, onCancel }) {
   const strategy = useStrategy()
   const showFees = chargesCommission(strategy)
   // The latest price check, offered as a hint: what you actually paid is on your broker's confirmation
   const priceNow = evaluation?.current_option_price > 0 ? evaluation.current_option_price : null
-  const [how, setHow]         = useState('bought')   // 'bought' | 'assigned'
+  const [how, setHow]         = useState(startHow)   // 'bought' | 'assigned'
   const [priceText, setPrice] = useState('')
   const [feesText, setFees]   = useState(null)       // null until edited: your usual commission
   const [busy, setBusy]       = useState(false)
@@ -50,7 +50,7 @@ export default function CloseModal({ position: p, evaluation, onDone, onCancel }
 
   return (
     <Modal onDismiss={() => { if (!busy) onCancel() }} labelledBy="close-title" width={480}>
-      <DialogHead id="close-title" title={how === 'assigned' ? 'Record an assignment' : 'Record a buyback'} onClose={onCancel} disabled={busy}
+      <DialogHead id="close-title" title={how === 'assigned' ? 'Record that your shares were sold' : 'Record a buyback'} onClose={onCancel} disabled={busy}
         sub={`${p.ticker} ${strike(p.strike)} call · expires ${fmtDate(p.expiry)} · ${plural(p.contracts, 'contract')}`} />
       <Segmented className="mt-5" label="What happened?" options={HOW} value={how} onChange={setHow} />
 
@@ -75,8 +75,8 @@ export default function CloseModal({ position: p, evaluation, onDone, onCancel }
       ) : (
         <p className="mt-5 rounded-sm bg-panel px-4 py-3 text-15 text-fg-2">
           You keep the full <strong className="font-semibold text-fg">{money(p.premium_total)}</strong> premium.{' '}
-          {shares.toLocaleString()} {p.ticker} shares come out of your holding, sold at {money(p.strike)}
-          {shareGain != null && <> against your {money(p.cost_basis)} average cost: a <strong className="font-semibold text-fg">{money(Math.abs(shareGain))}</strong> {shareGain >= 0 ? 'profit' : 'loss'} on the shares</>}.
+          {shares.toLocaleString()} {p.ticker} shares come out of your holding, sold at {strike(p.strike)}
+          {shareGain != null && <> against your {money(p.cost_basis)} average cost: a <strong className="font-semibold text-fg">{money(Math.abs(shareGain))}</strong> {shareGain >= 0 ? 'taxable gain' : 'loss'} on the shares</>}.
         </p>
       )}
 

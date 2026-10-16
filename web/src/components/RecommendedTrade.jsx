@@ -90,8 +90,7 @@ export default function RecommendedTrade({
         <div className="hero-num mt-1">{money(trade.premium_total, 0)}</div>
         <div className="mt-2 text-17 font-semibold">{trade.contracts} × {strike(trade.strike)} call · expires {fmtDate(trade.expiry)}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-13 text-muted">
-          <span>{plural(o.dte ?? 0, 'day')}{line ? ` · ${line}` : ''}</span>
-          {line && <PremiumTip check={result.premium_check} />}
+          <span>{plural(o.dte ?? 0, 'day')}{line && <> · {line} <PremiumTip check={result.premium_check} /></>}</span>
           {trade === main && result.goal_check && <><span aria-hidden="true">·</span><GoalCheck check={result.goal_check} deltaMax={result.delta_max} /></>}
         </div>
       </section>
