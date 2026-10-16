@@ -11,7 +11,10 @@ Passwords are stored as scrypt hashes (core/accounts.py).
 
 After MAX_FAILURES wrong passwords for an email within LOCKOUT_SECONDS, logins
 to it are refused (429) until the window passes; devices already logged in keep
-working. Sign-ups are capped per hour so a script can't flood the free database.
+working. Wrong guesses at the old app password are limited the same way. Nothing
+here sleeps: a slow answer would hold one of the server's few worker threads, so
+a burst of wrong passwords would stall everyone (scrypt is already slow to guess).
+Sign-ups are capped per hour so a script can't flood the free database.
 
 Data from before accounts existed (one shared APP_PASSWORD) stays unclaimed
 until someone signs up and enters that old password as claim_password; then
@@ -47,6 +50,7 @@ TOKEN_DAYS = float(os.environ.get("AUTH_TOKEN_DAYS", "30"))
 MAX_FAILURES = 10
 LOCKOUT_SECONDS = 15 * 60
 SIGNUPS_PER_HOUR = 30
+CLAIM_KEY = "(old app password)"   # wrong guesses at the old password count here, like an email
 
 _failures: dict[str, deque[float]] = {}   # email -> when each recent wrong password was tried
 _signups: deque[float] = deque()
@@ -143,6 +147,11 @@ def _locked_for(email: str, now: float) -> int:
         return math.ceil(LOCKOUT_SECONDS - (now - tries[0]))
 
 
+def _failed(key: str, now: float) -> None:
+    with _limits_lock:
+        _failures.setdefault(key, deque()).append(now)
+
+
 def _too_many(wait: int) -> HTTPException:
     minutes = math.ceil(wait / 60)
     return HTTPException(
@@ -192,10 +201,15 @@ def auth_status():
 def signup(body: SignupRequest):
     old = _old_password()
     wants_claim = bool(body.claim_password)
-    if wants_claim and not (old and hmac.compare_digest(body.claim_password.encode(), old.encode())):
-        time.sleep(1)  # slow down guessing the old password
-        raise HTTPException(status_code=403, detail="That isn't the old app password. Leave it empty to start fresh.")
-    _take_signup_slot(time.time())
+    now = time.time()
+    if wants_claim:
+        wait = _locked_for(CLAIM_KEY, now)
+        if wait:
+            raise _too_many(wait)
+        if not (old and hmac.compare_digest(body.claim_password.encode(), old.encode())):
+            _failed(CLAIM_KEY, now)
+            raise HTTPException(status_code=403, detail="That isn't the old app password. Leave it empty to start fresh.")
+    _take_signup_slot(now)
     try:
         user_id = accounts.create_user(body.email, body.password)
     except accounts.AccountExists as e:
@@ -220,10 +234,8 @@ def login(body: LoginRequest):
         raise _too_many(wait)
     user = accounts.find_user(email)
     if user is None or not accounts.password_matches(body.password, user["password_hash"]):
-        with _limits_lock:
-            _failures.setdefault(email, deque()).append(now)
-        log.warning("Wrong email or password at login")
-        time.sleep(1)  # slow down password guessing
+        _failed(email, now)
+        log.info("Wrong email or password at login")
         raise HTTPException(status_code=401, detail="Wrong email or password.")
     with _limits_lock:
         _failures.pop(email, None)

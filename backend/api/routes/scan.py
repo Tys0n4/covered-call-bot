@@ -15,6 +15,7 @@ from core.scanner import resolve_min_strike, scan_covered_calls
 from core.planner import alternative_plan, build_plan, free_contracts
 from core.positions import CoverageError, load_open_positions, save_positions
 from api.auth import current_user
+from api import limits
 from api.schemas import (
     AllocationItem, Candidate, GoalCheck, ScanAllItem, ScanAllResponse, ScanConfig, ScanFilters, ScanResponse, TradeIn,
 )
@@ -89,6 +90,7 @@ def _config(user_id: int, filters: ScanFilters) -> ScannerConfig:
 @router.post("", response_model=ScanResponse)
 def run_scan(scan_config: ScanConfig, user_id: int = Depends(current_user)):
     """Run the covered call scanner for one stock in your portfolio."""
+    limits.SCANS.take(user_id)
     holdings = load_portfolio(user_id)
     position = next((p for p in holdings if p.ticker == scan_config.ticker), None)
     if position is None:
@@ -107,6 +109,7 @@ def scan_all(filters: ScanFilters, user_id: int = Depends(current_user)):
     filters as scanning each one alone. A few stocks are scanned at a time; a
     stock that fails says why instead of failing the rest.
     """
+    limits.SCAN_ALLS.take(user_id)
     holdings = load_portfolio(user_id)
     config = _config(user_id, filters)
     goal = load_strategy(user_id)["monthly_goal"]

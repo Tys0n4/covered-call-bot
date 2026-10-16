@@ -9,6 +9,9 @@ from api.auth import current_user
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
+# Each stock is scanned on its own, so this also bounds what one account can ask of the price feeds
+MAX_HOLDINGS = 25
+
 
 def _portfolio_rows(user_id: int) -> list[dict]:
     """The account's holdings with contract stats, as used by the dashboard and ticker selector."""
@@ -85,8 +88,11 @@ def get_portfolio(user_id: int = Depends(current_user)):
 def add_holding(holding: HoldingIn, user_id: int = Depends(current_user)):
     """Add a stock you own. Fails if the ticker is already in the portfolio (use PUT to edit)."""
     ticker = _valid_ticker(holding.ticker)
-    if any(p.ticker == ticker for p in load_portfolio(user_id)):
+    held = load_portfolio(user_id)
+    if any(p.ticker == ticker for p in held):
         raise HTTPException(status_code=409, detail=f"{ticker} is already in your portfolio. Edit it instead.")
+    if len(held) >= MAX_HOLDINGS:
+        raise HTTPException(status_code=422, detail=f"CovCall follows up to {MAX_HOLDINGS} stocks per account. Remove one to add another.")
     # Covered calls need listed options; catch typos like "SOFII" here
     if has_listed_options(ticker) is False:
         raise HTTPException(
