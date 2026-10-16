@@ -1,32 +1,15 @@
-// src/components/PremiumCheck.jsx — one plain line on the Scanner: are option
-// premiums rich, normal or thin right now? (backend core/volatility.py) The
-// numbers behind it are in the ⓘ.
-import { Gauge } from 'lucide-react'
+// src/components/PremiumCheck.jsx — the Scanner's two checks, each with its working in an ⓘ:
+// are option premiums rich, normal or thin right now, and does the call keep you on pace
+// for your monthly goal?
 import InfoTip from './InfoTip'
 
 const pctYear = v => `${Math.round(v * 100)}%`
 
 const TIP = 'Selling calls pays best when options are priced for bigger moves than the stock actually makes. This compares the two: the yearly move near-the-money options are priced for (implied volatility) and how much the stock moved over the last 20 trading days.'
 
-export default function PremiumCheck({ check, ticker }) {
-  if (!check) return null
-  const { level, implied_vol: iv, realized_vol: rv } = check
-  const copy = {
-    rich:   ['Good time to sell.', `${ticker} options are paying more than usual right now.`],
-    normal: ['Premiums are normal.', `${ticker} options are paying about what you'd expect.`],
-    thin:   ['Premiums are thin right now.', `${ticker} options pay less than usual for how much it moves. Waiting may pay more.`],
-  }[level]
-  const detail = `Options are priced for ${pctYear(iv)} yearly moves; the stock has moved about ${pctYear(rv)} lately. ${TIP}`
-  const tone = level === 'rich' ? 'var(--accent)' : level === 'thin' ? 'var(--amber)' : 'var(--text-2)'
-  return (
-    <p className="flex items-center gap-2.5 text-15">
-      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-        style={{ color: tone, background: `color-mix(in srgb, ${tone} 14%, transparent)` }}>
-        <Gauge size={15} strokeWidth={2} aria-hidden="true" />
-      </span>
-      <span><strong className="font-semibold">{copy[0]}</strong> <span className="text-fg-2">{copy[1]}</span> <InfoTip text={detail} /></span>
-    </p>
-  )
+// The numbers behind "options are paying more than usual" (backend core/volatility.py)
+export function PremiumTip({ check }) {
+  return <InfoTip text={`Options are priced for ${pctYear(check.implied_vol)} yearly moves; the stock has moved about ${pctYear(check.realized_vol)} lately. ${TIP}`} />
 }
 
 const usd = v => `$${Math.round(v).toLocaleString('en-US')}`

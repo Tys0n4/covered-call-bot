@@ -1,9 +1,10 @@
-// src/pages/Strategy.jsx — your covered call strategy (saved to the database), plus
-// alerts, broker, appearance and your data. Each trading rule opens in place on
-// bigger screens and in a sheet on phones; changes wait for Save.
+// src/pages/Strategy.jsx — your covered call strategy (saved to the database): one question
+// (how much you mind your shares being sold) and an optional monthly goal. Everything else
+// (the exact range, expiry window, buy-back targets, commission, alerts) is under Advanced.
+// Each rule there opens in place on bigger screens and in a sheet on phones; changes wait for Save.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, Download, LogOut } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, LogOut } from 'lucide-react'
 import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformance, apiError } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../context/AuthContext'
@@ -13,7 +14,7 @@ import { useToast } from '../context/ToastContext'
 import AlertsSection from '../components/AlertsSection'
 import Modal from '../components/dialogs/Modal'
 import { Field, Segmented, Spinner } from '../components/ui'
-import { DEFAULT_STRATEGY, buybackPrice, splitContracts } from '../lib/strategy'
+import { DEFAULT_STRATEGY, buybackPrice } from '../lib/strategy'
 import { forgetStrategy } from '../lib/useStrategy'
 import { forgetPriceChecks } from '../lib/usePriceCheck'
 import { useWide } from '../lib/useWide'
@@ -37,9 +38,17 @@ const goalToText = g => (g > 0 ? String(Math.round(g)) : '')
 const commToText = c => (c > 0 ? String(Number(c.toFixed(2))) : '0')
 const digits = (t, n) => t.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '').slice(0, n)
 
-// The trading rules (everything but the goal and commission)
-const RULE_KEYS = ['delta_min', 'delta_max', 'min_dte', 'max_dte', 'profit_capture_target_pct', 'event_buyback_pct', 'income_weight', 'buyback_budget_pct']
+// The rules under Advanced that "Back to recommended" resets (the chance of being called is
+// the question at the top)
+const RULE_KEYS = ['min_dte', 'max_dte', 'profit_capture_target_pct', 'event_buyback_pct']
 const usesDefaults = d => RULE_KEYS.every(k => Math.abs(d[k] - DEFAULT_STRATEGY[k]) < 1e-9)
+
+// The one question: how much you mind your shares being sold sets the chance of being called
+const STYLES = [
+  { title: 'Fine, I want more income', detail: 'Calls with about a 20–30% chance of selling your shares. Bigger premiums.', delta_min: 0.20, delta_max: 0.30 },
+  { title: "I'd rather keep my shares", detail: 'Calls with about a 10–15% chance of selling your shares. Smaller premiums.', delta_min: 0.10, delta_max: 0.15 },
+]
+const sameRange = (d, st) => Math.abs(d.delta_min - st.delta_min) < 1e-9 && Math.abs(d.delta_max - st.delta_max) < 1e-9
 
 const APPEARANCE = [{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]
 
@@ -104,6 +113,7 @@ export default function Strategy() {
   const [exporting, setExporting] = useState(false)
   const [perf, setPerf]         = useState(null)    // /performance summary + months
   const [open, setOpen]         = useState(null)    // the rule being edited, and the draft before it opened
+  const [advanced, setAdvanced] = useState(false)   // the Advanced section is showing
 
   useEffect(() => {
     getStrategy()
@@ -168,14 +178,14 @@ export default function Strategy() {
     return <div className="page"><PageHeader title="Strategy" /><div className="flex justify-center py-20 text-muted"><Spinner className="h-8 w-8" /></div></div>
   }
 
-  const incomePct = Math.round(draft.income_weight * 100)
-  const reservePct = Math.round(draft.buyback_budget_pct * 100)
   const dMin = Math.round(draft.delta_min * 100), dMax = Math.round(draft.delta_max * 100)
   const deltaErr = !(dMin >= 5 && dMax <= 60 && dMin < dMax)
   const dteErr = !(draft.min_dte >= 1 && draft.max_dte <= 120 && draft.min_dte < draft.max_dte)
   const commErr = !(draft.commission_per_contract >= 0 && draft.commission_per_contract <= 10)
   const invalid = deltaErr || dteErr || commErr
   const example = buybackPrice(0.34, draft.profit_capture_target_pct)
+  const style = STYLES.findIndex(st => sameRange(draft, st))
+  const showAdvanced = advanced || invalid    // a rule that needs fixing stays in view
 
   // Each rule row; "open" remembers the draft from before it opened so Cancel can put it back
   const rule = (id, label, value, bad, editor) => (
@@ -190,11 +200,29 @@ export default function Strategy() {
   return (
     <div className="page mx-auto max-w-[720px]">
       <PageHeader title="Strategy" />
-      <p className="-mt-3 text-15 text-fg-2 md:-mt-5">How CovCall picks trades and tells you when to buy back. Changes apply to your next scan.</p>
 
-      <Section id="goal-h" title="Monthly goal">
+      <section aria-labelledby="style-h" className="mt-2 md:mt-0">
+        <h2 id="style-h" className="text-20 font-semibold tracking-title">If your shares get sold at a profit, is that…</h2>
+        <div role="radiogroup" aria-labelledby="style-h" className="mt-4 flex flex-col gap-2.5">
+          {STYLES.map((st, i) => (
+            <button key={st.title} type="button" role="radio" aria-checked={style === i}
+              className={`w-full rounded-card bg-surface p-4 text-left ${style === i ? 'ring-2 ring-accent' : 'ring-1 ring-edge'}`}
+              onClick={() => setDraft(d => ({ ...d, delta_min: st.delta_min, delta_max: st.delta_max }))}>
+              <span className="block text-17 font-semibold">{st.title}</span>
+              <span className="mt-0.5 block text-13 text-fg-2">{st.detail}</span>
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-13 text-muted">
+          {style === -1
+            ? <>You're using your own range: a {dMin}–{dMax}% chance of being called (under Advanced). Pick one above to switch.</>
+            : 'The Scanner picks calls to match. Before earnings or a Fed decision, it stays near the low end.'}
+        </p>
+      </section>
+
+      <Section id="goal-h" title={<>Monthly goal <span className="ml-1 text-13 font-normal text-muted">optional</span></>}>
         <div className="flex items-center justify-between gap-4 border-b border-line py-3">
-          <label htmlFor="goal" className="text-15 text-fg-2">Premium you'd like to keep each month</label>
+          <label htmlFor="goal" className="text-15 text-fg-2">What you'd like calls to earn each month</label>
           <Field id="goal" className="w-32 shrink-0" prefix="$" type="text" inputMode="numeric" placeholder="Off" maxLength={7}
             inputClassName="text-right font-semibold" value={goalText}
             onChange={e => { const t = digits(e.target.value, 7); setGoalText(t); set('monthly_goal', t === '' ? 0 : Number(t)) }} />
@@ -214,87 +242,84 @@ export default function Strategy() {
             </p>
           </div>
         ) : (
-          <p className="mt-2 text-13 text-muted">Optional. Shows your progress on Home and paces the Scanner's picks.</p>
+          <p className="mt-2 text-13 text-muted">Shows your progress on Home and paces the Scanner's picks.</p>
         )}
       </Section>
 
-      <Section id="rules-h" title="Trading rules" right={usesDefaults(draft)
-        ? <span className="text-13 font-semibold text-accent">Recommended</span>
-        : <span className="text-13 text-muted">Your rules · <button type="button" className="link text-13"
-            onClick={() => setDraft(d => ({ ...DEFAULT_STRATEGY, monthly_goal: d.monthly_goal, commission_per_contract: d.commission_per_contract }))}>Back to recommended</button></span>}>
-        <ul>
-          {rule('delta', 'Chance of being called', `${dMin}–${dMax}%`, deltaErr, <>
-            <div className="flex items-center gap-2.5" role="group" aria-label="Chance of being called">
-              <Field className="w-24" aria-label="Lowest chance" suffix="%" type="text" inputMode="numeric" value={Number.isFinite(dMin) ? String(dMin) : ''}
-                inputClassName="text-right" aria-invalid={deltaErr || undefined} onChange={e => { const t = digits(e.target.value, 2); set('delta_min', t === '' ? NaN : Number(t) / 100) }} />
-              <span className="text-muted">to</span>
-              <Field className="w-24" aria-label="Highest chance" suffix="%" type="text" inputMode="numeric" value={Number.isFinite(dMax) ? String(dMax) : ''}
-                inputClassName="text-right" aria-invalid={deltaErr || undefined} onChange={e => { const t = digits(e.target.value, 2); set('delta_max', t === '' ? NaN : Number(t) / 100) }} />
-            </div>
-            <p className={`mt-2 text-13 ${deltaErr ? 'text-loss' : 'text-muted'}`}>
-              {deltaErr ? 'Use a range between 5% and 60%, low to high.' : 'Roughly the chance the stock ends above the strike and your shares are sold. The Scanner only looks at calls in this range; before earnings or a Fed decision, picks stay near the low end.'}
-            </p>
-          </>)}
-          {rule('dte', 'Expiring in', `${draft.min_dte}–${draft.max_dte} days`, dteErr, <>
-            <div className="flex items-center gap-2.5" role="group" aria-label="Expiring in">
-              <Field className="w-24" aria-label="Fewest days" type="text" inputMode="numeric" inputClassName="text-right" value={Number.isFinite(draft.min_dte) ? String(draft.min_dte) : ''}
-                aria-invalid={dteErr || undefined} onChange={e => { const t = digits(e.target.value, 3); set('min_dte', t === '' ? NaN : Number(t)) }} />
-              <span className="text-muted">to</span>
-              <Field className="w-24" aria-label="Most days" type="text" inputMode="numeric" inputClassName="text-right" value={Number.isFinite(draft.max_dte) ? String(draft.max_dte) : ''}
-                aria-invalid={dteErr || undefined} onChange={e => { const t = digits(e.target.value, 3); set('max_dte', t === '' ? NaN : Number(t)) }} />
-              <span className="text-muted">days</span>
-            </div>
-            <p className={`mt-2 text-13 ${dteErr ? 'text-loss' : 'text-muted'}`}>{dteErr ? 'Use 1 to 120 days, shortest first.' : 'Shorter calls pay less each but can be sold more often.'}</p>
-          </>)}
-          {rule('buyback', 'Buy back at', `${draft.profit_capture_target_pct}% kept`, false, <>
-            <Range label="Buy back target, percent of premium kept" min={50} max={95} step={5} value={draft.profit_capture_target_pct}
-              onChange={v => setDraft(d => ({ ...d, profit_capture_target_pct: v, event_buyback_pct: Math.min(d.event_buyback_pct, v) }))} />
-            <p className="mt-2 text-13 text-fg-2">Positions marks a call “Ready to buy back” once it’s cheap enough that you'd keep this much of its premium.</p>
-            <p className="mt-1 text-13 text-muted">
-              Example: sold at $0.34 a share → buy back at {money(example)} or less ({((1 - example / 0.34) * 100).toFixed(1)}% kept, the closest cent).
-            </p>
-          </>)}
-          {rule('event', 'Before earnings or a Fed decision', `${draft.event_buyback_pct}% kept`, false, <>
-            <Range label="Buy back target before earnings or a Fed decision" min={30} max={draft.profit_capture_target_pct} step={5} value={draft.event_buyback_pct}
-              onChange={v => set('event_buyback_pct', v)} />
-            <p className="mt-2 text-13 text-muted">Buying back a little earlier avoids holding through the jump these events can cause.</p>
-          </>)}
-          {rule('split', 'Income / balanced split', `${incomePct} / ${100 - incomePct}`, false, <>
-            <input type="range" className="range" aria-label="Share of contracts sold as income picks" min={0} max={100} step={10} value={incomePct}
-              onChange={e => set('income_weight', Number(e.target.value) / 100)} />
-            <p className="mt-2 text-13 text-muted">Income picks pay more; balanced picks leave more room for the stock to rise. Each stock is split on its own; calls already open stay as they are.</p>
-            {holdings.length > 0 && (
-              <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5">
-                {holdings.map(h => {
-                  const [inc, bal] = splitContracts(h.total_contracts, draft.income_weight)
-                  return <li key={h.ticker} className="flex justify-between gap-3 text-13"><span className="font-semibold">{h.ticker}</span><span className="text-fg-2">{inc} · {bal}</span></li>
-                })}
+      <section className="mt-10 border-y border-line">
+        <button type="button" className="flex min-h-16 w-full items-center gap-3 py-3 text-left" aria-expanded={showAdvanced} aria-controls="advanced"
+          onClick={() => setAdvanced(!showAdvanced)} disabled={invalid}>
+          <span className="flex-1">
+            <span className="block text-17 font-semibold">Advanced</span>
+            <span className="block text-13 text-muted">Days to expiry, when to buy back, broker commission, Discord alerts</span>
+          </span>
+          <ChevronDown size={18} strokeWidth={2} aria-hidden="true" className={`shrink-0 text-muted transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+        </button>
+        {showAdvanced && (
+          <div id="advanced" className="pb-8">
+            <Section id="rules-h" title="Trading rules" className="mt-2" right={usesDefaults(draft)
+              ? <span className="text-13 font-semibold text-accent">Recommended</span>
+              : <span className="text-13 text-muted">Your rules · <button type="button" className="link text-13"
+                  onClick={() => setDraft(d => ({ ...d, ...Object.fromEntries(RULE_KEYS.map(k => [k, DEFAULT_STRATEGY[k]])) }))}>Back to recommended</button></span>}>
+              <ul>
+                {rule('delta', 'Chance of being called', `${dMin}–${dMax}%`, deltaErr, <>
+                  <div className="flex items-center gap-2.5" role="group" aria-label="Chance of being called">
+                    <Field className="w-24" aria-label="Lowest chance" suffix="%" type="text" inputMode="numeric" value={Number.isFinite(dMin) ? String(dMin) : ''}
+                      inputClassName="text-right" aria-invalid={deltaErr || undefined} onChange={e => { const t = digits(e.target.value, 2); set('delta_min', t === '' ? NaN : Number(t) / 100) }} />
+                    <span className="text-muted">to</span>
+                    <Field className="w-24" aria-label="Highest chance" suffix="%" type="text" inputMode="numeric" value={Number.isFinite(dMax) ? String(dMax) : ''}
+                      inputClassName="text-right" aria-invalid={deltaErr || undefined} onChange={e => { const t = digits(e.target.value, 2); set('delta_max', t === '' ? NaN : Number(t) / 100) }} />
+                  </div>
+                  <p className={`mt-2 text-13 ${deltaErr ? 'text-loss' : 'text-muted'}`}>
+                    {deltaErr ? 'Use a range between 5% and 60%, low to high.' : 'Roughly the chance the stock ends above the strike and your shares are sold. The Scanner only looks at calls in this range.'}
+                  </p>
+                </>)}
+                {rule('dte', 'Expiring in', `${draft.min_dte}–${draft.max_dte} days`, dteErr, <>
+                  <div className="flex items-center gap-2.5" role="group" aria-label="Expiring in">
+                    <Field className="w-24" aria-label="Fewest days" type="text" inputMode="numeric" inputClassName="text-right" value={Number.isFinite(draft.min_dte) ? String(draft.min_dte) : ''}
+                      aria-invalid={dteErr || undefined} onChange={e => { const t = digits(e.target.value, 3); set('min_dte', t === '' ? NaN : Number(t)) }} />
+                    <span className="text-muted">to</span>
+                    <Field className="w-24" aria-label="Most days" type="text" inputMode="numeric" inputClassName="text-right" value={Number.isFinite(draft.max_dte) ? String(draft.max_dte) : ''}
+                      aria-invalid={dteErr || undefined} onChange={e => { const t = digits(e.target.value, 3); set('max_dte', t === '' ? NaN : Number(t)) }} />
+                    <span className="text-muted">days</span>
+                  </div>
+                  <p className={`mt-2 text-13 ${dteErr ? 'text-loss' : 'text-muted'}`}>{dteErr ? 'Use 1 to 120 days, shortest first.' : 'Shorter calls pay less each but can be sold more often.'}</p>
+                </>)}
+                {rule('buyback', 'Buy back at', `${draft.profit_capture_target_pct}% kept`, false, <>
+                  <Range label="Buy back target, percent of premium kept" min={50} max={95} step={5} value={draft.profit_capture_target_pct}
+                    onChange={v => setDraft(d => ({ ...d, profit_capture_target_pct: v, event_buyback_pct: Math.min(d.event_buyback_pct, v) }))} />
+                  <p className="mt-2 text-13 text-fg-2">Positions marks a call “Ready to buy back” once it’s cheap enough that you'd keep this much of its premium.</p>
+                  <p className="mt-1 text-13 text-muted">
+                    Example: sold at $0.34 a share → buy back at {money(example)} or less ({((1 - example / 0.34) * 100).toFixed(1)}% kept, the closest cent).
+                  </p>
+                </>)}
+                {rule('event', 'Before earnings or a Fed decision', `${draft.event_buyback_pct}% kept`, false, <>
+                  <Range label="Buy back target before earnings or a Fed decision" min={30} max={draft.profit_capture_target_pct} step={5} value={draft.event_buyback_pct}
+                    onChange={v => set('event_buyback_pct', v)} />
+                  <p className="mt-2 text-13 text-muted">Buying back a little earlier avoids holding through the jump these events can cause.</p>
+                </>)}
               </ul>
-            )}
-          </>)}
-          {rule('reserve', 'Set aside for buybacks', `${reservePct}% of premium`, false, <>
-            <Range label="Part of each premium set aside, percent" min={0} max={50} step={5} value={reservePct} onChange={v => set('buyback_budget_pct', v / 100)} />
-            <p className="mt-2 text-13 text-muted">On a $500 premium you keep {money(500 * (1 - reservePct / 100), 0)} and set aside {money(500 * reservePct / 100, 0)} for buying back early.</p>
-          </>)}
-        </ul>
-      </Section>
+            </Section>
 
-      <div className="mt-10"><AlertsSection /></div>
+            <Section id="broker-h" title="Broker">
+              <div className="flex items-center justify-between gap-4 border-b border-line py-3">
+                <label htmlFor="commission" className="text-15 text-fg-2">Commission per contract</label>
+                <Field id="commission" className="w-32 shrink-0" prefix="$" type="text" inputMode="decimal" maxLength={5}
+                  inputClassName="text-right font-semibold" value={commText}
+                  onChange={e => {
+                    // dollars and cents only: "0.65", ".5", "1"
+                    const text = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^0+(?=\d)/, '')
+                    setCommText(text)
+                    set('commission_per_contract', text === '' || text === '.' ? 0 : Number(text))
+                  }} />
+              </div>
+              <p className={`mt-2 text-13 ${commErr ? 'text-loss' : 'text-muted'}`}>{commErr ? 'Use $0 to $10.' : 'Most brokers charge nothing for options. At $0 the fee boxes stay hidden.'}</p>
+            </Section>
 
-      <Section id="broker-h" title="Broker">
-        <div className="flex items-center justify-between gap-4 border-b border-line py-3">
-          <label htmlFor="commission" className="text-15 text-fg-2">Commission per contract</label>
-          <Field id="commission" className="w-32 shrink-0" prefix="$" type="text" inputMode="decimal" maxLength={5}
-            inputClassName="text-right font-semibold" value={commText}
-            onChange={e => {
-              // dollars and cents only: "0.65", ".5", "1"
-              const text = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^0+(?=\d)/, '')
-              setCommText(text)
-              set('commission_per_contract', text === '' || text === '.' ? 0 : Number(text))
-            }} />
-        </div>
-        <p className={`mt-2 text-13 ${commErr ? 'text-loss' : 'text-muted'}`}>{commErr ? 'Use $0 to $10.' : 'Most brokers charge nothing for options. At $0 the fee boxes stay hidden.'}</p>
-      </Section>
+            <div className="mt-10"><AlertsSection /></div>
+          </div>
+        )}
+      </section>
 
       <Section id="look-h" title="Appearance">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-3">

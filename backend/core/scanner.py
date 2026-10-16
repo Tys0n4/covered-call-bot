@@ -30,14 +30,14 @@ def resolve_min_strike(current_price: float, config: ScannerConfig, avg_cost: fl
     return min_strike
 
 
-def _below_cost_warning(label: str, pick, avg_cost: float) -> str | None:
-    """Selling a call below what you paid locks in a loss if the shares are called away."""
+def _below_cost_warning(pick, avg_cost: float) -> str | None:
+    """Selling a call below what you paid locks in a loss if the shares are sold."""
     if pick is None or avg_cost <= 0 or float(pick["strike"]) >= avg_cost:
         return None
     loss = avg_cost - float(pick["strike"])
     return (
-        f"The {label} pick's ${float(pick['strike']):,.2f} strike is below your ${avg_cost:,.2f} average cost. "
-        f"If your shares are called away you'd sell them ${loss:,.2f} per share below what you paid."
+        f"The ${float(pick['strike']):,.2f} strike is below your ${avg_cost:,.2f} average cost. "
+        f"If your shares are sold you'd get ${loss:,.2f} a share less than you paid."
     )
 
 
@@ -65,19 +65,16 @@ def _add_event_flags(df: pd.DataFrame, events: dict) -> pd.DataFrame:
     return df
 
 
-def _event_warnings(ticker: str, picks, events: dict) -> list[str]:
+def _event_warnings(ticker: str, pick, events: dict) -> list[str]:
     """
-    One heads-up per event before a pick expires. The first sentence carries the
-    point (the app shows it alone until you ask for more): picks that span earnings
-    or a Fed decision are deliberately kept near the safe end of your range.
+    One note per event before the recommended call expires. The first sentence
+    carries the point (the app shows it alone until you ask for more): a call
+    that spans earnings or a Fed decision is kept near the safe end of your range.
     """
-    picks = [p for p in picks if p is not None]
-
     def spanning(flag: str):
-        n = sum(1 for p in picks if bool(p.get(flag)))
-        if not n:
+        if pick is None or not bool(pick.get(flag)):
             return None
-        return ("before both picks expire", "they're") if n > 1 else ("before your pick expires", "it's")
+        return ("before this call expires", "it's")
 
     out = []
     if hit := spanning("spans_earnings"):
@@ -288,11 +285,9 @@ def scan_covered_calls(
         )
     scored = in_range
 
-    for label, pick in (("income", income_pick), ("balanced", balanced_pick)):
-        w = _below_cost_warning(label, pick, position.avg_cost)
-        if w:
-            warnings.append(w)
-    warnings.extend(_event_warnings(position.ticker, (income_pick, balanced_pick), events))
+    w = _below_cost_warning(income_pick, position.avg_cost)
+    if w:
+        warnings.append(w)
 
     return ScanResult(
         position=position,
@@ -307,4 +302,5 @@ def scan_covered_calls(
         premium_check=check,
         plan_per_contract=plan_per_contract,
         data_source=source, price_source=price_source,
+        event_notes=_event_warnings(position.ticker, income_pick, events),
     )

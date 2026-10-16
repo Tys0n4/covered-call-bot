@@ -12,7 +12,7 @@ from core.models import PlannedCall, PortfolioPosition
 from core.parallel import parallel_map
 from core.portfolio import load_portfolio
 from core.scanner import resolve_min_strike, scan_covered_calls
-from core.planner import build_plan, compute_buyback_budget, get_allocation_targets
+from core.planner import alternative_plan, build_plan, free_contracts
 from core.positions import CoverageError, load_open_positions, save_positions
 from api.auth import current_user
 from api.schemas import (
@@ -114,7 +114,7 @@ def scan_all(filters: ScanFilters, user_id: int = Depends(current_user)):
     free, covered = [], []
     for h in holdings:
         ticker_open = [p for p in all_open if p.get("ticker") == h.ticker]
-        available = get_allocation_targets(h.shares, ticker_open, config)["available"]
+        available = free_contracts(h.shares, ticker_open)
         if available > 0:
             free.append((h, available))
         elif h.total_contracts > 0:
@@ -158,7 +158,8 @@ def _scan_one(
     ticker_open = [p for p in all_open if p.get("ticker") == position.ticker]
 
     planned = build_plan(scan, config=config, open_positions=ticker_open)
-    targets = get_allocation_targets(position.shares, ticker_open, config)
+    other = alternative_plan(scan, config=config, open_positions=ticker_open)
+    free = free_contracts(position.shares, ticker_open)
 
     min_strike = resolve_min_strike(scan.current_price, config, position.avg_cost)
 
@@ -170,13 +171,8 @@ def _scan_one(
     income_pick  = _row_to_candidate(scan.income_pick)  if scan.income_pick  is not None else None
     balanced_pick= _row_to_candidate(scan.balanced_pick) if scan.balanced_pick is not None else None
 
-    planned_positions = []
-    gross_premium = 0.0
-    buyback_budget = 0.0
-
-    for p in planned:
-        budget = compute_buyback_budget(p, config=config)
-        planned_positions.append(AllocationItem(
+    def item(p) -> AllocationItem:
+        return AllocationItem(
             allocation_type=p.allocation_type,
             expiry=p.expiry,
             strike=p.strike,
@@ -184,13 +180,11 @@ def _scan_one(
             entry_price=p.entry_price,
             premium_total=p.premium_total,
             quote_quality=p.quote_quality,
-            buyback_total=float(budget["buyback_total"]),
-            per_contract_budget=float(budget["per_contract"]),
             below_cost_basis=position.avg_cost > 0 and p.strike < position.avg_cost,
-        ))
-        gross_premium  += p.premium_total
-        buyback_budget += budget["buyback_total"]
+        )
 
+    planned_positions = [item(p) for p in planned]
+    gross_premium = sum(p.premium_total for p in planned)
     est_fees = round(scan.fee_per_contract * sum(p.contracts for p in planned), 2)
 
     return ScanResponse(
@@ -201,11 +195,10 @@ def _scan_one(
         candidates=candidates,
         income_pick=income_pick,
         balanced_pick=balanced_pick,
-        allocation_summary=targets,
+        allocation_summary={"total_contracts": position.total_contracts, "available": free},
         planned_positions=planned_positions,
+        alternative=item(other[0]) if other else None,
         gross_premium=gross_premium,
-        buyback_budget=buyback_budget,
-        net_premium=gross_premium - buyback_budget - est_fees,
         estimated_fees=est_fees,
         fee_per_contract=scan.fee_per_contract,
         data_source=scan.data_source,
@@ -222,6 +215,7 @@ def _scan_one(
         fed_dates=scan.events.get("fed_dates", []),
         industry_earnings=scan.events.get("industry_earnings", []),
         warnings=scan.warnings,
+        event_notes=scan.event_notes,
         quotes_live=scan.quotes_live,
         earnings_date=scan.events.get("earnings_date"),
         ex_dividend_date=scan.events.get("ex_dividend_date"),
@@ -233,10 +227,10 @@ def _scan_one(
 @router.post("/save")
 def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_length=20), user_id: int = Depends(current_user)):
     """
-    Save the recommended trade from a scan as open positions.
+    Save the trade from a scan (what your broker filled) as open positions.
 
-    Refused (409) if your shares don't cover it, or if it no longer fits your
-    split, e.g. because the same scan was already saved.
+    Refused (409) if your shares don't cover it, e.g. because the same scan
+    was already saved.
     """
     planned = [
         PlannedCall(
@@ -252,7 +246,7 @@ def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_leng
         for t in trades
     ]
     try:
-        save_positions(user_id, planned, income_weight=load_strategy(user_id)["income_weight"])
+        save_positions(user_id, planned)
     except CoverageError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     return {"saved": len(planned)}

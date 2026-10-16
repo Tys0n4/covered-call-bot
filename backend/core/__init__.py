@@ -22,7 +22,7 @@ Your calls and holdings
     assignment.py    expired calls that were probably assigned
     performance.py   realized results and return on capital
     portfolio.py     your stock holdings
-    strategy.py      your saved strategy and the income/balanced split math
+    strategy.py      your saved strategy
 
 Plumbing
     db.py            database tables (Postgres, or SQLite locally)

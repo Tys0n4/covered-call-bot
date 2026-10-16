@@ -69,4 +69,5 @@ class ScanResult:
     premium_check: dict | None = None   # rich / normal / thin (see volatility.py)
     plan_per_contract: float = 0.0      # the picks' blended monthly income per contract
     data_source: str | None = None      # where the option prices came from: "cboe" | "yahoo"
+    event_notes: list[str] = field(default_factory=list)   # events before the recommended call expires
     price_source: str | None = None     # where the stock price came from: "cboe" | "alpha_vantage" | "yahoo"

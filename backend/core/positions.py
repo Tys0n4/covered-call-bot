@@ -19,7 +19,6 @@ from core.clock import local_today
 from core.db import get_engine, holdings, positions
 from core.market_hours import has_expired, market_today
 from core.models import PlannedCall
-from core.strategy import allocation_targets
 
 
 class PositionError(ValueError):
@@ -103,21 +102,19 @@ def _contracts_word(n: int) -> str:
     return f"{n} contract{'' if n == 1 else 's'}"
 
 
-def _check_coverage(conn: Connection, user_id: int, planned: list[PlannedCall], income_weight: float | None) -> dict[str, float]:
+def _check_coverage(conn: Connection, user_id: int, planned: list[PlannedCall]) -> dict[str, float]:
     """
     Raise CoverageError unless every ticker's open + new contracts fit in its
-    shares (100 per contract). With income_weight, each side (Income /
-    Balanced) must also fit what the split still needs, which also stops the
-    same scan from being saved twice.
+    shares (100 per contract), which also stops the same scan from being saved twice.
 
     Returns each ticker's average cost per share (recorded on the new calls).
     """
     avg_costs: dict[str, float] = {}
-    new_by_ticker: dict[str, dict[str, int]] = defaultdict(lambda: {"Income": 0, "Balanced": 0})
+    new_by_ticker: dict[str, int] = defaultdict(int)
     for p in planned:
-        new_by_ticker[p.ticker][p.allocation_type] = new_by_ticker[p.ticker].get(p.allocation_type, 0) + int(p.contracts)
+        new_by_ticker[p.ticker] += int(p.contracts)
 
-    for ticker, new in new_by_ticker.items():
+    for ticker, new_total in new_by_ticker.items():
         # Lock the holding row (Postgres) so two saves can't both pass the check
         holding = conn.execute(
             select(holdings.c.shares, holdings.c.avg_cost).where(_holding(user_id, ticker)).with_for_update()
@@ -128,30 +125,17 @@ def _check_coverage(conn: Connection, user_id: int, planned: list[PlannedCall], 
         avg_costs[ticker] = float(holding.avg_cost)
         total = shares // 100
 
-        open_by_type = {
-            t: int(n) for t, n in conn.execute(
-                select(positions.c.allocation_type, func.sum(positions.c.contracts))
-                .where(and_(_calls_on(user_id, ticker), positions.c.status == "OPEN"))
-                .group_by(positions.c.allocation_type)
-            ).all()
-        }
-        open_total = sum(open_by_type.values())
-        new_total = sum(new.values())
+        open_total = int(conn.execute(
+            select(func.coalesce(func.sum(positions.c.contracts), 0))
+            .where(and_(_calls_on(user_id, ticker), positions.c.status == "OPEN"))
+        ).scalar())
         free = max(total - open_total, 0)
         if new_total > free:
             raise CoverageError(
                 f"Your {shares:,} {ticker} shares cover {_contracts_word(total)} and {open_total} "
-                f"already have calls sold, so only {free} more can be covered (not {new_total})."
+                f"already have calls sold, so only {free} more can be covered (not {new_total}). "
+                "If you just saved this trade, it's already on Positions."
             )
-
-        if income_weight is not None:
-            t = allocation_targets(total, open_by_type.get("Income", 0), open_by_type.get("Balanced", 0), income_weight)
-            if new["Income"] > t["needed_income"] or new["Balanced"] > t["needed_balanced"]:
-                raise CoverageError(
-                    f"This trade no longer fits your {ticker} plan: it sells {new['Income']} income and "
-                    f"{new['Balanced']} balanced, but only {t['needed_income']} and {t['needed_balanced']} are "
-                    "still needed. It may already be saved; check Positions or scan again."
-                )
     return avg_costs
 
 
@@ -160,11 +144,10 @@ def _insert_positions(
     user_id: int,
     planned: list[PlannedCall],
     opened: str,
-    income_weight: float | None,
     rolled_from: int | None = None,
 ) -> list[int]:
     """Coverage check + insert inside the caller's transaction. Returns the new ids."""
-    avg_costs = _check_coverage(conn, user_id, planned, income_weight)
+    avg_costs = _check_coverage(conn, user_id, planned)
     ids = []
     for p in planned:
         record = {
@@ -194,21 +177,19 @@ def save_positions(
     planned: list[PlannedCall],
     *,
     opened_at: str | None = None,
-    income_weight: float | None = None,
 ) -> list[int]:
     """
     Add new positions as OPEN, stamped with opened_at (default: today).
     Returns the new position ids.
 
-    Refuses (CoverageError) anything your shares don't cover; pass
-    income_weight to also hold each side to your split. The check and the
-    insert happen in one transaction.
+    Refuses (CoverageError) anything your shares don't cover. The check and
+    the insert happen in one transaction.
     """
     if not planned:
         return []
     expire_finished_positions()   # calls that have expired no longer use up shares
     with get_engine().begin() as conn:
-        ids = _insert_positions(conn, user_id, planned, opened_at or local_today(), income_weight)
+        ids = _insert_positions(conn, user_id, planned, opened_at or local_today())
     _calls_changed()
     return ids
 
@@ -262,7 +243,7 @@ def roll_position(
             update(positions).where(positions.c.id == position_id)
             .values(status="CLOSED", closed_at=today, close_cost=_money(close_cost), close_fees=_money(close_fees))
         )
-        new_id = _insert_positions(conn, user_id, [new_call], today, None, rolled_from=position_id)[0]
+        new_id = _insert_positions(conn, user_id, [new_call], today, rolled_from=position_id)[0]
     _calls_changed()
     return new_id
 

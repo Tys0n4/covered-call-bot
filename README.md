@@ -110,7 +110,7 @@ ruff check backend tests
 cd web && npm run lint && npm test && npm run build
 ```
 
-The tests use a fake market and a temporary SQLite database, so they need no API keys or network. The web app's tests (Vitest) cover the money math and the shared price check; the buy-back price and the income/balanced split are checked on both sides against the same cases in `tests/fixtures/shared_rules.json`. GitHub Actions runs the same checks on every pull request and on pushes to `main`.
+The tests use a fake market and a temporary SQLite database, so they need no API keys or network. The web app's tests (Vitest) cover the money math and the shared price check; the buy-back price is checked on both sides against the same cases in `tests/fixtures/shared_rules.json`. GitHub Actions runs the same checks on every pull request and on pushes to `main`.
 
 ## Reference
 

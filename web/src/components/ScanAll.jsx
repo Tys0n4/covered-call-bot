@@ -1,5 +1,5 @@
 // src/components/ScanAll.jsx — the Scanner's "All stocks": the recommended trade for every
-// stock with free contracts, most premium first, and what selling them all would collect.
+// stock with contracts to sell, most premium first, and what selling them all would collect.
 // Picking a stock opens its full scan, where you record what your broker filled.
 import { Check, ChevronRight } from 'lucide-react'
 import { Dot } from './ui'
@@ -64,7 +64,7 @@ function StockRow({ item, saved, onReview }) {
       <button type="button" className="flex w-full items-start gap-3 py-4 text-left md:items-center md:gap-6" onClick={() => onReview(item)}>
         <span className="hidden md:block md:w-[130px] md:shrink-0">
           <span className={`block text-17 font-semibold ${amount ? '' : 'text-fg-2'}`}>{item.ticker}</span>
-          <span className="block text-13 text-muted">{r ? `${money(r.current_price)} · ` : ''}{item.available} free</span>
+          <span className="block text-13 text-muted">{r ? `${money(r.current_price)} · ` : ''}{item.available} to sell</span>
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex justify-between gap-3 md:hidden">
@@ -120,7 +120,7 @@ export default function ScanAll({ data, tickers, onReview }) {
       {lastPrices && (
         <p className="mt-5 flex items-start gap-2 text-15 text-fg-2">
           <Dot tone="amber" className="mt-2" />
-          Market closed, so these are last-close prices. Plan with them now and scan again after it opens to record a trade.
+          Market closed, so these are last-close prices. Check the price at your broker once it opens.
         </p>
       )}
 

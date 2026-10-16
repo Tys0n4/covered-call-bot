@@ -43,13 +43,14 @@ def pick_for_strategy(df: pd.DataFrame, config: ScannerConfig, goal_pace: float 
     """
     Pick (income, balanced, plan_per_contract) from options already in your delta range.
 
-    balanced — the best payer near the bottom of your range (the safer end)
-    income   — with a monthly goal: the LOWEST delta whose blend with the balanced
-               pick (at your income/balanced split) earns goal_pace per contract per
-               month, so it only takes the risk the goal needs. Without a goal, or
-               when nothing in range gets there: the best payer in range.
+    income   — the recommended call, sold on every free contract. With a monthly
+               goal: the LOWEST delta that earns goal_pace per contract per month,
+               so it only takes the risk the goal needs. Without a goal, or when
+               nothing in range gets there: the best payer in range.
+    balanced — the best payer near the bottom of your range (the safer end),
+               offered as the alternative with more room for the stock to rise.
     Expiries that span an event are capped near the bottom of the range.
-    plan_per_contract is that blend's monthly income per contract.
+    plan_per_contract is the recommended call's monthly income per contract.
     """
     if df.empty:
         return None, None, 0.0
@@ -71,15 +72,12 @@ def pick_for_strategy(df: pd.DataFrame, config: ScannerConfig, goal_pace: float 
     ]
     if others.empty:
         others = eligible.loc[[balanced.name]]
-    w = config.income_weight
-    blend = others["monthly_per_contract"] * w + float(balanced["monthly_per_contract"]) * (1 - w)
     income = None
     if goal_pace > 0:
-        meets = others[blend >= goal_pace]
+        meets = others[others["monthly_per_contract"] >= goal_pace]
         if not meets.empty:
             income = meets.sort_values(["delta", "monthly_per_contract"], ascending=[True, False]).iloc[0]
     if income is None:
         income = others.sort_values(["monthly_per_contract", "delta"], ascending=[False, True]).iloc[0]
 
-    plan = float(income["monthly_per_contract"]) * w + float(balanced["monthly_per_contract"]) * (1 - w)
-    return income, balanced, round(plan, 2)
+    return income, balanced, round(float(income["monthly_per_contract"]), 2)
