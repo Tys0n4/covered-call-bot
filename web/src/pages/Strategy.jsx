@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Download, LogOut } from 'lucide-react'
-import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformance, apiError } from '../api/client'
+import { getStrategy, saveStrategy, getPortfolio, getAllPositions, getPerformance, logoutOthers, setToken, apiError } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -13,6 +13,8 @@ import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import AlertsSection from '../components/AlertsSection'
 import Modal from '../components/dialogs/Modal'
+import ConfirmDialog from '../components/dialogs/ConfirmDialog'
+import { ChangePasswordModal, DeleteAccountModal, RecoveryCodeModal } from '../components/dialogs/AccountDialogs'
 import { Field, Segmented, Spinner } from '../components/ui'
 import { DEFAULT_STRATEGY, buybackPrice } from '../lib/strategy'
 import { forgetStrategy } from '../lib/useStrategy'
@@ -89,6 +91,22 @@ function RuleRow({ label, value, invalid, open, onOpen, onDone, onCancel, wide, 
   )
 }
 
+// One row in Account and security: what it does, a line under it, and an action or a chevron
+function AccountRow({ title, sub, action, danger = false, icon, onClick, disabled }) {
+  return (
+    <li className="border-b border-line last:border-b-0">
+      <button type="button" className={`flex min-h-14 w-full items-center gap-3 py-2.5 text-left ${danger ? 'text-loss' : ''}`} onClick={onClick} disabled={disabled}>
+        <span className="min-w-0 flex-1">
+          <span className="block text-15">{title}</span>
+          {sub && <span className="block text-13 text-muted">{sub}</span>}
+        </span>
+        {action ? <span className="shrink-0 text-13 font-semibold text-fg-2">{action}</span>
+          : icon || (!danger && <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-muted" aria-hidden="true" />)}
+      </button>
+    </li>
+  )
+}
+
 const Range = ({ label, min, max, step, value, onChange }) => (
   <>
     <input type="range" className="range" aria-label={label} min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} />
@@ -99,7 +117,8 @@ const Range = ({ label, min, max, step, value, onChange }) => (
 export default function Strategy() {
   const toast = useToast()
   const wide = useWide()
-  const { email, logout } = useAuth()
+  const { email, hasRecoveryCode, logout, refreshMe } = useAuth()
+  const [dialog, setDialog]     = useState(null)    // 'password' | 'code' | 'others' | 'delete'
   const { preference, setPreference } = useTheme()
   const [saved, setSaved]       = useState(null)    // what the server has
   const [draft, setDraft]       = useState(null)    // what's on screen
@@ -135,18 +154,14 @@ export default function Strategy() {
   const openPremium = openSoldThisMonth.reduce((sum, p) => sum + p.premium_total - (p.open_fees || 0), 0)
   const goalPct = draft?.monthly_goal > 0 ? Math.max(0, Math.round((monthKept / draft.monthly_goal) * 100)) : 0
 
-  const exportHoldings = async () => {
+  const exportAll = async () => {
     setExporting(true)
     try {
-      const r = await getPortfolio()
-      downloadCsv('holdings.csv', ['ticker', 'shares', 'avg_cost'], r.data)
-    } finally { setExporting(false) }
-  }
-  const exportPositions = async () => {
-    setExporting(true)
-    try {
-      const r = await getAllPositions()
-      downloadCsv('trades.csv', ['id', 'ticker', 'allocation_type', 'status', 'expiry', 'strike', 'contracts', 'entry_price', 'premium_total', 'open_fees', 'close_cost', 'close_fees', 'cost_basis', 'rolled_from', 'opened_at', 'closed_at'], r.data)
+      const [h, p] = await Promise.all([getPortfolio(), getAllPositions()])
+      downloadCsv('holdings.csv', ['ticker', 'shares', 'avg_cost'], h.data)
+      downloadCsv('trades.csv', ['id', 'ticker', 'allocation_type', 'status', 'expiry', 'strike', 'contracts', 'entry_price', 'premium_total', 'open_fees', 'close_cost', 'close_fees', 'cost_basis', 'rolled_from', 'opened_at', 'closed_at'], p.data)
+    } catch (e) {
+      toast(apiError(e, "Couldn't download your data."), { tone: 'error' })
     } finally { setExporting(false) }
   }
 
@@ -329,25 +344,46 @@ export default function Strategy() {
         <p className="mt-2 text-13 text-muted">System follows your device's light or dark setting. Saved on this device.</p>
       </Section>
 
-      <Section id="data-h" title="Your data">
-        <ul>
-          <li className="flex items-center justify-between gap-4 border-b border-line py-3">
-            <div><div className="text-15">Holdings</div><div className="text-13 text-muted">{plural(holdings.length, 'stock')}</div></div>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={exportHoldings} disabled={exporting}><Download size={15} strokeWidth={2} /> Download CSV</button>
-          </li>
-          <li className="flex items-center justify-between gap-4 border-b border-line py-3">
-            <div><div className="text-15">Trades</div><div className="text-13 text-muted">{plural(positions.length, 'call')}, open and closed</div></div>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={exportPositions} disabled={exporting}><Download size={15} strokeWidth={2} /> Download CSV</button>
-          </li>
-        </ul>
-      </Section>
-
-      <Section id="account-h" title="Account">
+      <Section id="account-h" title="Account and security">
         <div className="flex items-center justify-between gap-4 border-b border-line py-3">
           <span className="min-w-0 truncate text-15 text-fg-2">{email ? `Logged in as ${email}` : 'Logged in on this device'}</span>
           <button type="button" className="btn btn-secondary btn-sm" onClick={logout}><LogOut size={15} strokeWidth={2} /> Log out</button>
         </div>
+        <ul>
+          <AccountRow title="Change password" sub="Logs out your other devices too" onClick={() => setDialog('password')} />
+          <AccountRow title="Recovery code" onClick={() => setDialog('code')}
+            sub={hasRecoveryCode ? 'Saved · for a forgotten password' : <span className="text-amber">Not set up: without it, a forgotten password can't be reset</span>}
+            action={hasRecoveryCode ? 'Make a new one' : 'Set it up'} />
+          <AccountRow title="Log out other devices" sub="If you used CovCall on a shared or lost device" onClick={() => setDialog('others')} />
+          <AccountRow title="Download my data" sub={`${plural(holdings.length, 'stock')} and ${plural(positions.length, 'call')}, as CSV files`}
+            onClick={exportAll} disabled={exporting} icon={exporting ? <Spinner className="h-4 w-4" /> : <Download size={16} strokeWidth={2} />} />
+          <AccountRow title="Delete my account" sub="Removes your stocks, calls and alerts for good" danger onClick={() => setDialog('delete')} />
+        </ul>
+        <p className="mt-3 text-13 text-muted">CovCall never asks for your broker login and can't place trades. It keeps the stocks and calls you enter, and nothing else.</p>
       </Section>
+
+      {dialog === 'password' && (
+        <ChangePasswordModal onCancel={() => setDialog(null)}
+          onDone={() => { setDialog(null); toast('Password changed. Your other devices are logged out.') }} />
+      )}
+      {dialog === 'code' && (
+        <RecoveryCodeModal email={email} onCancel={() => setDialog(null)}
+          onDone={() => { setDialog(null); refreshMe() }} />
+      )}
+      {dialog === 'others' && (
+        <ConfirmDialog title="Log out other devices?" confirmLabel="Log out others" onCancel={() => setDialog(null)}
+          onConfirm={async () => {
+            try {
+              const r = await logoutOthers()
+              setToken(r.data.token)
+            } catch (e) { throw new Error(apiError(e, "Couldn't log out your other devices."), { cause: e }) }
+            setDialog(null)
+            toast('Your other devices are logged out. This one stays logged in.')
+          }}>
+          Every other phone or computer logged in to this account is logged out within a minute. This one stays logged in.
+        </ConfirmDialog>
+      )}
+      {dialog === 'delete' && <DeleteAccountModal email={email} onCancel={() => setDialog(null)} />}
 
       {/* Save bar: only while there are changes to save (or an error to show) */}
       {(dirty || error || saving) && (
