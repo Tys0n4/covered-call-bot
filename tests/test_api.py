@@ -3,8 +3,6 @@ from datetime import date, timedelta
 
 import pytest
 
-import api.auth as auth
-
 
 def _expiry(days=25):
     return (date.today() + timedelta(days=days)).isoformat()
@@ -29,33 +27,7 @@ def _open_contracts(client, ticker="NVDA"):
     return sum(p["contracts"] for p in client.get("/positions", params={"ticker": ticker}).json())
 
 
-# --- Auth --------------------------------------------------------------------
-
-def test_api_is_open_without_password(client):
-    assert client.get("/auth/status").json() == {"auth_required": False}
-    assert client.get("/portfolio").status_code == 200
-
-
-def test_password_protects_every_data_route(client, monkeypatch):
-    monkeypatch.setenv("APP_PASSWORD", "hunter2")
-    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
-
-    assert client.get("/health").status_code == 200
-    assert client.get("/auth/status").json() == {"auth_required": True}
-    for method, url in [("get", "/portfolio"), ("get", "/positions"), ("get", "/manage"),
-                        ("get", "/settings"), ("get", "/performance"), ("get", "/positions/assignment-review"),
-                        ("post", "/positions/1/roll"), ("post", "/positions/1/assign"),
-                        ("post", "/positions/1/undo"), ("patch", "/positions/1"), ("delete", "/positions/1"),
-                        ("post", "/scan"), ("delete", "/portfolio/AAPL")]:
-        assert getattr(client, method)(url).status_code == 401, url
-
-    assert client.post("/auth/login", json={"password": "nope"}).status_code == 401
-    token = client.post("/auth/login", json={"password": "hunter2"}).json()["token"]
-    assert client.get("/portfolio", headers={"Authorization": f"Bearer {token}"}).status_code == 200
-
-    tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
-    assert client.get("/portfolio", headers={"Authorization": f"Bearer {tampered}"}).status_code == 401
-
+# --- Market status -----------------------------------------------------------
 
 def test_market_status_for_the_header(client, monkeypatch):
     import api.main as main
@@ -73,15 +45,6 @@ def test_market_status_for_the_header(client, monkeypatch):
     # Public, like /health: it's only the market calendar
     monkeypatch.setenv("APP_PASSWORD", "hunter2")
     assert client.get("/market").status_code == 200
-
-
-def test_expired_and_rotated_tokens_are_rejected(monkeypatch):
-    monkeypatch.setenv("APP_PASSWORD", "hunter2")
-    token, expires = auth.make_token()
-    assert auth.token_is_valid(token)
-    assert not auth.token_is_valid(token, now=expires + 1)
-    monkeypatch.setenv("APP_PASSWORD", "changed")   # new password logs old sessions out
-    assert not auth.token_is_valid(token)
 
 
 # --- Scan ----------------------------------------------------------------------
@@ -234,27 +197,3 @@ def test_scan_explains_when_every_expiry_spans_earnings(client, nvda):
     scan = client.post("/scan", json={"ticker": "NVDA", "avoid_earnings": True}).json()
     assert scan["candidates"] == []
     assert any("Every option in your expiry window" in w for w in scan["warnings"])
-
-
-def test_too_many_wrong_passwords_lock_logins_for_a_while(client, monkeypatch):
-    monkeypatch.setenv("APP_PASSWORD", "hunter2")
-    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
-    clock = [1_000_000.0]
-    monkeypatch.setattr(auth.time, "time", lambda: clock[0])
-    for _ in range(auth.MAX_FAILURES):
-        assert client.post("/auth/login", json={"password": "nope"}).status_code == 401
-    locked = client.post("/auth/login", json={"password": "hunter2"})        # even the right one, for now
-    assert locked.status_code == 429
-    assert locked.json()["detail"] == "Too many wrong passwords. Try again in 15 minutes."
-    assert locked.headers["Retry-After"] == str(auth.LOCKOUT_SECONDS)
-    clock[0] += auth.LOCKOUT_SECONDS
-    assert client.post("/auth/login", json={"password": "hunter2"}).status_code == 200
-
-
-def test_a_right_password_clears_earlier_mistakes(client, monkeypatch):
-    monkeypatch.setenv("APP_PASSWORD", "hunter2")
-    monkeypatch.setattr(auth.time, "sleep", lambda s: None)
-    for _ in range(auth.MAX_FAILURES - 1):
-        client.post("/auth/login", json={"password": "nope"})
-    assert client.post("/auth/login", json={"password": "hunter2"}).status_code == 200
-    assert client.post("/auth/login", json={"password": "nope"}).status_code == 401   # not locked

@@ -1,7 +1,7 @@
 # api/routes/scan.py
 import logging
 import math
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from dataclasses import replace
 
@@ -14,6 +14,7 @@ from core.portfolio import load_portfolio
 from core.scanner import resolve_min_strike, scan_covered_calls
 from core.planner import build_plan, compute_buyback_budget, get_allocation_targets
 from core.positions import CoverageError, load_open_positions, save_positions
+from api.auth import current_user
 from api.schemas import (
     AllocationItem, Candidate, GoalCheck, ScanAllItem, ScanAllResponse, ScanConfig, ScanFilters, ScanResponse, TradeIn,
 )
@@ -66,12 +67,12 @@ def _row_to_candidate(row) -> Candidate:
 # Handlers are plain `def` so FastAPI runs them in a worker thread: a scan
 # makes slow network calls that would otherwise freeze every other request.
 
-def _config(filters: ScanFilters) -> ScannerConfig:
+def _config(user_id: int, filters: ScanFilters) -> ScannerConfig:
     """
     Your saved strategy (delta range, expiry window, split, buyback) plus the
     Scanner page's filters; an expiry window sent with the scan overrides the strategy's.
     """
-    strategy_config = effective_config()
+    strategy_config = effective_config(user_id)
     return replace(
         strategy_config,
         min_dte=filters.min_dte if filters.min_dte is not None else strategy_config.min_dte,
@@ -86,29 +87,30 @@ def _config(filters: ScanFilters) -> ScannerConfig:
 
 
 @router.post("", response_model=ScanResponse)
-def run_scan(scan_config: ScanConfig):
+def run_scan(scan_config: ScanConfig, user_id: int = Depends(current_user)):
     """Run the covered call scanner for one stock in your portfolio."""
-    holdings = load_portfolio()
+    holdings = load_portfolio(user_id)
     position = next((p for p in holdings if p.ticker == scan_config.ticker), None)
     if position is None:
         raise HTTPException(
             status_code=404,
             detail=f"{scan_config.ticker} is not in your portfolio. Add it on the Dashboard first.",
         )
-    return _scan_one(position, _config(scan_config), holdings, load_strategy()["monthly_goal"], load_open_positions())
+    return _scan_one(position, _config(user_id, scan_config), holdings, load_strategy(user_id)["monthly_goal"],
+                     load_open_positions(user_id))
 
 
 @router.post("/all", response_model=ScanAllResponse)
-def scan_all(filters: ScanFilters):
+def scan_all(filters: ScanFilters, user_id: int = Depends(current_user)):
     """
     Scan every stock that has contracts free to sell, with the same rules and
     filters as scanning each one alone. A few stocks are scanned at a time; a
     stock that fails says why instead of failing the rest.
     """
-    holdings = load_portfolio()
-    config = _config(filters)
-    goal = load_strategy()["monthly_goal"]
-    all_open = load_open_positions()
+    holdings = load_portfolio(user_id)
+    config = _config(user_id, filters)
+    goal = load_strategy(user_id)["monthly_goal"]
+    all_open = load_open_positions(user_id)
     free, covered = [], []
     for h in holdings:
         ticker_open = [p for p in all_open if p.get("ticker") == h.ticker]
@@ -229,7 +231,7 @@ def _scan_one(
 
 
 @router.post("/save")
-def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_length=20)):
+def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_length=20), user_id: int = Depends(current_user)):
     """
     Save the recommended trade from a scan as open positions.
 
@@ -250,7 +252,7 @@ def save_scan_positions(trades: list[TradeIn] = Body(..., min_length=1, max_leng
         for t in trades
     ]
     try:
-        save_positions(planned, income_weight=load_strategy()["income_weight"])
+        save_positions(user_id, planned, income_weight=load_strategy(user_id)["income_weight"])
     except CoverageError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     return {"saved": len(planned)}

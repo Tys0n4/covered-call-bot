@@ -134,14 +134,36 @@ def fresh_db(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_password(monkeypatch):
+    """No old shared password, fresh login limits, and quick password hashing (tests only)."""
     from api import auth
+    from core import accounts
     monkeypatch.delenv("APP_PASSWORD", raising=False)
     monkeypatch.delenv("AUTH_SECRET", raising=False)
+    monkeypatch.setattr(accounts, "_N", 2 ** 10)
     auth._failures.clear()
+    auth._signups.clear()
+
+
+def signed_up(email: str = "you@example.com", password: str = "correct horse battery"):
+    """A test client logged in to a new account."""
+    from fastapi.testclient import TestClient
+    from api.main import app
+    c = TestClient(app)
+    r = c.post("/auth/signup", json={"email": email, "password": password})
+    assert r.status_code == 201, r.text
+    c.headers["Authorization"] = f"Bearer {r.json()['token']}"
+    return c
 
 
 @pytest.fixture
 def client():
+    """Logged in to a new account (every data route needs one)."""
+    return signed_up()
+
+
+@pytest.fixture
+def anonymous():
+    """Not logged in."""
     from fastapi.testclient import TestClient
     from api.main import app
     return TestClient(app)

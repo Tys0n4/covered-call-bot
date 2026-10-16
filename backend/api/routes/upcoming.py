@@ -2,8 +2,9 @@
 # What's coming up for your stocks (Dashboard): Fed rate decisions and your holdings' earnings.
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from api.auth import current_user
 from api.schemas import UpcomingEvents
 from core.events import fed_meetings_between, last_fed_meeting
 from core.market_data import get_events
@@ -15,12 +16,12 @@ router = APIRouter(prefix="/upcoming", tags=["upcoming"])
 
 
 @router.get("", response_model=UpcomingEvents)
-def upcoming(days: int = Query(30, ge=1, le=90)):
+def upcoming(days: int = Query(30, ge=1, le=90), user_id: int = Depends(current_user)):
     """Fed decisions and earnings for the stocks you hold, from today through `days` ahead."""
     today = market_today()
     end = (date.fromisoformat(today) + timedelta(days=days)).isoformat()
     earnings, unknown = [], []
-    holdings = load_portfolio()
+    holdings = load_portfolio(user_id)
     for holding, found in zip(holdings, parallel_map(lambda h: get_events(h.ticker), holdings), strict=True):
         when = found.get("earnings_date")
         if when and today <= when <= end:

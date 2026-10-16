@@ -8,6 +8,7 @@ The details behind the [README](../README.md): what each screen shows, how calls
 - [Management](#management)
 - [Alerts (Discord)](#alerts-discord)
 - [Performance](#performance)
+- [Accounts](#accounts)
 - [Configuration](#configuration)
 - [Design system](#design-system)
 
@@ -91,10 +92,10 @@ If the scheduled check stops running during market hours (none for 50 minutes af
 
 1. **Discord:** in the channel you want, open *Edit Channel → Integrations → Webhooks → New Webhook* and copy the webhook URL.
 2. **App:** paste it under *Discord alerts* on the Strategy page and click Connect. A test message is sent right away.
-3. **Railway:** add a variable `ALERTS_KEY` set to a long random string (for example the output of `python -c "import secrets; print(secrets.token_urlsafe(32))"`). It lets a scheduler run the check without your password, and can do nothing else.
+3. **Railway:** add a variable `ALERTS_KEY` set to a long random string (for example the output of `python -c "import secrets; print(secrets.token_urlsafe(32))"`). It lets a scheduler run the check for every account with alerts on, without logging in, and can do nothing else.
 4. **[cron-job.org](https://cron-job.org)** (free): create a cron job that sends `POST https://covered-call-bot-production.up.railway.app/alerts/cron` with the header `X-Alerts-Key: <your ALERTS_KEY>`. Schedule: time zone *America/New_York*, Monday–Friday, hours 9–15, minutes 15 and 45 (every 30 minutes, 9:45 a.m. to 3:45 p.m.; the 9:15 call is skipped because prices are still the last session's). It answers right away and checks in the background.
 
-GitHub's free scheduled workflows turned out too unreliable for this (one run in a whole trading day), so `.github/workflows/alerts.yml` now only runs by hand: *Actions → Buy-back alerts → Run workflow* (needs the `APP_PASSWORD` repository secret). You can also run a check with `cd backend && python -m core.alerts`.
+GitHub's free scheduled workflows turned out too unreliable for this (one run in a whole trading day), so `.github/workflows/alerts.yml` now only runs by hand: *Actions → Buy-back alerts → Run workflow* (needs the `ALERTS_KEY` repository secret). You can also run a check with `cd backend && python -m core.alerts`.
 
 ---
 
@@ -105,6 +106,14 @@ A call's result is realized when it finishes. Net = premium − fees − buyback
 The page opens with the honest bottom line: what selling calls added **compared with just holding the shares**. That's the premium kept, minus any gain given up when shares were called away below their market price that day (the stock's close on the assignment date minus the strike). Bought-back calls already include any rise in the stock in their buyback cost, and expired calls capped nothing.
 
 Assigned calls also record the profit or loss on the shares: (strike − your cost per share) × shares. Yearly return is net premium on the cost of the shares covered, weighted by how long each call was open. Bought-back calls with no cost entered are flagged and left out of the totals.
+
+---
+
+## Accounts
+
+Everyone signs up with an email and a password, and each account has its own stocks, calls, strategy and Discord alerts; nobody else can see or change them. Passwords are stored as scrypt hashes. After 10 wrong passwords for an email within 15 minutes, logging in to it waits until the 15 minutes are up; devices already logged in keep working. New accounts are capped at 30 an hour so a script can't fill the free database.
+
+A server from before accounts (one shared password, `APP_PASSWORD`) keeps its portfolio as unclaimed when it upgrades. The sign-up screen then asks for the old app password: whoever enters it takes that portfolio over, and anyone else starts with an empty one. With no `APP_PASSWORD` (local development), the first account takes it.
 
 ---
 

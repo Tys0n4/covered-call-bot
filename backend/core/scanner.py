@@ -12,7 +12,6 @@ from core.options_data import get_call_options_in_dte_range
 from core.filters import filter_covered_calls
 from core.calculations import add_option_metrics
 from core.greeks import add_estimated_delta
-from core.fees import typical_fee_per_contract
 from core.volatility import premium_check, realized_volatility
 from core.scoring import add_monthly_income, in_delta_range, pick_for_strategy, recent_prices_only
 from core.events import fed_meetings_between, last_fed_meeting, related_earnings
@@ -224,7 +223,7 @@ def scan_covered_calls(
         filtered, current_price, risk_free_rate=config.risk_free_rate,
         dividend_yield=get_dividend_yield(position.ticker, current_price), fallback_vol=recent_vol,
     )
-    fee = typical_fee_per_contract()
+    fee = config.commission_per_contract
     enriched = add_option_metrics(enriched, current_price, fee_per_contract=fee)
     # An option whose commission eats the whole premium isn't income
     enriched = enriched[enriched["net_per_contract"] > 0]

@@ -29,7 +29,7 @@ from sqlalchemy import insert, select, update
 
 from core import market_hours
 from core.buyback import evaluate_positions
-from core.db import alert_settings, get_engine, positions
+from core.db import UNCLAIMED, alert_settings, get_engine, positions
 from core.market_hours import NEW_YORK, OPEN, QUOTE_DELAY, delayed_quotes_live
 from core.positions import load_open_positions
 from core.strategy import effective_config
@@ -64,9 +64,10 @@ def valid_webhook(url: str) -> bool:
 
 # --- Settings ------------------------------------------------------------------
 
-def load_alert_settings() -> dict:
+def load_alert_settings(user_id: int) -> dict:
+    """The account's alert settings (one row per account, id = users.id)."""
     with get_engine().connect() as conn:
-        row = conn.execute(select(alert_settings).where(alert_settings.c.id == 1)).mappings().first()
+        row = conn.execute(select(alert_settings).where(alert_settings.c.id == user_id)).mappings().first()
     if row is None:
         return {"discord_webhook": None, "enabled": False, "last_check_at": None, "last_error": None,
                 "notify_early": True, "notify_strike": True}
@@ -78,6 +79,7 @@ def load_alert_settings() -> dict:
 
 
 def save_alert_settings(
+    user_id: int,
     *,
     discord_webhook: str | None = None,
     enabled: bool | None = None,
@@ -104,24 +106,25 @@ def save_alert_settings(
     if notify_strike is not None:
         values["notify_strike"] = 1 if notify_strike else 0
     with get_engine().begin() as conn:
-        if values and conn.execute(update(alert_settings).where(alert_settings.c.id == 1).values(**values)).rowcount == 0:
-            conn.execute(insert(alert_settings).values(id=1, **{"enabled": 0, **values}))
-    current = load_alert_settings()
+        if values and conn.execute(update(alert_settings).where(alert_settings.c.id == user_id).values(**values)).rowcount == 0:
+            conn.execute(insert(alert_settings).values(id=user_id, **{"enabled": 0, **values}))
+    current = load_alert_settings(user_id)
     if current["enabled"] and not current["discord_webhook"]:
         raise AlertError("Add a Discord webhook URL before turning alerts on.")
     return current
 
 
-def _mark_checked() -> None:
+def _mark_checked(user_id: int) -> None:
     with get_engine().begin() as conn:
-        if conn.execute(update(alert_settings).where(alert_settings.c.id == 1).values(last_check_at=_now())).rowcount == 0:
-            conn.execute(insert(alert_settings).values(id=1, enabled=0, last_check_at=_now()))
+        if conn.execute(update(alert_settings).where(alert_settings.c.id == user_id).values(last_check_at=_now())).rowcount == 0:
+            conn.execute(insert(alert_settings).values(id=user_id, enabled=0, last_check_at=_now()))
 
 
-def _record_error(message: str | None) -> None:
-    """Remember why the last message couldn't be sent (None: it was), for the app to show."""
+def _record_error(user_id: int, message: str | None) -> None:
+    """Remember why the account's last message couldn't be sent (None: it was), for the app to show."""
     with get_engine().begin() as conn:
-        conn.execute(update(alert_settings).where(alert_settings.c.id == 1).values(last_error=message[:300] if message else None))
+        conn.execute(update(alert_settings).where(alert_settings.c.id == user_id)
+                     .values(last_error=message[:300] if message else None))
 
 
 def check_overdue(settings: dict, now: datetime | None = None) -> bool:
@@ -259,8 +262,8 @@ def buyback_message(ready: list[dict]) -> dict:
     return alert_message(ready=ready)
 
 
-def send_test(url: str | None = None) -> None:
-    url = url or load_alert_settings()["discord_webhook"]
+def send_test(user_id: int, url: str | None = None) -> None:
+    url = url or load_alert_settings(user_id)["discord_webhook"]
     if not url:
         raise AlertError("Add a Discord webhook URL first.")
     if not valid_webhook(url):
@@ -268,28 +271,52 @@ def send_test(url: str | None = None) -> None:
     send_discord(url, {
         "content": "✅ CovCall alerts are connected. You'll get a message here when a covered call needs you.",
     })
-    _record_error(None)   # it works now
+    _record_error(user_id, None)   # it works now
 
 
 # --- The check -----------------------------------------------------------------
 
-def check_and_alert(*, force: bool = False) -> dict:
+def accounts_with_alerts() -> list[int]:
+    """Accounts that have alerts on (unclaimed data from before accounts never gets any)."""
+    with get_engine().connect() as conn:
+        return [r.id for r in conn.execute(
+            select(alert_settings.c.id).where(alert_settings.c.enabled == 1, alert_settings.c.id != UNCLAIMED)
+            .order_by(alert_settings.c.id)
+        )]
+
+
+def check_all(*, force: bool = False) -> dict:
+    """The scheduled check: every account with alerts on, one at a time; one failing doesn't stop the rest."""
+    if not force and not delayed_quotes_live():
+        return {"status": "market_closed", "sent": 0, "accounts": 0}
+    sent = failed = 0
+    accounts = accounts_with_alerts()
+    for user_id in accounts:
+        try:
+            sent += check_and_alert(user_id, force=force)["sent"]
+        except Exception as e:                  # a deleted webhook, Discord down, prices unavailable
+            failed += 1
+            log.warning("Alert check for account %s failed: %s", user_id, e)
+    return {"status": "ok", "sent": sent, "accounts": len(accounts), "failed": failed}
+
+
+def check_and_alert(user_id: int, *, force: bool = False) -> dict:
     """
-    Check open calls and send one Discord message for any that newly reached
-    the buy-back target. Skips when alerts are off, and (unless force) when the
+    Check the account's open calls and send one Discord message for any that
+    newly need it. Skips when alerts are off, and (unless force) when the
     market is closed or opened less than 15 minutes ago, since the delayed
     prices then are still the last session's closing quotes.
     """
-    settings = load_alert_settings()
+    settings = load_alert_settings(user_id)
     if not settings["enabled"] or not settings["discord_webhook"]:
         return {"status": "off", "sent": 0}
     if not force and not delayed_quotes_live():
         return {"status": "market_closed", "sent": 0}
 
-    open_positions = load_open_positions()
-    config = effective_config()
+    open_positions = load_open_positions(user_id)
+    config = effective_config(user_id)
     results = evaluate_positions(open_positions, config=config) if open_positions else []
-    _mark_checked()
+    _mark_checked(user_id)
 
     ready, early, above = [], [], []
     for pos, r in zip(open_positions, results, strict=True):
@@ -311,9 +338,9 @@ def check_and_alert(*, force: bool = False) -> dict:
     try:
         send_discord(settings["discord_webhook"], alert_message(ready, early, above))
     except AlertError as e:
-        _record_error(str(e))
+        _record_error(user_id, str(e))
         raise
-    _record_error(None)
+    _record_error(user_id, None)
     now = _now()
     with get_engine().begin() as conn:
         for calls, values in ((ready, {"buyback_alerted_at": now}),
@@ -329,7 +356,7 @@ def check_and_alert(*, force: bool = False) -> dict:
 if __name__ == "__main__":                       # python -m core.alerts
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
-        print(check_and_alert())
+        print(check_all())
     except AlertError as e:
         log.error("Alert check failed: %s", e)
         raise SystemExit(1) from e

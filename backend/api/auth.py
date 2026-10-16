@@ -1,20 +1,22 @@
 # api/auth.py
 """
-Password protection for the API.
+Accounts and logins.
 
-Set APP_PASSWORD (e.g. on Railway) to require a login. The app's login screen
-sends the password to POST /auth/login and gets back a signed token, which it
-sends as "Authorization: Bearer <token>" on every request. Tokens last
-AUTH_TOKEN_DAYS days (default 30) and are signed with AUTH_SECRET (defaults to
-one derived from the password, so changing the password logs everyone out).
+Sign up (POST /auth/signup) or log in (POST /auth/login) with an email and a
+password to get a signed token. The app sends it as "Authorization: Bearer
+<token>" on every request, and every route sees only that account's data
+(current_user). Tokens last AUTH_TOKEN_DAYS days (default 30) and are signed
+with AUTH_SECRET, or else with a key generated once and kept in the database.
+Passwords are stored as scrypt hashes (core/accounts.py).
 
-When APP_PASSWORD is not set the API stays open (handy for local development)
-and a warning is logged at startup.
+After MAX_FAILURES wrong passwords for an email within LOCKOUT_SECONDS, logins
+to it are refused (429) until the window passes; devices already logged in keep
+working. Sign-ups are capped per hour so a script can't flood the free database.
 
-After MAX_FAILURES wrong passwords within LOCKOUT_SECONDS, logins are refused
-(429) until the oldest of them is that old. It's one limit for everyone: behind
-Railway's proxy every request comes from the same address. Devices already
-logged in keep working, since their tokens are still valid.
+Data from before accounts existed (one shared APP_PASSWORD) stays unclaimed
+until someone signs up and enters that old password as claim_password; then
+it's theirs. On a server without APP_PASSWORD (local development) the first
+account takes it over.
 """
 from __future__ import annotations
 
@@ -24,13 +26,19 @@ import hmac
 import logging
 import math
 import os
+import secrets
 import threading
 import time
 from collections import deque
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy import insert, select
+from sqlalchemy.exc import IntegrityError
+
+from core import accounts
+from core.db import app_settings, get_engine
 
 log = logging.getLogger(__name__)
 
@@ -38,33 +46,44 @@ TOKEN_DAYS = float(os.environ.get("AUTH_TOKEN_DAYS", "30"))
 
 MAX_FAILURES = 10
 LOCKOUT_SECONDS = 15 * 60
-_failures: deque[float] = deque()     # when each recent wrong password was tried
-_failures_lock = threading.Lock()
+SIGNUPS_PER_HOUR = 30
+
+_failures: dict[str, deque[float]] = {}   # email -> when each recent wrong password was tried
+_signups: deque[float] = deque()
+_limits_lock = threading.Lock()
 
 
-def _locked_for(now: float) -> int:
-    """Seconds until a login may be tried again (0: now)."""
-    with _failures_lock:
-        while _failures and now - _failures[0] >= LOCKOUT_SECONDS:
-            _failures.popleft()
-        if len(_failures) < MAX_FAILURES:
-            return 0
-        return math.ceil(LOCKOUT_SECONDS - (now - _failures[0]))
-
-
-def _password() -> str:
+def _old_password() -> str:
+    """The shared password from before accounts; now only for claiming that data."""
     return os.environ.get("APP_PASSWORD", "")
 
 
-def auth_required() -> bool:
-    return bool(_password())
+# --- Signing tokens ---------------------------------------------------------------
+
+_secret_kept: dict = {"engine": None, "value": None}
+_secret_lock = threading.Lock()
 
 
 def _secret() -> bytes:
     explicit = os.environ.get("AUTH_SECRET", "")
     if explicit:
         return explicit.encode()
-    return hashlib.sha256(b"covcall-auth:" + _password().encode()).digest()
+    engine = get_engine()
+    with _secret_lock:
+        if _secret_kept["engine"] is engine:
+            return _secret_kept["value"]
+        with engine.begin() as conn:
+            value = conn.execute(select(app_settings.c.value).where(app_settings.c.key == "auth_secret")).scalar()
+        if value is None:
+            value = secrets.token_urlsafe(48)
+            try:
+                with engine.begin() as conn:
+                    conn.execute(insert(app_settings).values(key="auth_secret", value=value))
+            except IntegrityError:          # another server process made one first: use theirs
+                with engine.begin() as conn:
+                    value = conn.execute(select(app_settings.c.value).where(app_settings.c.key == "auth_secret")).scalar()
+        _secret_kept.update(engine=engine, value=value.encode())
+        return _secret_kept["value"]
 
 
 def _sign(payload: str) -> str:
@@ -72,84 +91,150 @@ def _sign(payload: str) -> str:
     return base64.urlsafe_b64encode(sig).decode().rstrip("=")
 
 
-def make_token(now: float | None = None) -> tuple[str, int]:
-    """A signed token and its expiry (unix seconds)."""
+def make_token(user_id: int, now: float | None = None) -> tuple[str, int]:
+    """A signed token for the account and its expiry (unix seconds)."""
     expires = int((now or time.time()) + TOKEN_DAYS * 86400)
-    payload = str(expires)
+    payload = f"{user_id}.{expires}"
     return f"{payload}.{_sign(payload)}", expires
 
 
-def token_is_valid(token: str, now: float | None = None) -> bool:
-    payload, _, sig = (token or "").partition(".")
-    if not payload.isdigit() or not sig:
-        return False
-    if not hmac.compare_digest(sig, _sign(payload)):
-        return False
-    return int(payload) > (now or time.time())
+def token_user(token: str, now: float | None = None) -> int | None:
+    """The account a valid, unexpired token belongs to, else None."""
+    parts = (token or "").split(".")
+    if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit() or not parts[2]:
+        return None
+    if not hmac.compare_digest(parts[2], _sign(f"{parts[0]}.{parts[1]}")):
+        return None
+    if int(parts[1]) <= (now or time.time()):
+        return None
+    return int(parts[0])
 
 
 _bearer = HTTPBearer(auto_error=False)
 
 
-def require_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> None:
-    """Route dependency: reject the request unless it carries a valid token."""
-    if not auth_required():
-        return
-    if creds is None or not token_is_valid(creds.credentials):
+def current_user(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> int:
+    """Route dependency: the logged-in account's id, or 401."""
+    user_id = token_user(creds.credentials) if creds else None
+    if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Please log in.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return user_id
 
 
-# ---------------------------------------------------------------------------
-# /auth routes (always public)
+# --- Limits -----------------------------------------------------------------------
+
+def _locked_for(email: str, now: float) -> int:
+    """Seconds until this email may try a password again (0: now)."""
+    with _limits_lock:
+        tries = _failures.get(email)
+        if not tries:
+            return 0
+        while tries and now - tries[0] >= LOCKOUT_SECONDS:
+            tries.popleft()
+        if not tries:
+            _failures.pop(email, None)
+            return 0
+        if len(tries) < MAX_FAILURES:
+            return 0
+        return math.ceil(LOCKOUT_SECONDS - (now - tries[0]))
+
+
+def _too_many(wait: int) -> HTTPException:
+    minutes = math.ceil(wait / 60)
+    return HTTPException(
+        status_code=429,
+        detail=f"Too many wrong passwords. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
+        headers={"Retry-After": str(wait)},
+    )
+
+
+def _take_signup_slot(now: float) -> None:
+    with _limits_lock:
+        while _signups and now - _signups[0] >= 3600:
+            _signups.popleft()
+        if len(_signups) >= SIGNUPS_PER_HOUR:
+            raise HTTPException(status_code=429, detail="Too many new accounts right now. Try again in an hour.")
+        _signups.append(now)
+
+
+# --- /auth routes (public, except /auth/me) ----------------------------------------
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
-    password: str
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=200)
+
+
+class SignupRequest(LoginRequest):
+    claim_password: str | None = Field(default=None, max_length=200)   # the old shared app password, to keep that data
 
 
 class LoginResponse(BaseModel):
     token: str
     expires_at: int
+    email: str
+    claimed: bool = False    # took over the data from before accounts
 
 
 @router.get("/status")
 def auth_status():
-    """Whether this API needs a password."""
-    return {"auth_required": auth_required()}
+    """Accounts are always on. can_claim: there's data from before accounts that the old app password can take over."""
+    return {"auth_required": True, "can_claim": bool(_old_password()) and accounts.has_unclaimed_data()}
+
+
+@router.post("/signup", response_model=LoginResponse, status_code=201)
+def signup(body: SignupRequest):
+    old = _old_password()
+    wants_claim = bool(body.claim_password)
+    if wants_claim and not (old and hmac.compare_digest(body.claim_password.encode(), old.encode())):
+        time.sleep(1)  # slow down guessing the old password
+        raise HTTPException(status_code=403, detail="That isn't the old app password. Leave it empty to start fresh.")
+    _take_signup_slot(time.time())
+    try:
+        user_id = accounts.create_user(body.email, body.password)
+    except accounts.AccountExists as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    except accounts.AccountError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
+    # The old data goes to whoever proves they know the old password, or, with no old
+    # password set (local development), to the first account
+    claimed = False
+    if wants_claim or (not old and accounts.account_count() == 1):
+        claimed = accounts.claim_unclaimed_data(user_id)
+    token, expires = make_token(user_id)
+    return LoginResponse(token=token, expires_at=expires, email=accounts.email_of(user_id), claimed=claimed)
 
 
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest):
-    if not auth_required():
-        token, expires = make_token()
-        return LoginResponse(token=token, expires_at=expires)
+    email = (body.email or "").strip().lower()
     now = time.time()
-    wait = _locked_for(now)
+    wait = _locked_for(email, now)
     if wait:
-        minutes = math.ceil(wait / 60)
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many wrong passwords. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
-            headers={"Retry-After": str(wait)},
-        )
-    if not hmac.compare_digest(body.password.encode(), _password().encode()):
-        with _failures_lock:
-            _failures.append(now)
-        log.warning("Wrong password at login")
+        raise _too_many(wait)
+    user = accounts.find_user(email)
+    if user is None or not accounts.password_matches(body.password, user["password_hash"]):
+        with _limits_lock:
+            _failures.setdefault(email, deque()).append(now)
+        log.warning("Wrong email or password at login")
         time.sleep(1)  # slow down password guessing
-        raise HTTPException(status_code=401, detail="Wrong password.")
-    with _failures_lock:
-        _failures.clear()
-    token, expires = make_token()
-    return LoginResponse(token=token, expires_at=expires)
+        raise HTTPException(status_code=401, detail="Wrong email or password.")
+    with _limits_lock:
+        _failures.pop(email, None)
+    token, expires = make_token(user["id"])
+    return LoginResponse(token=token, expires_at=expires, email=user["email"])
 
 
-def warn_if_open() -> None:
-    if not auth_required():
-        log.warning("APP_PASSWORD is not set: the API is open to anyone who can reach it.")
+@router.get("/me")
+def me(user_id: int = Depends(current_user)):
+    """The logged-in account."""
+    email = accounts.email_of(user_id)
+    if email is None:
+        raise HTTPException(status_code=401, detail="Please log in.")
+    return {"email": email}

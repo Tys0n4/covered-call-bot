@@ -90,7 +90,7 @@ const Range = ({ label, min, max, step, value, onChange }) => (
 export default function Strategy() {
   const toast = useToast()
   const wide = useWide()
-  const { authRequired, logout } = useAuth()
+  const { email, logout } = useAuth()
   const { preference, setPreference } = useTheme()
   const [saved, setSaved]       = useState(null)    // what the server has
   const [draft, setDraft]       = useState(null)    // what's on screen
@@ -317,14 +317,12 @@ export default function Strategy() {
         </ul>
       </Section>
 
-      {authRequired && (
-        <Section id="account-h" title="Account">
-          <div className="flex items-center justify-between gap-4 border-b border-line py-3">
-            <span className="text-15 text-fg-2">Signed in on this device</span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={logout}><LogOut size={15} strokeWidth={2} /> Log out</button>
-          </div>
-        </Section>
-      )}
+      <Section id="account-h" title="Account">
+        <div className="flex items-center justify-between gap-4 border-b border-line py-3">
+          <span className="min-w-0 truncate text-15 text-fg-2">{email ? `Logged in as ${email}` : 'Logged in on this device'}</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={logout}><LogOut size={15} strokeWidth={2} /> Log out</button>
+        </div>
+      </Section>
 
       {/* Save bar: only while there are changes to save (or an error to show) */}
       {(dirty || error || saving) && (

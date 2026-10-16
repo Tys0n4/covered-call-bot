@@ -130,6 +130,7 @@ def test_the_strategy_is_kept_in_memory_and_saving_updates_it(client):
     body = {**client.get("/settings").json(), "monthly_goal": 1500}
     assert client.put("/settings", json=body).status_code == 200
     seen.clear()
-    assert strategy.load_strategy()["monthly_goal"] == 1500 and seen == []
-    strategy._kept["at"] -= strategy.STRATEGY_TTL         # a minute later: read again
-    assert strategy.load_strategy()["monthly_goal"] == 1500 and len(seen) == 1
+    user_id = int(client.headers["Authorization"].split()[1].split(".")[0])
+    assert strategy.load_strategy(user_id)["monthly_goal"] == 1500 and seen == []
+    strategy._kept[user_id]["at"] -= strategy.STRATEGY_TTL   # a minute later: read again
+    assert strategy.load_strategy(user_id)["monthly_goal"] == 1500 and len(seen) == 1

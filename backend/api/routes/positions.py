@@ -1,6 +1,6 @@
 # api/routes/positions.py
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from core.assignment import calls_to_review
 from core.models import PlannedCall
@@ -10,6 +10,7 @@ from core.positions import (
     CoverageError, PositionError, assign_position, close_position, delete_position, dismiss_assignment, edit_position,
     list_all_positions, load_open_positions, roll_position, save_positions, undo_position,
 )
+from api.auth import current_user
 from api.schemas import (
     AssignRequest, AssignmentReviewItem, ClosePositionRequest, EditPositionRequest, PositionIn,
     PositionOut, RollOptions, RollRequest,
@@ -22,35 +23,35 @@ router = APIRouter(prefix="/positions", tags=["positions"])
 
 
 @router.get("", response_model=list[PositionOut])
-def get_open_positions(ticker: Optional[str] = None):
+def get_open_positions(ticker: Optional[str] = None, user_id: int = Depends(current_user)):
     """Return open positions. Optionally filter by ticker."""
-    positions = load_open_positions()
+    positions = load_open_positions(user_id)
     if ticker:
         positions = [p for p in positions if p.get("ticker") == ticker.upper()]
     return positions
 
 
 @router.get("/all", response_model=list[PositionOut])
-def get_all_positions(ticker: Optional[str] = None):
+def get_all_positions(ticker: Optional[str] = None, user_id: int = Depends(current_user)):
     """Return all positions including closed. Optionally filter by ticker."""
-    positions = list_all_positions()
+    positions = list_all_positions(user_id)
     if ticker:
         positions = [p for p in positions if p.get("ticker") == ticker.upper()]
     return positions
 
 
 @router.get("/assignment-review", response_model=list[AssignmentReviewItem])
-def get_assignment_review():
+def get_assignment_review(user_id: int = Depends(current_user)):
     """
     Recently expired calls where the stock closed above the strike on expiry
     day, so your shares were probably called away. Confirm each one with
     /assign or /not-assigned.
     """
-    return calls_to_review()
+    return calls_to_review(user_id)
 
 
 @router.post("", response_model=dict, status_code=201)
-def add_position(position: PositionIn):
+def add_position(position: PositionIn, user_id: int = Depends(current_user)):
     """Manually add a single open position. Refused if your shares don't cover it."""
     planned = PlannedCall(
         ticker=position.ticker,
@@ -65,36 +66,36 @@ def add_position(position: PositionIn):
         fees=position.fees,
     )
     try:
-        save_positions([planned], opened_at=position.opened_at)
+        save_positions(user_id, [planned], opened_at=position.opened_at)
     except CoverageError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     return {"saved": 1}
 
 
 @router.post("/close")
-def close_open_position(request: ClosePositionRequest):
+def close_open_position(request: ClosePositionRequest, user_id: int = Depends(current_user)):
     """Mark a position as closed (bought back) by ID."""
-    success = close_position(request.position_id, close_cost=request.close_cost, close_fees=request.close_fees)
+    success = close_position(user_id, request.position_id, close_cost=request.close_cost, close_fees=request.close_fees)
     if not success:
         raise HTTPException(status_code=404, detail=f"No open position with id {request.position_id}.")
     return {"closed": request.position_id}
 
 
 @router.get("/{position_id}/rolls", response_model=RollOptions)
-def get_rolls(position_id: int):
+def get_rolls(position_id: int, user_id: int = Depends(current_user)):
     """
     Later calls to roll an open call into: at or above its strike, paying a
     credit after both commissions, best first (see core/rolls.py). Plain `def`:
     it fetches option prices over the network.
     """
-    pos = next((p for p in load_open_positions() if p["id"] == position_id), None)
+    pos = next((p for p in load_open_positions(user_id) if p["id"] == position_id), None)
     if pos is None:
         raise HTTPException(status_code=404, detail=f"No open position with id {position_id}.")
-    return {"position_id": position_id, **find_rolls(pos, config=effective_config())}
+    return {"position_id": position_id, **find_rolls(pos, config=effective_config(user_id))}
 
 
 @router.post("/{position_id}/roll")
-def roll_open_position(position_id: int, request: RollRequest):
+def roll_open_position(position_id: int, request: RollRequest, user_id: int = Depends(current_user)):
     """Buy back an open call and sell a new one on the same shares, in one step."""
     new_call = PlannedCall(
         ticker="",            # filled in from the old call
@@ -108,7 +109,7 @@ def roll_open_position(position_id: int, request: RollRequest):
         fees=request.open_fees,
     )
     try:
-        new_id = roll_position(position_id, new_call, close_cost=request.close_cost, close_fees=request.close_fees)
+        new_id = roll_position(user_id, position_id, new_call, close_cost=request.close_cost, close_fees=request.close_fees)
     except CoverageError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except PositionError as e:
@@ -119,13 +120,13 @@ def roll_open_position(position_id: int, request: RollRequest):
 
 
 @router.post("/{position_id}/assign", response_model=PositionOut)
-def assign_open_position(position_id: int, request: Optional[AssignRequest] = None):
+def assign_open_position(position_id: int, request: Optional[AssignRequest] = None, user_id: int = Depends(current_user)):
     """
     Record that the call was exercised and your shares were sold at the
     strike. Removes those shares from your holding.
     """
     try:
-        pos = assign_position(position_id, assigned_on=request.assigned_on if request else None)
+        pos = assign_position(user_id, position_id, assigned_on=request.assigned_on if request else None)
     except PositionError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     if pos is None:
@@ -134,18 +135,18 @@ def assign_open_position(position_id: int, request: Optional[AssignRequest] = No
 
 
 @router.post("/{position_id}/not-assigned")
-def mark_not_assigned(position_id: int):
+def mark_not_assigned(position_id: int, user_id: int = Depends(current_user)):
     """You checked with your broker: this expired call was not assigned."""
-    if not dismiss_assignment(position_id):
+    if not dismiss_assignment(user_id, position_id):
         raise HTTPException(status_code=404, detail=f"No expired position with id {position_id}.")
     return {"reviewed": position_id}
 
 
 @router.patch("/{position_id}", response_model=PositionOut)
-def edit_trade(position_id: int, request: EditPositionRequest):
+def edit_trade(position_id: int, request: EditPositionRequest, user_id: int = Depends(current_user)):
     """Fix a trade's fill price, fees or (for bought-back calls) buyback cost."""
     try:
-        pos = edit_position(position_id, request.model_dump(exclude_none=True))
+        pos = edit_position(user_id, position_id, request.model_dump(exclude_none=True))
     except PositionError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     if pos is None:
@@ -154,13 +155,13 @@ def edit_trade(position_id: int, request: EditPositionRequest):
 
 
 @router.post("/{position_id}/undo")
-def undo_trade(position_id: int):
+def undo_trade(position_id: int, user_id: int = Depends(current_user)):
     """
     Undo a buyback, roll or assignment: the call is open again (a roll's new
     call is removed; an assignment's shares go back into your holding).
     """
     try:
-        result = undo_position(position_id)
+        result = undo_position(user_id, position_id)
     except PositionError as e:   # includes CoverageError
         raise HTTPException(status_code=409, detail=str(e)) from e
     if result is None:
@@ -169,10 +170,10 @@ def undo_trade(position_id: int):
 
 
 @router.delete("/{position_id}")
-def delete_trade(position_id: int):
+def delete_trade(position_id: int, user_id: int = Depends(current_user)):
     """Delete an open call entered by mistake. Finished calls can't be deleted (undo them instead)."""
     try:
-        deleted = delete_position(position_id)
+        deleted = delete_position(user_id, position_id)
     except PositionError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     if not deleted:

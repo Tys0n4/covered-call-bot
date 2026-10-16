@@ -1,33 +1,34 @@
 # api/routes/manage.py
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from core.strategy import effective_config
 from core.positions import load_open_positions
 from core.buyback import evaluate_positions
 from core.market_hours import is_market_open, next_market_open, quotes_live_at
+from api.auth import current_user
 from api.schemas import ManagementResponse, EvaluatedPosition
 
 router = APIRouter(prefix="/manage", tags=["management"])
 
 
 @router.get("", response_model=ManagementResponse)
-def evaluate_open_positions(ticker: Optional[str] = None):
+def evaluate_open_positions(ticker: Optional[str] = None, user_id: int = Depends(current_user)):
     """
     Evaluate open positions for buyback. Optionally filter by ticker.
 
     Plain `def` so FastAPI runs it in a worker thread: it fetches option
     chains over the network, which would otherwise freeze other requests.
     """
-    open_positions = load_open_positions()
+    open_positions = load_open_positions(user_id)
     if ticker:
         open_positions = [p for p in open_positions if p.get("ticker") == ticker.upper()]
 
     # evaluate_positions returns one result per position, in the same order,
     # so pair them directly; matching by ticker/expiry/strike mixes up
     # positions that share an option.
-    results = evaluate_positions(open_positions, config=effective_config()) if open_positions else []
+    results = evaluate_positions(open_positions, config=effective_config(user_id)) if open_positions else []
 
     evaluated = [
         EvaluatedPosition(

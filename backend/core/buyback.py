@@ -11,7 +11,6 @@ from core.options_data import get_calls
 from core.quotes import select_quote, QuoteMode
 from core.models import OpenCoveredCall
 from core.config import ScannerConfig, DEFAULT_CONFIG
-from core.fees import typical_fee_per_contract
 from core.market_data import get_current_price, get_dividend_amount, get_events
 from core.events import fed_meetings_between
 from core.market_hours import NEW_YORK, last_session, market_today, previous_trading_day
@@ -207,7 +206,7 @@ def evaluate_positions(
     price, which also downloads its Cboe chain, then each call. Calls on the
     same stock share one download through the cache.
     """
-    fee = typical_fee_per_contract()
+    fee = config.commission_per_contract
     tickers = list(dict.fromkeys(pos["ticker"] for pos in positions))
     stock_prices = dict(zip(tickers, parallel_map(get_current_price, tickers), strict=True))
 

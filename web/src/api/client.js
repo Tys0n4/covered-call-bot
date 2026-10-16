@@ -6,8 +6,8 @@ const api = axios.create({
   timeout: 120000,
 })
 
-// Login token (see api/auth.py). Sent with every request; a 401 means it's
-// missing or expired, so drop it and tell the app to show the login screen.
+// Login token for your account (see api/auth.py). Sent with every request; a 401 means
+// it's missing or expired, so drop it and tell the app to show the login screen.
 const TOKEN_KEY = 'auth_token'
 export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) } catch { return null } }
 export const setToken = (t) => { try { localStorage.setItem(TOKEN_KEY, t) } catch { /* storage unavailable */ } }
@@ -32,7 +32,10 @@ api.interceptors.response.use(
 )
 
 export const getAuthStatus   = ()            => api.get('/auth/status')
-export const login           = (password)    => api.post('/auth/login', { password })
+export const login           = (email, password) => api.post('/auth/login', { email, password })
+export const signup          = (email, password, claimPassword = null) =>
+  api.post('/auth/signup', { email, password, claim_password: claimPassword })
+export const getMe           = ()            => api.get('/auth/me')
 
 export const getPortfolio    = ()            => api.get('/portfolio')
 export const getStrategy     = ()            => api.get('/settings')

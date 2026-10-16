@@ -1,20 +1,21 @@
 # api/routes/portfolio.py
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from core.portfolio import load_portfolio, upsert_holding, delete_holding, normalize_ticker
 from core.positions import load_open_positions
 from core.strategy import load_strategy, split_contracts
 from api.schemas import HoldingIn, HoldingUpdate
 from core.ticker_check import has_listed_options
+from api.auth import current_user
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 
-def _portfolio_rows() -> list[dict]:
-    """All holdings with contract stats, as used by the dashboard and ticker selector."""
-    positions = load_portfolio()
-    open_positions = load_open_positions()
-    income_weight = load_strategy()["income_weight"]
+def _portfolio_rows(user_id: int) -> list[dict]:
+    """The account's holdings with contract stats, as used by the dashboard and ticker selector."""
+    positions = load_portfolio(user_id)
+    open_positions = load_open_positions(user_id)
+    income_weight = load_strategy(user_id)["income_weight"]
 
     result = []
     for pos in positions:
@@ -58,9 +59,9 @@ def _portfolio_rows() -> list[dict]:
     return result
 
 
-def _open_contracts(ticker: str) -> int:
+def _open_contracts(user_id: int, ticker: str) -> int:
     return sum(
-        p["contracts"] for p in load_open_positions()
+        p["contracts"] for p in load_open_positions(user_id)
         if p.get("status") == "OPEN" and p.get("ticker") == ticker
     )
 
@@ -72,9 +73,9 @@ def _valid_ticker(ticker: str) -> str:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
-def _check_covers_open_calls(ticker: str, shares: int) -> None:
+def _check_covers_open_calls(user_id: int, ticker: str, shares: int) -> None:
     """Refuse share counts that would leave already-sold calls uncovered."""
-    open_contracts = _open_contracts(ticker)
+    open_contracts = _open_contracts(user_id, ticker)
     if shares // 100 < open_contracts:
         raise HTTPException(
             status_code=409,
@@ -89,19 +90,19 @@ def _check_covers_open_calls(ticker: str, shares: int) -> None:
 # database and network calls would otherwise block every other request.
 
 @router.get("")
-def get_portfolio():
+def get_portfolio(user_id: int = Depends(current_user)):
     """
     Return all tickers in the portfolio with contract stats.
     Used by the frontend ticker selector and dashboard.
     """
-    return _portfolio_rows()
+    return _portfolio_rows(user_id)
 
 
 @router.post("", status_code=201)
-def add_holding(holding: HoldingIn):
+def add_holding(holding: HoldingIn, user_id: int = Depends(current_user)):
     """Add a stock you own. Fails if the ticker is already in the portfolio (use PUT to edit)."""
     ticker = _valid_ticker(holding.ticker)
-    if any(p.ticker == ticker for p in load_portfolio()):
+    if any(p.ticker == ticker for p in load_portfolio(user_id)):
         raise HTTPException(status_code=409, detail=f"{ticker} is already in your portfolio. Edit it instead.")
     # Covered calls need listed options; catch typos like "SOFII" here
     if has_listed_options(ticker) is False:
@@ -109,31 +110,31 @@ def add_holding(holding: HoldingIn):
             status_code=422,
             detail=f"Couldn't find listed options for {ticker}. Check the ticker symbol is right.",
         )
-    upsert_holding(ticker, holding.shares, holding.avg_cost)
-    return _portfolio_rows()
+    upsert_holding(user_id, ticker, holding.shares, holding.avg_cost)
+    return _portfolio_rows(user_id)
 
 
 @router.put("/{ticker}")
-def update_holding(ticker: str, update: HoldingUpdate):
+def update_holding(ticker: str, update: HoldingUpdate, user_id: int = Depends(current_user)):
     """Change the share count or average cost of a stock you own."""
     t = _valid_ticker(ticker)
-    if not any(p.ticker == t for p in load_portfolio()):
+    if not any(p.ticker == t for p in load_portfolio(user_id)):
         raise HTTPException(status_code=404, detail=f"{t} is not in your portfolio.")
-    _check_covers_open_calls(t, update.shares)
-    upsert_holding(t, update.shares, update.avg_cost)
-    return _portfolio_rows()
+    _check_covers_open_calls(user_id, t, update.shares)
+    upsert_holding(user_id, t, update.shares, update.avg_cost)
+    return _portfolio_rows(user_id)
 
 
 @router.delete("/{ticker}")
-def remove_holding(ticker: str):
+def remove_holding(ticker: str, user_id: int = Depends(current_user)):
     """Remove a stock from the portfolio. Blocked while it still has open calls."""
     t = _valid_ticker(ticker)
-    open_contracts = _open_contracts(t)
+    open_contracts = _open_contracts(user_id, t)
     if open_contracts:
         raise HTTPException(
             status_code=409,
             detail=f"{t} still has {open_contracts} open call contract(s). Close them on the Positions page first.",
         )
-    if not delete_holding(t):
+    if not delete_holding(user_id, t):
         raise HTTPException(status_code=404, detail=f"{t} is not in your portfolio.")
-    return _portfolio_rows()
+    return _portfolio_rows(user_id)

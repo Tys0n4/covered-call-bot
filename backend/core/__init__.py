@@ -15,6 +15,7 @@ Scanning a stock
     planner.py       turns a scan into the trade to place, for your split
 
 Your calls and holdings
+    accounts.py      sign-up and log-in, and the data from before accounts
     positions.py     saving, closing, rolling, assigning, editing, undoing and deleting calls
     buyback.py       "Check prices": is it time to buy back? (and early exercise before a dividend)
     rolls.py         later calls to roll an open call into, for a credit
