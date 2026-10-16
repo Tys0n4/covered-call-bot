@@ -53,6 +53,7 @@ const STYLES = [
 const sameRange = (d, st) => Math.abs(d.delta_min - st.delta_min) < 1e-9 && Math.abs(d.delta_max - st.delta_max) < 1e-9
 
 const APPEARANCE = [{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]
+const TAX_ACCOUNTS = [{ value: 'taxable', label: 'Taxable' }, { value: 'retirement', label: 'Retirement (IRA)' }]
 
 function Section({ id, title, right, children, className = 'mt-10' }) {
   return (
@@ -259,6 +260,16 @@ export default function Strategy() {
         ) : (
           <p className="mt-2 text-13 text-muted">Shows your progress on Home and paces the Scanner's picks.</p>
         )}
+        {draft.monthly_goal > 0 && (
+          <div role="note" className="mt-3.5 rounded-card bg-surface px-4 py-3.5">
+            <div className="text-15 font-semibold">A goal paces the picks, never past your rules</div>
+            <p className="mt-1 text-13 text-fg-2">
+              The Scanner picks the call with the least chance of selling your shares that still keeps your pace. When no call within
+              your {dMin}–{dMax}% range gets there, it says you're short and stays within the range. To earn more, you'd choose more risk
+              yourself, under Advanced.
+            </p>
+          </div>
+        )}
       </Section>
 
       <section className="mt-10 border-y border-line">
@@ -266,7 +277,7 @@ export default function Strategy() {
           onClick={() => setAdvanced(!showAdvanced)} disabled={invalid}>
           <span className="flex-1">
             <span className="block text-17 font-semibold">Advanced</span>
-            <span className="block text-13 text-muted">Days to expiry, when to buy back, broker commission, Discord alerts</span>
+            <span className="block text-13 text-muted">Days to expiry, when to buy back, commission, tax account, Discord alerts</span>
           </span>
           <ChevronDown size={18} strokeWidth={2} aria-hidden="true" className={`shrink-0 text-muted transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
         </button>
@@ -329,6 +340,12 @@ export default function Strategy() {
                   }} />
               </div>
               <p className={`mt-2 text-13 ${commErr ? 'text-loss' : 'text-muted'}`}>{commErr ? 'Use $0 to $10.' : 'Most brokers charge nothing for options. At $0 the fee boxes stay hidden.'}</p>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-line py-3">
+                <span className="text-15 text-fg-2">Account for these shares</span>
+                <Segmented label="Account for these shares" options={TAX_ACCOUNTS} value={draft.tax_account || 'taxable'}
+                  onChange={v => set('tax_account', v)} className="w-full sm:w-[300px]" />
+              </div>
+              <p className="mt-2 text-13 text-muted">How the Scanner describes the tax if your shares are sold: a gain in a taxable account, nothing now in an IRA.</p>
             </Section>
 
             <div className="mt-10"><AlertsSection /></div>

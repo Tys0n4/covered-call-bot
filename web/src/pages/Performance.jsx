@@ -105,6 +105,52 @@ function resultText(t) {
   return t.rolled ? 'Rolled' : 'Bought back'
 }
 
+// Did following CovCall help? Finished calls recorded from a scan, split by whether you sold
+// the call it recommended that day (backend core/performance.py: advice)
+function AdviceTile({ label, g }) {
+  return (
+    <div className="rounded-sm bg-inset p-4">
+      <div className="text-12 text-muted">{label}</div>
+      <div className="mt-0.5 text-22 font-semibold tracking-title">{plural(g.calls, 'call')}</div>
+      {g.calls === 0 ? <div className="text-13 text-muted">None finished yet</div> : <>
+        <div className="text-13 text-fg-2">kept <span className="font-semibold" style={{ color: g.kept < 0 ? 'var(--loss)' : 'var(--accent)' }}>{signedMoney(g.kept)}</span></div>
+        <div className="text-13 text-fg-2">shares sold {g.shares_sold === 1 ? 'once' : `${g.shares_sold} times`}</div>
+      </>}
+      {g.unknown > 0 && <div className="text-12 text-muted">{plural(g.unknown, 'buyback')} without a cost left out</div>}
+    </div>
+  )
+}
+
+function AdviceCard({ advice }) {
+  if (!advice) return null
+  const finished = advice.followed.calls + advice.other.calls
+  return (
+    <section aria-labelledby="advice-h" className="mt-10 rounded-card bg-surface p-5 md:p-6">
+      <h2 id="advice-h" className="text-17 font-semibold">Did following CovCall help?</h2>
+      {finished === 0 ? (
+        <p className="mt-1 text-13 text-fg-2">
+          {advice.open > 0
+            ? `Not yet: ${plural(advice.open, 'call')} you recorded from the Scanner ${advice.open === 1 ? 'is' : 'are'} still open. This fills in as they finish.`
+            : 'Calls you record from the Scanner are matched with the call it recommended that day, so this can show whether following it helped. It starts with your next one.'}
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-13 text-fg-2">
+            Each call you record from a scan is matched with the call CovCall recommended that day. Only calls you record count
+            {advice.since ? `, from ${fmtDate(advice.since)} on` : ''}; calls added by hand aren't compared.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
+            <AdviceTile label="You sold its pick" g={advice.followed} />
+            <AdviceTile label="You chose another" g={advice.other} />
+          </div>
+          {advice.open > 0 && <p className="mt-3 text-13 text-muted">{plural(advice.open, 'more call')} still open.</p>}
+          <p className="mt-2 text-12 text-muted">A few calls say little: one jump in a stock can swing either side. Past results don't predict future ones.</p>
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function Performance() {
   const [data, setData]       = useState(null)
   const [failed, setFailed]   = useState(null)
@@ -176,6 +222,8 @@ export default function Performance() {
               </p>
             )}
           </section>
+
+          <AdviceCard advice={data.advice} />
 
           {months.length > 0 && selected && (
             <section aria-labelledby="months-h" className="mt-10">

@@ -3,7 +3,7 @@
 // Picking a stock opens its full scan, where you record what your broker filled.
 import { Check, ChevronRight } from 'lucide-react'
 import { Dot } from './ui'
-import { eventsText } from './OptionsTable'
+import { eventsText } from '../lib/events'
 import { fmtDate, money, plural, strike } from '../lib/format'
 
 const LEVEL = { rich: 'premiums rich', normal: 'premiums normal', thin: 'premiums thin' }

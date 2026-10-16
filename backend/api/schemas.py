@@ -66,6 +66,8 @@ class Candidate(BaseModel):
     upside_to_strike_pct: float
     delta: Optional[float]
     spread_pct: Optional[float]
+    bid: Optional[float] = None          # per share, as quoted (for "check the bid at your broker")
+    ask: Optional[float] = None
     quote_quality: str                   # LIVE | STALE (not a live quote: see price_basis) | OLD (traded before the latest session) | BAD
     price_basis: Optional[str] = None    # for STALE: "closing" (last session's closing bid/ask midpoint) or "last_trade"
     last_trade_date: Optional[str] = None  # New York date of the last trade, when known
@@ -165,6 +167,9 @@ class TradeIn(BaseModel):
     entry_price: float = Field(ge=0, le=1_000_000)        # premium per share you were filled at
     allocation_type: Literal["Income", "Balanced"]
     fees: float = Field(default=0, ge=0, le=100_000)      # commissions/fees for this trade, in dollars
+    # The call the Scanner recommended, when this trade comes from a scan (it may be a different one)
+    recommended_expiry: Optional[str] = Field(default=None, max_length=10)
+    recommended_strike: Optional[float] = Field(default=None, gt=0, le=1_000_000)
     # Ignored if sent: always entry_price x contracts x 100 (kept so older clients still work)
     premium_total: Optional[float] = None
 
@@ -355,6 +360,7 @@ class StrategySettings(BaseModel):
     max_dte: Optional[int] = Field(default=None, ge=1, le=120)
     event_buyback_pct: Optional[float] = Field(default=None, ge=10, le=100)  # 65 = buy back at 65% before events
     commission_per_contract: Optional[float] = Field(default=None, ge=0, le=10)  # dollars per option contract
+    tax_account: Literal["taxable", "retirement"] = "taxable"   # how the Scanner describes the tax if shares are sold
 
     @model_validator(mode="after")
     def _ranges(self):

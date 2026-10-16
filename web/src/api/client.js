@@ -68,6 +68,7 @@ export const getManagement   = (ticker)      => api.get('/manage',        { para
 export const getPerformance  = ()            => api.get('/performance')
 export const getUpcoming     = ()            => api.get('/upcoming')
 export const getMarket       = ()            => api.get('/market')
+export const getHealth       = ()            => api.get('/health', { timeout: 60000 })
 export const getAlerts       = ()            => api.get('/alerts')
 export const saveAlerts      = (data)        => api.put('/alerts', data)
 export const testAlert       = ()            => api.post('/alerts/test')

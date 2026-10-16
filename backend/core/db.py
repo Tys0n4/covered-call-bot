@@ -83,6 +83,8 @@ positions = Table(
     Column("buyback_alerted_at",  String(25), nullable=True),  # when a "buy back now" alert was sent
     Column("early_alerted_at",    String(25), nullable=True),  # when a "may be exercised early" alert was sent
     Column("strike_alerted_at",   String(25), nullable=True),  # when a "stock above your strike" alert was sent
+    Column("recommended_expiry",  String(10), nullable=True),  # the call the Scanner recommended when this one was
+    Column("recommended_strike",  Float,      nullable=True),  #   recorded from a scan (to compare: did following it help?)
 )
 
 
@@ -101,6 +103,7 @@ strategy = Table(
     Column("max_dte",                   Float, nullable=True),
     Column("event_buyback_pct",         Float, nullable=True),
     Column("commission_per_contract",   Float, nullable=True),
+    Column("tax_account",               String(12), nullable=True),   # "taxable" or "retirement" (IRA): how the tax line reads
 )
 
 # Each account's Discord alerts (id = the account's users.id), on the Strategy page
@@ -224,12 +227,12 @@ def _add_missing_columns(engine: Engine) -> None:
         users.c.token_version, users.c.recovery_hash,
     ], "strategy": [
         strategy.c.delta_min, strategy.c.delta_max, strategy.c.min_dte, strategy.c.max_dte,
-        strategy.c.event_buyback_pct, strategy.c.commission_per_contract,
+        strategy.c.event_buyback_pct, strategy.c.commission_per_contract, strategy.c.tax_account,
     ], "positions": [
         positions.c.close_cost, positions.c.open_fees, positions.c.close_fees,
         positions.c.cost_basis, positions.c.rolled_from, positions.c.assignment_reviewed,
         positions.c.buyback_alerted_at, positions.c.early_alerted_at, positions.c.strike_alerted_at,
-        positions.c.user_id,
+        positions.c.user_id, positions.c.recommended_expiry, positions.c.recommended_strike,
     ], "alert_settings": [
         alert_settings.c.last_error, alert_settings.c.notify_early, alert_settings.c.notify_strike,
     ]}

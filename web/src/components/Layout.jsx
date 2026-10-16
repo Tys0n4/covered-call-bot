@@ -2,6 +2,7 @@
 import { Link, NavLink } from 'react-router-dom'
 import { Briefcase, House, ScanLine, SlidersHorizontal, TrendingUp } from 'lucide-react'
 import { Logo, MarketStatus } from './ui'
+import WakingNotice from './WakingNotice'
 
 // The workflow: see where you stand, find a trade, look after it, see how it went
 const NAV = [
@@ -39,6 +40,7 @@ export default function Layout({ children }) {
       </header>
 
       <main className="mx-auto max-w-[1160px] px-4 pt-4 pb-[calc(104px+env(safe-area-inset-bottom))] md:px-6 md:pt-10 md:pb-12">
+        <WakingNotice />
         {children}
         <footer className="mt-16 border-t border-line pt-5 text-12 text-muted">
           Prices from Cboe, delayed about 15 minutes. CovCall tracks your trades; it doesn't place orders with your broker.

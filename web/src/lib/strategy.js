@@ -9,6 +9,7 @@ export const DEFAULT_STRATEGY = {
   min_dte: 14,                     // expiring in 14-30 days
   max_dte: 30,
   commission_per_contract: 0,      // your broker's commission per option contract
+  tax_account: 'taxable',          // or 'retirement' (an IRA): how the Scanner describes the tax if shares are sold
 }
 
 // Options trade in whole cents, so a buy-back target becomes a price: the

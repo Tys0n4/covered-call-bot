@@ -18,6 +18,12 @@ Compared with just holding the shares (no calls sold):
   upside given up     = (stock's close on the assignment day - strike) x shares
 A bought-back call's buyback cost already reflects any rise in the stock, and
 an expired call capped nothing, so only assignments give up upside.
+
+Did following CovCall help? Calls recorded from a scan keep the call the
+Scanner recommended (recommended_expiry/strike). Finished ones are split into
+"sold its pick" and "chose another", each with what was kept and how often the
+shares were sold. Calls added by hand or rolled into have no recommendation and
+aren't counted; neither are calls you never recorded.
 """
 from __future__ import annotations
 
@@ -86,6 +92,7 @@ def compute_performance(positions: list[dict], avg_costs: dict[str, float], toda
     """
     assignment_closes = assignment_closes or {}
     rolled_ids = {p["rolled_from"] for p in positions if p.get("rolled_from")}
+    by_id = {p["id"]: p for p in positions}
     trades = []
     for p in positions:
         if p["status"] in FINISHED and p.get("closed_at"):
@@ -149,4 +156,37 @@ def compute_performance(positions: list[dict], avg_costs: dict[str, float], toda
         },
         "months": month_rows,
         "trades": trades,
+        "advice": _advice(trades, by_id, open_calls),
+    }
+
+
+def followed_pick(p: dict) -> bool | None:
+    """True: the call sold was the Scanner's pick. None: not recorded from a scan."""
+    if p.get("recommended_strike") is None or not p.get("recommended_expiry"):
+        return None
+    return p["expiry"] == p["recommended_expiry"] and abs(float(p["strike"]) - float(p["recommended_strike"])) < 0.005
+
+
+def _advice(trades: list[dict], by_id: dict[int, dict], open_calls: list[dict]) -> dict:
+    groups = {True: {"calls": 0, "kept": 0.0, "unknown": 0, "shares_sold": 0},
+              False: {"calls": 0, "kept": 0.0, "unknown": 0, "shares_sold": 0}}
+    for t in trades:
+        followed = followed_pick(by_id[t["id"]])
+        if followed is None:
+            continue
+        g = groups[followed]
+        g["calls"] += 1
+        g["shares_sold"] += t["status"] == "ASSIGNED"
+        if t["option_net"] is None:
+            g["unknown"] += 1
+        else:
+            g["kept"] += t["option_net"]
+    for g in groups.values():
+        g["kept"] = round(g["kept"], 2)
+    recorded = [p for p in by_id.values() if followed_pick(p) is not None]
+    return {
+        "followed": groups[True],
+        "other": groups[False],
+        "open": sum(1 for p in open_calls if followed_pick(p) is not None),
+        "since": min((p["opened_at"] for p in recorded), default=None),
     }

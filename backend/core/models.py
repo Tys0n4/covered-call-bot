@@ -30,6 +30,8 @@ class PlannedCall:
     status: str = "OPEN"
     allocation_type: str = ""   # "Income" | "Balanced"
     fees: float = 0.0           # commissions/fees paid when selling ($ total)
+    recommended_expiry: str | None = None    # the Scanner's pick when this was recorded from a scan
+    recommended_strike: float | None = None
 
 
 @dataclass
