@@ -17,9 +17,9 @@ from core.positions import expired_unreviewed
 REVIEW_DAYS = 45   # only look at calls that expired within this many days
 
 
-def calls_to_review() -> list[dict]:
+def calls_to_review(user_id: int) -> list[dict]:
     since = (date.fromisoformat(market_today()) - timedelta(days=REVIEW_DAYS)).isoformat()
-    calls = expired_unreviewed(since)
+    calls = expired_unreviewed(user_id, since)
     closes = parallel_map(lambda p: get_close_on(p["ticker"], p["expiry"]), calls)
     return [
         {**p, "close_price": round(close, 2)}

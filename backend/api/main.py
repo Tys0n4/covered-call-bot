@@ -53,8 +53,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Everything except /auth, / and /health needs a login when APP_PASSWORD is set
-protected = [Depends(auth.require_auth)]
+# Everything except /auth, /, /health, /market and the scheduler needs a logged-in account
+protected = [Depends(auth.current_user)]
 app.include_router(auth.router)
 app.include_router(portfolio.router, dependencies=protected)
 app.include_router(scan.router,      dependencies=protected)
@@ -65,7 +65,6 @@ app.include_router(performance.router, dependencies=protected)
 app.include_router(alerts.router,   dependencies=protected)
 app.include_router(upcoming.router, dependencies=protected)
 app.include_router(alerts.scheduler)          # its own key instead of the login (ALERTS_KEY)
-auth.warn_if_open()
 
 @app.get("/")
 async def root():

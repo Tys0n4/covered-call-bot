@@ -24,7 +24,6 @@ import pandas as pd
 from core.buyback import get_current_option_quote
 from core.config import DEFAULT_CONFIG, ScannerConfig
 from core.events import fed_meetings_between
-from core.fees import typical_fee_per_contract
 from core.filters import filter_covered_calls
 from core.greeks import add_estimated_delta
 from core.market_data import get_dividend_yield, get_events, get_price_quote
@@ -77,7 +76,7 @@ def find_rolls(position: dict, config: ScannerConfig = DEFAULT_CONFIG, today: st
 
     calls = add_estimated_delta(calls, stock_price, risk_free_rate=config.risk_free_rate,
                                 dividend_yield=get_dividend_yield(ticker, stock_price))
-    fee = typical_fee_per_contract()
+    fee = config.commission_per_contract
     calls["price"] = calls["premium_price"].astype(float).round(2)
     calls["net_per_share"] = (calls["price"] - buyback).round(2)
     calls["net_total"] = calls["net_per_share"] * 100 * contracts - 2 * fee * contracts

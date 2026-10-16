@@ -1,11 +1,16 @@
 # db.py
 """
-Database connection for holdings and covered call positions.
+Database connection for accounts, holdings and covered call positions.
 
 - Live (Railway): set the DATABASE_URL environment variable to your Postgres
   connection string (e.g. from Neon's free plan).
 - Local: leave DATABASE_URL unset and a SQLite file is used instead
   (backend/covcall.db, created empty on first run).
+
+Every holding, call, strategy and alert setting belongs to one account
+(users.id). A database from before accounts existed is upgraded on start: its
+data is kept as account 0 ("unclaimed") until someone signs up with the old
+app password (api/auth.py), and then it's theirs.
 """
 from __future__ import annotations
 
@@ -23,8 +28,20 @@ SQLITE_PATH = Path(__file__).resolve().parent.parent / "covcall.db"   # backend/
 
 metadata = MetaData()
 
+# Accounts: sign up with an email and password (api/auth.py)
+users = Table(
+    "users", metadata,
+    Column("id",            Integer, primary_key=True, autoincrement=True),
+    Column("email",         String(254), nullable=False, unique=True),   # stored lower case
+    Column("password_hash", String(200), nullable=False),
+    Column("created_at",    String(25), nullable=False),
+)
+
+UNCLAIMED = 0   # owner of data from before accounts existed, until it's claimed
+
 holdings = Table(
     "holdings", metadata,
+    Column("user_id",  Integer, primary_key=True, autoincrement=False),
     Column("ticker",   String(12), primary_key=True),
     Column("shares",   Integer, nullable=False),
     Column("avg_cost", Float,   nullable=False),
@@ -33,6 +50,7 @@ holdings = Table(
 positions = Table(
     "positions", metadata,
     Column("id",              Integer, primary_key=True, autoincrement=True),
+    Column("user_id",         Integer, nullable=True, index=True),   # added later; every row has one after the upgrade
     Column("ticker",          String(12), nullable=False, index=True),
     Column("expiry",          String(10), nullable=False),
     Column("strike",          Float,   nullable=False),
@@ -57,7 +75,7 @@ positions = Table(
 )
 
 
-# Your strategy settings: a single row (id = 1), edited on the Strategy page
+# Each account's strategy (id = the account's users.id), edited on the Strategy page
 strategy = Table(
     "strategy", metadata,
     Column("id",                        Integer, primary_key=True),
@@ -74,7 +92,7 @@ strategy = Table(
     Column("commission_per_contract",   Float, nullable=True),
 )
 
-# Buy-back alerts (Strategy page): a single row (id = 1)
+# Each account's Discord alerts (id = the account's users.id), on the Strategy page
 alert_settings = Table(
     "alert_settings", metadata,
     Column("id",              Integer, primary_key=True),
@@ -103,6 +121,13 @@ daily_closes = Table(
     Column("ticker", String(12), primary_key=True),
     Column("day",    String(10), primary_key=True),
     Column("close",  Float, nullable=False),
+)
+
+# Values the app generates once and keeps, e.g. the key that signs login tokens
+app_settings = Table(
+    "app_settings", metadata,
+    Column("key",   String(40), primary_key=True),
+    Column("value", String(200), nullable=False),
 )
 
 # The schema_fingerprint() the database was last set up for (a single row, id = 1)
@@ -149,8 +174,10 @@ def get_engine() -> Engine:
                 # trip to the database, on every server start (and the server sleeps when idle).
                 # So it only runs when the tables defined here changed since the last time.
                 if not _schema_is_current(engine):
+                    _upgrade_holdings_for_accounts(engine)
                     metadata.create_all(engine)
                     _add_missing_columns(engine)
+                    _keep_unowned_data_unclaimed(engine)
                     _mark_schema_current(engine)
                 _engine = engine
     return _engine
@@ -189,6 +216,7 @@ def _add_missing_columns(engine: Engine) -> None:
         positions.c.close_cost, positions.c.open_fees, positions.c.close_fees,
         positions.c.cost_basis, positions.c.rolled_from, positions.c.assignment_reviewed,
         positions.c.buyback_alerted_at, positions.c.early_alerted_at, positions.c.strike_alerted_at,
+        positions.c.user_id,
     ], "alert_settings": [
         alert_settings.c.last_error, alert_settings.c.notify_early, alert_settings.c.notify_strike,
     ]}
@@ -200,3 +228,37 @@ def _add_missing_columns(engine: Engine) -> None:
                 col_type = col.type.compile(dialect=engine.dialect)
                 with engine.begin() as conn:
                     conn.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}'))
+
+
+def _upgrade_holdings_for_accounts(engine: Engine) -> None:
+    """
+    Holdings from before accounts were keyed by ticker alone, so two people
+    couldn't both hold AAPL. Rebuild the table keyed by account and ticker,
+    keeping its rows as unclaimed (account 0). Read, drop, create and refill in
+    one transaction (renaming would clash with Postgres's primary key name).
+    """
+    insp = inspect(engine)
+    if "holdings" not in insp.get_table_names():
+        return
+    if "user_id" in {c["name"] for c in insp.get_columns("holdings")}:
+        return
+    with engine.begin() as conn:
+        rows = [dict(r) for r in conn.execute(text("SELECT ticker, shares, avg_cost FROM holdings")).mappings()]
+        conn.execute(text("DROP TABLE holdings"))
+        holdings.create(conn)
+        if rows:
+            conn.execute(insert(holdings), [{"user_id": UNCLAIMED, **r} for r in rows])
+
+
+def _keep_unowned_data_unclaimed(engine: Engine) -> None:
+    """
+    Calls, the strategy and alert settings from before accounts (no account,
+    or the old single row id = 1 while there are no accounts yet) become
+    account 0's, so the first person to sign up doesn't get them by accident.
+    """
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE positions SET user_id = :u WHERE user_id IS NULL"), {"u": UNCLAIMED})
+        if conn.execute(select(users.c.id).limit(1)).first() is None:
+            for table in (strategy, alert_settings):
+                if conn.execute(select(table.c.id).where(table.c.id == UNCLAIMED)).first() is None:
+                    conn.execute(text(f"UPDATE {table.name} SET id = :u WHERE id = 1"), {"u": UNCLAIMED})

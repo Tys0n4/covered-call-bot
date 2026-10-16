@@ -1,10 +1,10 @@
-# Buy-back alerts, run by hand: wakes the API and asks it to check open calls.
-# The API posts to Discord when a call reaches your buy-back target (set up on
-# the Strategy page). The regular checks come from cron-job.org calling
-# POST /alerts/cron every 30 minutes (see the README): GitHub's free schedule
-# ran this only once in a whole trading day.
+# Buy-back alerts, run by hand: wakes the API and asks it to check every account's
+# open calls. The API posts to each account's Discord channel (set up on the
+# Strategy page). The regular checks come from cron-job.org calling
+# POST /alerts/cron every 30 minutes (see docs/how-it-works.md): GitHub's free
+# schedule ran this only once in a whole trading day.
 #
-# Needs: repository secret APP_PASSWORD (same as on Railway), if the API has one.
+# Needs: repository secret ALERTS_KEY (same as on Railway).
 # Optional: repository variable API_URL, if the backend isn't at the default URL.
 name: Buy-back alerts
 
@@ -22,21 +22,14 @@ jobs:
     timeout-minutes: 5
     env:
       API_URL: ${{ vars.API_URL || 'https://covered-call-bot-production.up.railway.app' }}
-      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      ALERTS_KEY: ${{ secrets.ALERTS_KEY }}
     steps:
       - name: Check and alert
         run: |
           set -euo pipefail
-          # The backend sleeps when idle; the first request wakes it, so retry for up to ~a minute
-          auth=()
-          if [ -n "$APP_PASSWORD" ]; then
-            token=$(curl -fsS --retry 6 --retry-all-errors --retry-delay 10 --max-time 60 \
-              -H 'Content-Type: application/json' \
-              -d "$(jq -n --arg p "$APP_PASSWORD" '{password: $p}')" \
-              "$API_URL/auth/login" | jq -r .token)
-            auth=(-H "Authorization: Bearer $token")
-          fi
-          curl -fsS --retry 6 --retry-all-errors --retry-delay 10 --max-time 120 \
-            -X POST "${auth[@]}" "$API_URL/alerts/check" | tee result.json
+          # The backend sleeps when idle; the first request wakes it, so retry for up to ~a minute.
+          # It answers right away and checks in the background; Railway's logs show the result.
+          curl -fsS --retry 6 --retry-all-errors --retry-delay 10 --max-time 60 \
+            -X POST -H "X-Alerts-Key: $ALERTS_KEY" "$API_URL/alerts/cron" | tee result.json
           echo
-          jq -r '"Status: \(.status) · calls checked: \(.checked // "–") · alerts sent: \(.sent)"' result.json >> "$GITHUB_STEP_SUMMARY"
+          echo "Check started for every account with alerts on. See Railway's logs for what was sent." >> "$GITHUB_STEP_SUMMARY"

@@ -139,16 +139,47 @@ def test_scheduler_endpoint_needs_the_right_key(client, monkeypatch):
     assert client.post("/alerts/cron", headers={"X-Alerts-Key": "wrong"}).status_code == 401
 
 
-def test_scheduler_endpoint_runs_the_check_without_logging_in(client, nvda, discord, monkeypatch):
+def test_scheduler_endpoint_runs_the_check_without_logging_in(client, anonymous, nvda, discord, monkeypatch):
     _turn_on(client)
     _call(client, entry_price=25.0)                               # past the 85% target
     monkeypatch.setenv("ALERTS_KEY", "s3cret-key-for-tests")
-    monkeypatch.setenv("APP_PASSWORD", "pw")                      # the rest of the API is locked
-    assert client.post("/alerts/check").status_code == 401
-    r = client.post("/alerts/cron", headers={"X-Alerts-Key": "s3cret-key-for-tests"})
+    assert anonymous.post("/alerts/check").status_code == 401     # the rest of the API needs a login
+    r = anonymous.post("/alerts/cron", headers={"X-Alerts-Key": "s3cret-key-for-tests"})
     assert r.status_code == 202 and r.json() == {"status": "started"}
     assert len(discord.sent) == 1                                 # the check ran (in the background)
     assert discord.sent[0][1]["embeds"][0]["title"] == "Buy back now: NVDA $125.00 call"
+
+
+def test_the_scheduled_check_covers_every_account(client, nvda, discord):
+    from conftest import signed_up
+    other = signed_up("other@example.com")
+    other.post("/portfolio", json={"ticker": "NVDA", "shares": 100, "avg_cost": 90})
+    for c, hook in ((client, HOOK), (other, "https://discord.com/api/webhooks/987654321/other_hook")):
+        assert c.put("/alerts", json={"discord_webhook": hook, "enabled": True}).status_code == 200
+        _call(c, entry_price=25.0)
+    result = alerts.check_all()
+    assert (result["accounts"], result["sent"], result["failed"]) == (2, 2, 0)
+    assert {url for url, _ in discord.sent} == {HOOK, "https://discord.com/api/webhooks/987654321/other_hook"}
+
+
+def test_one_account_failing_doesnt_stop_the_others(client, nvda, discord, monkeypatch):
+    from conftest import signed_up
+    other = signed_up("other@example.com")
+    other.post("/portfolio", json={"ticker": "NVDA", "shares": 100, "avg_cost": 90})
+    for c in (client, other):
+        c.put("/alerts", json={"discord_webhook": HOOK, "enabled": True})
+        _call(c, entry_price=25.0)
+    real = alerts.send_discord
+    calls = []
+
+    def first_fails(url, payload):
+        calls.append(1)
+        if len(calls) == 1:
+            raise alerts.AlertError("Discord refused the message (HTTP 500).")
+        return real(url, payload)
+    monkeypatch.setattr(alerts, "send_discord", first_fails)
+    result = alerts.check_all()
+    assert (result["sent"], result["failed"]) == (1, 1)
 
 
 # --- Early exercise and "above your strike" -----------------------------------------

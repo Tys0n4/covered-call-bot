@@ -92,8 +92,8 @@ Server settings (set these on Railway, or export them locally):
 
 | Variable          | What it does |
 |-------------------|--------------|
-| `APP_PASSWORD`    | Password for the app's login screen. **Set this on any server others can reach**; without it the API is open to anyone. Leave unset for local development. |
-| `AUTH_SECRET`     | Optional. Key used to sign login tokens. Defaults to one derived from `APP_PASSWORD`, so changing the password logs everyone out. |
+| `APP_PASSWORD`    | Only for upgrading a server from before accounts: the old shared password. Whoever signs up and enters it as the old app password takes over the portfolio that was already there. Without it, the first account does. |
+| `AUTH_SECRET`     | Optional. Key used to sign login tokens. By default one is generated once and kept in the database. |
 | `AUTH_TOKEN_DAYS` | Optional. How long a login lasts (default 30). |
 | `DATABASE_URL`    | Postgres connection string. Leave unset to use a local SQLite file. |
 | `APP_TIMEZONE`    | Time zone for trade dates (default `America/Edmonton`). |
@@ -114,7 +114,7 @@ The tests use a fake market and a temporary SQLite database, so they need no API
 
 ## Reference
 
-**API** — interactive docs at [/docs](https://covered-call-bot-production.up.railway.app/docs). With `APP_PASSWORD` set, every endpoint except `/`, `/health`, `/market` and `/auth/*` needs an `Authorization: Bearer <token>` header from `/auth/login`. `/alerts/cron` uses the `X-Alerts-Key` header instead.
+**API** — interactive docs at [/docs](https://covered-call-bot-production.up.railway.app/docs). Everyone signs up with an email and password; every endpoint except `/`, `/health`, `/market` and `/auth/status`, `/auth/signup`, `/auth/login` needs an `Authorization: Bearer <token>` header from `/auth/signup` or `/auth/login`, and only sees that account's portfolio. `/alerts/cron` uses the `X-Alerts-Key` header instead.
 
 <details>
 <summary><strong>Project structure</strong></summary>

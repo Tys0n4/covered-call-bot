@@ -4,9 +4,10 @@ import hmac
 import logging
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
-from core.alerts import AlertError, check_and_alert, check_overdue, load_alert_settings, save_alert_settings, send_test
+from core.alerts import AlertError, check_all, check_and_alert, check_overdue, load_alert_settings, save_alert_settings, send_test
+from api.auth import current_user
 from api.schemas import AlertSettingsIn, AlertSettingsOut, AlertCheckResult
 
 log = logging.getLogger(__name__)
@@ -34,46 +35,46 @@ def _out(s: dict) -> AlertSettingsOut:
 
 
 @router.get("", response_model=AlertSettingsOut)
-def get_alerts():
-    return _out(load_alert_settings())
+def get_alerts(user_id: int = Depends(current_user)):
+    return _out(load_alert_settings(user_id))
 
 
 @router.put("", response_model=AlertSettingsOut)
-def update_alerts(body: AlertSettingsIn):
+def update_alerts(body: AlertSettingsIn, user_id: int = Depends(current_user)):
     """Save the webhook and/or turn alerts on or off. Only the fields you send change."""
     try:
-        return _out(save_alert_settings(discord_webhook=body.discord_webhook, enabled=body.enabled, clear_webhook=body.clear_webhook,
+        return _out(save_alert_settings(user_id, discord_webhook=body.discord_webhook, enabled=body.enabled, clear_webhook=body.clear_webhook,
                                         notify_early=body.notify_early, notify_strike=body.notify_strike))
     except AlertError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 @router.post("/test")
-def test_alert():
+def test_alert(user_id: int = Depends(current_user)):
     """Send a test message to the saved webhook."""
     try:
-        send_test()
+        send_test(user_id)
     except AlertError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
     return {"sent": True}
 
 
 @router.post("/check", response_model=AlertCheckResult)
-def run_check(force: bool = False):
+def run_check(force: bool = False, user_id: int = Depends(current_user)):
     """
     Check open calls and alert any that just reached the buy-back target.
     Plain `def`: it fetches option prices over the network. Called by the
     scheduled job; force=true also checks outside market hours.
     """
     try:
-        return check_and_alert(force=force)
+        return check_and_alert(user_id, force=force)
     except AlertError as e:
         raise HTTPException(status_code=502, detail=str(e)) from None
 
 
 def _scheduled_check() -> None:
     try:
-        log.info("Scheduled alert check: %s", check_and_alert())
+        log.info("Scheduled alert check: %s", check_all())
     except Exception as e:                      # a bad webhook, Discord down, prices unavailable
         log.warning("Scheduled alert check failed: %s", e)
 
