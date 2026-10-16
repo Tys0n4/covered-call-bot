@@ -8,7 +8,7 @@ import pytest
 from api import auth, limits
 from api import main as api_main
 from api.routes import portfolio as portfolio_routes
-from tests.conftest import signed_up
+from conftest import signed_up
 
 
 def test_wrong_passwords_answer_without_sleeping(anonymous, monkeypatch):
