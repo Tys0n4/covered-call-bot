@@ -4,7 +4,7 @@ import re
 
 from api import auth
 from core import db
-from tests.conftest import signed_up
+from conftest import signed_up
 
 PASSWORD = "correct horse battery"
 
