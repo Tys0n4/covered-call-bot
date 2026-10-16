@@ -107,8 +107,6 @@ class AllocationItem(BaseModel):
     entry_price: float
     premium_total: float
     quote_quality: str
-    buyback_total: float
-    per_contract_budget: float
     below_cost_basis: bool = False
 
 
@@ -120,11 +118,10 @@ class ScanResponse(BaseModel):
     candidates: list[Candidate]
     income_pick: Optional[Candidate]
     balanced_pick: Optional[Candidate]
-    allocation_summary: dict
-    planned_positions: list[AllocationItem]
-    gross_premium: float
-    buyback_budget: float
-    net_premium: float                       # premium − buyback reserve − estimated fees
+    allocation_summary: dict                 # total_contracts, available (free to sell now)
+    planned_positions: list[AllocationItem]  # the recommended trade: every free contract on one call
+    alternative: Optional[AllocationItem] = None   # the same contracts on a call with more room to rise, when different
+    gross_premium: float                     # what the recommended trade collects
     estimated_fees: float = 0.0              # commission for the planned contracts
     fee_per_contract: float = 0.0            # your usual commission per contract
     premium_check: Optional[PremiumCheck] = None
@@ -138,6 +135,7 @@ class ScanResponse(BaseModel):
     fed_dates: list[str] = []                # Fed decisions within the expiry window
     industry_earnings: list[RelatedEarnings] = []
     warnings: list[str]
+    event_notes: list[str] = []              # earnings, a Fed decision, ... before the recommended call expires
     quotes_live: bool = True                 # False = priced at last trades (market closed)
     earnings_date: Optional[str] = None      # next earnings date, if known
     ex_dividend_date: Optional[str] = None   # next ex-dividend date, if known
@@ -347,9 +345,9 @@ class HoldingUpdate(BaseModel):
 
 class StrategySettings(BaseModel):
     """Your strategy, as shown and edited on the Strategy page. Fields left out keep their saved value."""
-    income_weight: float = Field(ge=0, le=1)                       # 0.70 = 70% income
+    income_weight: float = Field(default=0.7, ge=0, le=1)          # no longer used (one call per stock); kept for older clients
     profit_capture_target_pct: float = Field(ge=1, le=100)         # 85 = buy back at 85% kept
-    buyback_budget_pct: float = Field(ge=0, le=1)                  # 0.15 = 15% set aside
+    buyback_budget_pct: float = Field(default=0.15, ge=0, le=1)    # no longer used; kept for older clients
     monthly_goal: float = Field(default=0, ge=0, le=10_000_000)    # dollars per month, 0 = off
     delta_min: Optional[float] = Field(default=None, ge=0.05, le=0.6)   # 0.20 = 20% chance of being called
     delta_max: Optional[float] = Field(default=None, ge=0.05, le=0.6)

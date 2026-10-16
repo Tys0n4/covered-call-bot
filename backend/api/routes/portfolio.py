@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.portfolio import load_portfolio, upsert_holding, delete_holding, normalize_ticker
 from core.positions import load_open_positions
-from core.strategy import load_strategy, split_contracts
 from api.schemas import HoldingIn, HoldingUpdate
 from core.ticker_check import has_listed_options
 from api.auth import current_user
@@ -15,26 +14,14 @@ def _portfolio_rows(user_id: int) -> list[dict]:
     """The account's holdings with contract stats, as used by the dashboard and ticker selector."""
     positions = load_portfolio(user_id)
     open_positions = load_open_positions(user_id)
-    income_weight = load_strategy(user_id)["income_weight"]
 
     result = []
     for pos in positions:
         total_contracts = pos.shares // 100
-        target_income, target_balanced = split_contracts(total_contracts, income_weight)
-
-        open_income = sum(
+        open_total = sum(
             p["contracts"] for p in open_positions
-            if p.get("status") == "OPEN"
-            and p.get("ticker") == pos.ticker
-            and p.get("allocation_type") == "Income"
+            if p.get("status") == "OPEN" and p.get("ticker") == pos.ticker
         )
-        open_balanced = sum(
-            p["contracts"] for p in open_positions
-            if p.get("status") == "OPEN"
-            and p.get("ticker") == pos.ticker
-            and p.get("allocation_type") == "Balanced"
-        )
-        open_total    = open_income + open_balanced
         available     = max(total_contracts - open_total, 0)
         gross_premium = sum(
             p["premium_total"] for p in open_positions
@@ -47,10 +34,6 @@ def _portfolio_rows(user_id: int) -> list[dict]:
             "shares":          pos.shares,
             "avg_cost":        pos.avg_cost,
             "total_contracts": total_contracts,
-            "target_income":   target_income,
-            "target_balanced": target_balanced,
-            "open_income":     open_income,
-            "open_balanced":   open_balanced,
             "open_total":      open_total,
             "available":       available,
             "gross_premium":   round(gross_premium, 2),

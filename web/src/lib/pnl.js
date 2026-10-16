@@ -23,15 +23,6 @@ export function resultLabel(p, rolledIds) {
 // reads as having reached a 65% target
 export const keptPct = v => Math.floor((Number(v) || 0) + 1e-9)
 
-// Split a total fee across trades by contract count, to the cent
-export function splitFees(total, contracts) {
-  const cents = Math.round(n(total) * 100)
-  const sum = contracts.reduce((s, c) => s + c, 0) || 1
-  const parts = contracts.map(c => Math.floor((cents * c) / sum))
-  parts[parts.length - 1] += cents - parts.reduce((s, c) => s + c, 0)
-  return parts.map(c => c / 100)
-}
-
 // "12.5" style money input: digits and one dot, two decimals at most
 export function cleanMoney(raw) {
   let t = raw.replace(/[^0-9.]/g, '')

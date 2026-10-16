@@ -11,7 +11,7 @@ export default function StockChips({ tickers, value, onChange, all = false, allL
       )}
       {tickers.map(t => (
         <button key={t.ticker} type="button" className="chip min-h-11 shrink-0 md:min-h-10" aria-pressed={value === t.ticker} onClick={() => onChange(t.ticker)}>
-          {t.ticker}{free && t.available > 0 ? ` · ${t.available} free` : ''}
+          {t.ticker}{free && t.available > 0 ? ` · ${t.available} to sell` : ''}
         </button>
       ))}
     </div>

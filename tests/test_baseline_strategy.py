@@ -82,7 +82,8 @@ def test_income_pick_takes_the_lowest_delta_that_meets_the_goal(client, nvda):
     base = _scan(client)
     bal = base["balanced_pick"]
     others = sorted((c for c in base["candidates"] if c["strike"] != bal["strike"]), key=lambda c: c["delta"])
-    blend = {c["strike"]: 0.7 * c["monthly_per_contract"] + 0.3 * bal["monthly_per_contract"] for c in others}
+    # Every free contract goes on the recommended call, so it has to meet the pace on its own
+    blend = {c["strike"]: c["monthly_per_contract"] for c in others}
     safest, riskiest = others[0], others[-1]
     assert blend[safest["strike"]] < blend[riskiest["strike"]]
 
@@ -112,9 +113,10 @@ def test_fed_meeting_in_the_window_keeps_picks_at_the_safe_end(client, nvda, mon
     assert scan["fed_dates"] == [_days(10)]
     assert all(c["spans_fed"] for c in scan["candidates"])
     assert scan["income_pick"]["delta"] <= 0.23 and scan["balanced_pick"]["delta"] <= 0.23
-    # The first sentence (all the app shows until you tap More) says why the picks still cross it
-    fed = next(w for w in scan["warnings"] if "rate decision" in w)
-    assert "before both picks expire, so they're kept near the safe end of your range." in fed.split(". ")[0] + "."
+    # The first sentence (all the app shows until you tap More) says why the call still crosses it
+    fed = next(w for w in scan["event_notes"] if "rate decision" in w)
+    assert "before this call expires, so it's kept near the safe end of your range." in fed.split(". ")[0] + "."
+    assert not any("rate decision" in w for w in scan["warnings"])       # shown with the call, not as a warning
 
 
 def test_industry_leaders_and_your_stocks_earnings_are_flagged(client, nvda):
@@ -126,7 +128,7 @@ def test_industry_leaders_and_your_stocks_earnings_are_flagged(client, nvda):
     scan = _scan(client)
     assert [(e["ticker"], e["why"]) for e in scan["industry_earnings"]] == [("AAPL", "yours"), ("AMD", "leader")]
     assert all(c["spans_industry"] for c in scan["candidates"])
-    assert any("Others in NVDA's industry report earnings" in w and "AAPL, AMD" in w for w in scan["warnings"])
+    assert any("Others in NVDA's industry report earnings" in w and "AAPL, AMD" in w for w in scan["event_notes"])
     assert scan["income_pick"]["delta"] <= 0.23
 
 

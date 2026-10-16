@@ -113,7 +113,7 @@ function PhoneList({ candidates, ticker, pick }) {
   )
 }
 
-// picked: Map of "expiry|strike" -> "Income" / "Balanced" for the recommended calls
+// picked: Map of "expiry|strike" -> a label ("Picked") for the recommended call
 export default function OptionsTable({ candidates, ticker, picked = new Map() }) {
   const [sort, setSort] = useState({ key: 'expiry', dir: 'asc' })
   const onSort = col => setSort(s => (s.key === col.key

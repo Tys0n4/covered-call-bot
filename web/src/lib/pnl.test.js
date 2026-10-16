@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  againstYou, cleanMoney, contractsTotal, keptPct, moneyValue, optionNet, resultLabel, splitFees, totalFees, usualFees,
+  againstYou, cleanMoney, contractsTotal, keptPct, moneyValue, optionNet, resultLabel, totalFees, usualFees,
 } from './pnl'
 
 describe('optionNet', () => {
@@ -29,14 +29,6 @@ it('resultLabel tells rolls from buybacks', () => {
 it('keptPct rounds down, so 64.6% never reads as a 65% target', () => {
   expect(keptPct(64.6)).toBe(64)
   expect(keptPct(65)).toBe(65)
-})
-
-describe('splitFees', () => {
-  it('splits by contracts and keeps every cent', () => {
-    const parts = splitFees(1.95, [2, 1])
-    expect(parts).toEqual([1.3, 0.65])
-    expect(splitFees(1, [1, 1, 1]).reduce((s, v) => s + v, 0)).toBeCloseTo(1, 10)
-  })
 })
 
 describe('money boxes', () => {

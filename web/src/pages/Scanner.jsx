@@ -1,7 +1,7 @@
 // src/pages/Scanner.jsx — find a covered call to sell on one of your stocks
 import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Check, RefreshCw, RotateCcw, ScanLine } from 'lucide-react'
+import { Check, RefreshCw, RotateCcw, ScanLine } from 'lucide-react'
 import { runScan, runScanAll, savePositions, apiError } from '../api/client'
 import { useStrategy, chargesCommission } from '../lib/useStrategy'
 import { useTicker } from '../context/TickerContext'
@@ -9,14 +9,14 @@ import { usePageTitle } from '../components/PageHeader'
 import InfoTip from '../components/InfoTip'
 import ServerDown from '../components/ServerDown'
 import EmptyState, { AddStockLink } from '../components/EmptyState'
-import OptionsTable, { eventsText } from '../components/OptionsTable'
-import PremiumCheck, { GoalCheck } from '../components/PremiumCheck'
+import OptionsTable from '../components/OptionsTable'
 import ScanAll from '../components/ScanAll'
+import RecommendedTrade from '../components/RecommendedTrade'
 import StockChips from '../components/StockChips'
-import { Dot, Field, MoneyField, Spinner } from '../components/ui'
+import { Dot, Field, Spinner } from '../components/ui'
 import { TERMS } from '../lib/terms'
-import { fmtDate, money, plural, strike } from '../lib/format'
-import { moneyValue, splitFees } from '../lib/pnl'
+import { fmtDate, money, plural } from '../lib/format'
+import { moneyValue } from '../lib/pnl'
 
 // The expiry window and delta range come from your strategy (Strategy page)
 const DEFAULT_CONFIG = {
@@ -106,7 +106,7 @@ function HeadsUp({ text }) {
 }
 
 // The last scan of each stock stays on screen when you come back to it
-const lastScans = new Map()   // ticker -> { result, fills, fees, saved, at }
+const lastScans = new Map()   // ticker -> { result, fill, fees, saved, at, useAlt }
 // ...and so does the last scan of every stock ("All stocks"), and whether that was showing
 const lastAll = { on: false, scan: null }   // scan: { data, at }
 const clock = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -121,11 +121,13 @@ export default function Scanner() {
   const [all, setAllState] = useState(() => params.get('all') === '1' || lastAll.on)
   const setAll = on => { lastAll.on = on; setAllState(on) }
   const [allScan, setAllScan] = useState(() => lastAll.scan)
-  const [autoScan] = useState(() => params.get('go') === '1' && !lastAll.scan)
+  const [autoScan] = useState(() => params.get('go') === '1' && all && !lastAll.scan)
+  // Home's "Find a call" (/scanner?go=1): scan the selected stock right away
+  const [autoOne] = useState(() => params.get('go') === '1' && !all && !!selected)
   const [allLoading, setAllLoading] = useState(autoScan)
   const [form, setForm]       = useState(() => toForm(loadConfig()))   // boxes, exactly as typed
-  const [scan, setScan]       = useState(() => lastScans.get(selected) || null)
-  const [loading, setLoading] = useState(false)
+  const [scan, setScan]       = useState(() => (autoOne ? null : lastScans.get(selected) || null))
+  const [loading, setLoading] = useState(autoOne)
   const [error, setError]     = useState(null)
   const [saving, setSaving]   = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -153,34 +155,38 @@ export default function Scanner() {
   })
 
   const result = scan?.result
-  const fills = scan?.fills || []
-  const feesText = scan?.fees ?? ''
   const saved = !!scan?.saved
 
   const updateField = (k, text) => setForm(f => ({ ...f, [k]: text }))
 
-  const handleScan = async () => {
-    if (!selected || !filtersValid) return
-    setLoading(true); setError(null)
-    try {
-      const res = await runScan({ ...config, ticker: selected })
-      const next = {
-        result: res.data,
-        // Empty until you enter your broker's fills (or choose the quotes), so a guess is never saved as a trade
-        fills: res.data.planned_positions.map(() => ''),
-        // Your usual commission for these contracts; edit it if your broker charged something else
-        fees: res.data.estimated_fees > 0 ? res.data.estimated_fees.toFixed(2) : '',
-        saved: false,
-        at: new Date().toISOString(),
-      }
+  // A fresh scan: the price you sold at stays empty until you enter your broker's fill, so a guess is
+  // never saved as a trade; the fee box starts at your usual commission
+  const freshScan = (data, at) => ({
+    result: data, fill: '', fees: data.estimated_fees > 0 ? data.estimated_fees.toFixed(2) : '',
+    saved: false, at, useAlt: false,
+  })
+
+  const scanOne = ticker => runScan({ ...config, ticker })
+    .then(res => {
+      const next = freshScan(res.data, new Date().toISOString())
       lastScans.set(res.data.ticker, next)
       setScan(next)
-    } catch (e) {
-      setError(apiError(e, 'Scan failed. Is the API running?'))
-    } finally {
-      setLoading(false)
-    }
+    })
+    .catch(e => setError(apiError(e, 'Scan failed. Is the API running?')))
+    .finally(() => setLoading(false))
+  const handleScan = () => {
+    if (!selected || !filtersValid) return
+    setLoading(true); setError(null)
+    scanOne(selected)
   }
+  // Arriving from Home's "Find a call": scan now (once), and drop go=1 so a reload doesn't scan again
+  const oneStarted = useRef(false)
+  useEffect(() => {
+    if (!autoOne || oneStarted.current) return
+    oneStarted.current = true
+    scanOne(selected)
+    setParams({}, { replace: true })
+  }, [autoOne]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const scanAll = () => runScanAll(config)
     .then(res => {
@@ -208,58 +214,48 @@ export default function Scanner() {
   const review = item => {
     const r = item.result
     const existing = lastScans.get(item.ticker)
-    if (r && !(existing && existing.at >= allScan.at)) {
-      lastScans.set(item.ticker, {
-        result: r, fills: r.planned_positions.map(() => ''),
-        fees: r.estimated_fees > 0 ? r.estimated_fees.toFixed(2) : '', saved: false, at: allScan.at,
-      })
-    }
+    if (r && !(existing && existing.at >= allScan.at)) lastScans.set(item.ticker, freshScan(r, allScan.at))
     setAll(false); setError(null)
     setScan(lastScans.get(item.ticker) || null); setScannedFor(item.ticker)
     selectTicker(item.ticker)
   }
 
-  const fillValues = fills.map(moneyValue)
-  const fillsValid = fillValues.length > 0 && fillValues.every(v => v != null && v > 0)
-  const fillQuotes = () => update({ fills: (scan?.result.planned_positions || []).map((p, i) => fills[i] || p.entry_price.toFixed(2)) })
-
   const handleSave = async () => {
-    if (!result?.planned_positions || !fillsValid) return
-    const legs = result.planned_positions
-    const fees = splitFees(moneyValue(feesText) || 0, legs.map(p => p.contracts))
-    const payload = legs.map((p, i) => ({
-      ticker: result.ticker, expiry: p.expiry, strike: p.strike,
-      contracts: p.contracts, entry_price: fillValues[i],
-      allocation_type: p.allocation_type, fees: fees[i],
-    }))
+    const r = scan?.result
+    const trade = r && (scan.useAlt && r.alternative ? r.alternative : r.planned_positions[0])
+    const price = moneyValue(scan?.fill ?? '')
+    if (!trade || !(price > 0)) return
     setSaving(true)
-    try { await savePositions(payload); update({ saved: true }); refresh().catch(() => {}) }
-    catch (e) { setError(apiError(e, 'Could not save the trade. Is the API running?')) }
-    finally { setSaving(false) }
+    try {
+      await savePositions([{
+        ticker: r.ticker, expiry: trade.expiry, strike: trade.strike, contracts: trade.contracts,
+        entry_price: price, allocation_type: trade.allocation_type, fees: moneyValue(scan.fees) || 0,
+      }])
+      update({ saved: true })
+      refresh().catch(() => {})
+    } catch (e) {
+      setError(apiError(e, 'Could not save the trade. Is the API running?'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const holding = tickers.find(t => t.ticker === selected)
   const planned = result?.planned_positions || []
-  const contracts = planned.reduce((s, p) => s + p.contracts, 0)
-  // Market closed (or opened under 15 min ago, while the delayed quotes catch up):
-  // results use last-session prices, so saving waits for live prices
+  // Market closed (or opened under 15 min ago, while the delayed quotes catch up): results use
+  // last-session prices. You can still record what your broker filled; only "use the quote" waits.
   const lastPrices = result?.quotes_live === false
   const liveAt = lastPrices && result?.quotes_live_at ? clock(result.quotes_live_at) : null
   const nextOpen = result?.next_market_open
     ? new Date(result.next_market_open).toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit' })
     : null
-  const optionFor = p => result?.candidates.find(c => c.expiry === p.expiry && c.strike === p.strike) || {}
-  const picked = new Map(planned.map(p => [`${p.expiry}|${p.strike}`, 'Picked']))
-  const fillTotal = planned.reduce((s, p, i) => s + (fillValues[i] || 0) * p.contracts * 100, 0) - (moneyValue(feesText) || 0)
-  const reservePct = result && result.gross_premium > 0 ? Math.round((result.buyback_budget / result.gross_premium) * 100) : null
-  const allEvents = planned.length > 0 && planned.every(p => eventsText(optionFor(p)))
+  const shownTrade = result && (scan.useAlt && result.alternative ? result.alternative : planned[0])
+  const picked = new Map(shownTrade ? [[`${shownTrade.expiry}|${shownTrade.strike}`, 'Picked']] : [])
 
   const rules = strategy
     ? [
         ['Chance of being called', `${Math.round(strategy.delta_min * 100)}–${Math.round(strategy.delta_max * 100)}%`],
         ['Expiring in', `${strategy.min_dte}–${strategy.max_dte} days`],
-        ['Income / balanced', `${Math.round(strategy.income_weight * 100)} / ${100 - Math.round(strategy.income_weight * 100)}`],
-        ['Set aside to buy back', `${Math.round(strategy.buyback_budget_pct * 100)}%`],
       ]
     : []
   const changed = FIELDS.filter(f => config[f.name] !== DEFAULT_CONFIG[f.name]).length + TOGGLES.filter(t => config[t.name]).length
@@ -315,7 +311,7 @@ export default function Scanner() {
         {tickers.length > 0 && (
           <div className="order-last w-full md:order-none md:w-auto">
             <StockChips label="Stock to scan" free tickers={tickers} value={all ? null : selected}
-              all={tickers.length > 1} allLabel={`All stocks${freeTotal ? ` · ${freeTotal} free` : ''}`}
+              all={tickers.length > 1} allLabel={`All stocks${freeTotal ? ` · ${freeTotal} to sell` : ''}`}
               onChange={t => { if (t == null) setAll(true); else { setAll(false); selectTicker(t) } }} />
           </div>
         )}
@@ -356,7 +352,7 @@ export default function Scanner() {
           {all ? allColumn : <div className="min-w-0">
             <p className="flex flex-wrap gap-x-5 gap-y-1 text-15 text-fg-2">
               {result && <span>{result.ticker} <strong className="font-semibold text-fg">{money(result.current_price)}</strong>{lastPrices ? ' at the last close' : ''}</span>}
-              {holding && <span>{holding.shares.toLocaleString()} shares · avg {money(holding.avg_cost)}</span>}
+              {holding && <span>{holding.shares.toLocaleString()} shares{holding.available > 0 && holding.open_total > 0 ? ` · ${(holding.available * 100).toLocaleString()} not covered` : ''}{holding.avg_cost > 0 ? ` · bought at ${money(holding.avg_cost)}` : ''}</span>}
               {result?.earnings_date && <span>Earnings {fmtDate(result.earnings_date)}</span>}
               {result?.ex_dividend_date && <span>Ex-dividend {fmtDate(result.ex_dividend_date)}</span>}
             </p>
@@ -379,7 +375,7 @@ export default function Scanner() {
                 </p>
                 <div className="mt-6">{scanButton}</div>
                 <ol className="mt-10 grid gap-4 border-t border-line pt-6 md:grid-cols-3">
-                  {[['Scan', 'Calls on your shares that match your rules and filters.'], ['Pick', 'One recommended trade, split between income and balanced calls.'], ['Track', 'Save it, then follow it on Positions until you close it.']].map(([t, d], i) => (
+                  {[['Scan', 'Calls on your shares that match your rules and filters.'], ['Pick', 'One call for all your free contracts, and the order to place at your broker.'], ['Track', 'Save it, then follow it on Positions until you close it.']].map(([t, d], i) => (
                     <li key={t} className="flex gap-3">
                       <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-13 font-semibold text-fg-2">{i + 1}</span>
                       <span><span className="block text-15 font-semibold">{t}</span><span className="block text-13 text-muted">{d}</span></span>
@@ -391,103 +387,18 @@ export default function Scanner() {
 
             {result && !loading && (
               <>
-                <div className="mt-4"><PremiumCheck check={result.premium_check} ticker={result.ticker} /></div>
-
-                {planned.length > 0 && (
-                  <section aria-labelledby="rec-h" className="mt-8">
-                    <h2 id="rec-h" className="text-15 font-medium text-fg-2">Recommended trade</h2>
-                    <div className="hero-num mt-1.5">{money(result.gross_premium)}</div>
-                    <div className="mt-2.5 flex flex-wrap items-center gap-x-1.5 text-15 text-fg-2">
-                      <span>{lastPrices ? 'Estimated at last prices for' : 'You collect today for'} selling {plural(contracts, `${result.ticker} call`)}</span>
-                      {result.goal_check && <><span aria-hidden="true">·</span><GoalCheck check={result.goal_check} deltaMax={result.delta_max} /></>}
-                    </div>
-
-                    <ul className="mt-6 border-t border-line">
-                      {planned.map((p, i) => {
-                        const o = optionFor(p)
-                        const ev = eventsText(o, result.ticker)
-                        return (
-                          <li key={i} className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-line py-4">
-                            <div className="w-full md:w-[110px]">
-                              <div className="text-13 font-semibold text-fg-2 md:text-15 md:text-fg">{p.allocation_type}</div>
-                              <div className="hidden text-13 text-muted md:block">{p.allocation_type === 'Income' ? 'more premium' : 'more room to rise'}</div>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-17 font-semibold">{p.contracts} × {strike(p.strike)} call</div>
-                              <div className="text-13 text-muted">
-                                {fmtDate(p.expiry)} · {plural(o.dte ?? 0, 'day')}{o.delta != null ? ` · ${Math.round(o.delta * 100)}% chance of being called` : ''}
-                                {p.below_cost_basis && <span className="text-amber"> · below your cost</span>}
-                              </div>
-                              {ev && <div className="flex items-center gap-1.5 text-13 text-muted"><Dot tone="amber" />Expires {ev}</div>}
-                            </div>
-                            <div className="text-17 font-semibold text-accent">+{money(p.premium_total)}</div>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                    <p className="mt-3 text-13 text-muted">
-                      Of the {money(result.gross_premium)}, {money(result.buyback_budget)}{reservePct != null ? ` (${reservePct}%)` : ''} is set aside in case you buy back early
-                      {result.estimated_fees > 0 ? ` and ${money(result.estimated_fees)} goes to fees` : ''}, so you keep {money(result.net_premium)}.
-                      {!allEvents && result.earnings_date && planned.every(p => !optionFor(p).spans_earnings) ? ` ${planned.length > 1 ? 'Both calls expire' : 'It expires'} before ${result.ticker} reports on ${fmtDate(result.earnings_date)}.` : ''}
-                    </p>
-                  </section>
-                )}
-
-                {(lastPrices || result.warnings?.length > 0) && (
-                  <ul aria-label="Heads-up" className="mt-6 flex flex-col gap-2.5">
-                    {lastPrices && (
-                      <HeadsUp text={liveAt
-                        ? `Trading just opened and option prices are 15 minutes behind, so these are last-close prices until ${liveAt}. Scan again then to record a trade.`
-                        : `Market closed, so these are last-close prices. Plan with them now and scan again${nextOpen ? ` after it opens (${nextOpen})` : ' when it opens'} to record a trade.`} />
-                    )}
+                {(liveAt || result.warnings?.length > 0) && (
+                  <ul aria-label="Heads-up" className="mt-5 flex flex-col gap-2.5">
+                    {liveAt && <HeadsUp text={`Trading just opened and option prices are 15 minutes behind, so these are last-close prices until ${liveAt}. Scan again then for current ones.`} />}
                     {result.warnings?.map((w, i) => <HeadsUp key={i} text={w} />)}
                   </ul>
                 )}
 
                 {planned.length > 0 && (
-                  <div className="mt-7 rounded-card bg-surface p-5 md:p-6">
-                    {saved ? (
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <span className="inline-flex items-center gap-2 text-17 font-semibold"><Check size={20} strokeWidth={2.4} className="text-accent" /> Saved</span>
-                        <Link to="/positions" className="btn btn-secondary btn-sm">View in Positions <ArrowRight size={15} strokeWidth={2.2} /></Link>
-                      </div>
-                    ) : lastPrices ? (
-                      <>
-                        <h3 className="text-17 font-semibold">Record what you sold at</h3>
-                        <p className="mt-1.5 text-15 text-fg-2">
-                          Saving opens {liveAt ? `when prices catch up at ${liveAt}` : 'when the market opens'}, so trades are never recorded at an out-of-date price.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <h3 className="text-17 font-semibold">Record what you sold at <InfoTip text={TERMS.fill} /></h3>
-                          <span className="text-13 text-muted">Per share, from your broker</span>
-                        </div>
-                        <div className={`mt-4 grid gap-3 ${planned.length + (showFees ? 1 : 0) >= 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                          {planned.map((p, i) => (
-                            <MoneyField key={i} id={`fill-${i}`} label={<><span className="md:hidden">{p.allocation_type}</span><span className="hidden md:inline">{p.allocation_type} · {strike(p.strike)}</span></>}
-                              value={fills[i] ?? ''} onChange={v => update({ fills: fills.map((x, j) => (j === i ? v : x)) })}
-                              error={fills[i] && !(fillValues[i] > 0) ? 'Enter the price' : null} />
-                          ))}
-                          {showFees && <MoneyField id="fill-fees" label="Fees" value={feesText} onChange={v => update({ fees: v })} />}
-                        </div>
-                        {fillsValid ? (
-                          <p className="mt-3 text-13 text-fg-2">At these prices you collect {money(fillTotal)}{showFees ? ' after fees' : ''}.</p>
-                        ) : (
-                          <p className="mt-3 flex flex-wrap items-center gap-x-1.5 text-13 text-fg-2">
-                            <span>Quoted {planned.map(p => `${planned.length > 1 ? `${p.allocation_type} ` : ''}${money(p.entry_price)}`).join(' · ')}.</span>
-                            <button type="button" className="link text-13" onClick={fillQuotes}>Use {planned.length > 1 ? 'these' : 'it'}</button>
-                            <span>if your broker filled at {planned.length > 1 ? 'those prices' : 'that price'}.</span>
-                          </p>
-                        )}
-                        <button type="button" className="btn btn-primary btn-block mt-4 md:w-auto md:inline-flex" onClick={handleSave} disabled={saving || !fillsValid}>
-                          {saving ? <><Spinner /> Saving…</> : 'Save trade'}
-                        </button>
-                        <p className="mt-3 text-12 text-muted">This records the trade in CovCall so you can track it. It doesn't place an order.</p>
-                      </>
-                    )}
-                  </div>
+                  <RecommendedTrade result={result} useAlt={scan.useAlt} onToggleAlt={() => update({ useAlt: !scan.useAlt, fill: '' })}
+                    fill={scan.fill} fees={scan.fees} showFees={showFees} saved={saved} saving={saving}
+                    onFill={v => update({ fill: v })} onFees={v => update({ fees: v })} onSave={handleSave}
+                    lastPrices={lastPrices} nextOpen={nextOpen} />
                 )}
 
                 {planned.length === 0 && result.candidates.length > 0 && (
@@ -498,9 +409,9 @@ export default function Scanner() {
                 )}
 
                 {result.candidates.length > 0 ? (
-                  <section aria-labelledby="all-h" className="mt-12">
+                  <section aria-labelledby="all-h" className="mt-10">
                     <div className="flex items-baseline justify-between gap-3">
-                      <h2 id="all-h" className="text-20 font-semibold tracking-title">All {plural(result.candidates.length, 'matching call')}</h2>
+                      <h2 id="all-h" className="text-17 font-semibold">All {plural(result.candidates.length, 'call')} that fit</h2>
                       <button type="button" className="link link-quiet min-h-11 text-13" aria-expanded={tableOpen} onClick={() => setTableOpen(o => !o)}>
                         {tableOpen ? 'Hide' : 'Show'}
                       </button>
@@ -514,6 +425,10 @@ export default function Scanner() {
                     {config.min_strike_pct > 0 ? ` (the distance above price is ${Math.round(config.min_strike_pct * 100)}%)` : ''}.
                   </EmptyState>
                 )}
+
+                <p className="mt-8 text-12 text-muted">
+                  Not investment advice. CovCall shows calls that fit the rules you chose; you decide, and you place the trade at your broker.
+                </p>
               </>
             )}
           </div>}

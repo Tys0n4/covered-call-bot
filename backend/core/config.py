@@ -25,16 +25,16 @@ class ScannerConfig:
 
     # --- Greeks ---
     risk_free_rate: float = 0.04
-    # Sell calls with this chance of being called (delta). Balanced picks sit near the
-    # low end, income picks go as high as the monthly goal needs, never past the top.
+    # Sell calls with this chance of being called (delta). The recommended call goes as high
+    # as the monthly goal needs, never past the top; the alternative sits near the low end.
     delta_min: float = 0.20
     delta_max: float = 0.30
 
-    # --- Allocation ---
+    # --- No longer used (one call per stock, nothing set aside); kept for older saved strategies ---
     income_weight: float = 0.70
+    buyback_budget_pct: float = 0.15
 
     # --- Buyback / management ---
-    buyback_budget_pct: float = 0.15
     profit_capture_target_pct: float = 85.0
     # When earnings or a Fed meeting comes before expiry, buy back once this much is kept
     event_buyback_pct: float = 65.0

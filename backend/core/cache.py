@@ -25,7 +25,8 @@ _lock = threading.Lock()
 
 # How long each kind of data stays fresh (seconds)
 PRICE_TTL = 30
-CHAIN_TTL = 60
+CHAIN_TTL = 300     # option chains (Cboe's snapshot includes the stock price): one download per stock for
+                    # 5 minutes, shared by everyone; the quotes are 15 minutes behind anyway
 EXPIRIES_TTL = 600
 EVENTS_TTL = 6 * 3600
 CLOSE_TTL = 12 * 3600

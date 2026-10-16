@@ -179,7 +179,7 @@ def test_scan_flags_expiries_spanning_earnings_and_ex_dividend(client, nvda):
     assert by_expiry[_days(25).isoformat()]["spans_earnings"] is False
     assert by_expiry[_days(32).isoformat()]["spans_earnings"] is True
     assert all(c["spans_ex_dividend"] for c in scan["candidates"])
-    assert any("goes ex-dividend" in w for w in scan["warnings"])
+    assert any("goes ex-dividend" in w for w in scan["event_notes"])
 
 
 def test_scan_can_skip_expiries_spanning_earnings(client, nvda):
@@ -188,7 +188,7 @@ def test_scan_can_skip_expiries_spanning_earnings(client, nvda):
     scan = client.post("/scan", json={"ticker": "NVDA", "avoid_earnings": True}).json()
     assert scan["candidates"]
     assert all(c["expiry"] == _days(25).isoformat() for c in scan["candidates"])
-    assert not any("reports earnings" in w for w in scan["warnings"])
+    assert not any("reports earnings" in w for w in scan["event_notes"])
 
 
 def test_scan_explains_when_every_expiry_spans_earnings(client, nvda):
@@ -197,3 +197,35 @@ def test_scan_explains_when_every_expiry_spans_earnings(client, nvda):
     scan = client.post("/scan", json={"ticker": "NVDA", "avoid_earnings": True}).json()
     assert scan["candidates"] == []
     assert any("Every option in your expiry window" in w for w in scan["warnings"])
+
+
+# --- One trade per stock --------------------------------------------------------------
+
+def test_the_recommendation_is_one_call_for_every_free_contract(client, nvda):
+    scan = client.post("/scan", json={"ticker": "NVDA"}).json()
+    planned = scan["planned_positions"]
+    assert len(planned) == 1 and planned[0]["contracts"] == 5
+    assert (planned[0]["expiry"], planned[0]["strike"]) == (scan["income_pick"]["expiry"], scan["income_pick"]["strike"])
+    assert scan["allocation_summary"] == {"total_contracts": 5, "available": 5}
+    alt = scan["alternative"]
+    assert alt["contracts"] == 5 and alt["strike"] == scan["balanced_pick"]["strike"]
+    assert alt["strike"] != planned[0]["strike"]
+
+
+def test_no_alternative_when_both_picks_are_the_same_call(client, nvda, monkeypatch):
+    from core import scoring
+    real = scoring.pick_for_strategy
+
+    def same(df, config, goal_pace=0.0):
+        income, _, plan = real(df, config, goal_pace)
+        return income, income, plan
+    monkeypatch.setattr("core.scanner.pick_for_strategy", same)
+    assert client.post("/scan", json={"ticker": "NVDA"}).json()["alternative"] is None
+
+
+def test_open_calls_leave_fewer_contracts_to_sell(client, nvda):
+    assert client.post("/positions", json=_trade(contracts=2)).status_code == 201
+    scan = client.post("/scan", json={"ticker": "NVDA"}).json()
+    assert scan["planned_positions"][0]["contracts"] == 3
+    assert scan["alternative"]["contracts"] == 3
+

@@ -1,14 +1,17 @@
 # planner.py
-"""Turns a scan into the trade to place: how many contracts of which option, for your split."""
+"""
+Turns a scan into the trade to place: every contract your shares can still
+cover, on the recommended call (the scan's income pick). The scan's other pick
+(near the safe end of your range) is offered as an alternative for the same
+contracts when it's a different call.
+"""
 from __future__ import annotations
 import logging
-import math
 
 import pandas as pd
 
 from core.config import ScannerConfig, DEFAULT_CONFIG
 from core.models import ScanResult, PlannedCall
-from core.strategy import allocation_targets
 
 log = logging.getLogger(__name__)
 
@@ -23,21 +26,17 @@ def _find_option_row(
     Match a row by expiry and strike using tolerance instead of exact equality.
     Raises ValueError if no match is within tolerance.
     """
-    expiry_mask = scored_calls["expiry"] == expiry
-    expiry_df = scored_calls[expiry_mask]
-
+    expiry_df = scored_calls[scored_calls["expiry"] == expiry]
     if expiry_df.empty:
         raise ValueError(f"No options found for expiry {expiry!r}")
 
     diffs = (expiry_df["strike"] - strike).abs()
     closest_idx = diffs.idxmin()
-
     if diffs[closest_idx] > tolerance:
         raise ValueError(
             f"No option within ${tolerance:.2f} of strike {strike} for expiry {expiry!r}. "
             f"Closest was {expiry_df.loc[closest_idx, 'strike']:.2f}."
         )
-
     return expiry_df.loc[closest_idx]
 
 
@@ -67,66 +66,26 @@ def create_position(
     )
 
 
-def create_positions_from_plan(
-    ticker: str,
-    plan: list[dict],
-    scored_calls: pd.DataFrame,
-    config: ScannerConfig = DEFAULT_CONFIG,
-) -> list[PlannedCall]:
-    positions: list[PlannedCall] = []
-
-    for item in plan:
-        row = _find_option_row(
-            scored_calls,
-            expiry=item["expiry"],
-            strike=float(item["strike"]),
-            tolerance=config.strike_match_tolerance,
-        )
-
-        positions.append(
-            create_position(
-                ticker=ticker,
-                expiry=item["expiry"],
-                strike=float(row["strike"]),
-                contracts=item["contracts"],
-                entry_price=float(row["premium_price"]),
-                premium_source=str(row.get("premium_source", "NONE")),
-                quote_quality=str(row.get("quote_quality", "BAD")),
-                warning=str(row.get("warning", "Verify on broker")),
-                allocation_type=item.get("type", ""),
-            )
-        )
-
-    return positions
+def free_contracts(total_shares: int, open_positions: list[dict]) -> int:
+    """Contracts the shares can still cover: one per 100 shares, minus calls already open."""
+    open_total = sum(int(p["contracts"]) for p in open_positions if p.get("status", "OPEN") == "OPEN")
+    return max(int(total_shares) // 100 - open_total, 0)
 
 
-def get_allocation_targets(
-    total_shares: int,
-    open_positions: list[dict],
-    config: ScannerConfig,
-) -> dict:
-    """
-    Calculate how many income and balanced contracts are still needed
-    to hit the 70/30 target across the TOTAL position, accounting for
-    what's already open.
-
-    Returns:
-      total_contracts      : total coverable contracts from shares
-      open_income          : income contracts already open
-      open_balanced        : balanced contracts already open
-      needed_income        : income contracts still to sell
-      needed_balanced      : balanced contracts still to sell
-      available            : total contracts still available to sell
-    """
-    open_income = sum(
-        p["contracts"] for p in open_positions
-        if p.get("status") == "OPEN" and p.get("allocation_type") == "Income"
-    )
-    open_balanced = sum(
-        p["contracts"] for p in open_positions
-        if p.get("status") == "OPEN" and p.get("allocation_type") == "Balanced"
-    )
-    return allocation_targets(total_shares // 100, open_income, open_balanced, config.income_weight)
+def _plan_on(scan: ScanResult, pick, contracts: int, kind: str, config: ScannerConfig) -> list[PlannedCall]:
+    row = _find_option_row(scan.candidates, expiry=pick["expiry"], strike=float(pick["strike"]),
+                           tolerance=config.strike_match_tolerance)
+    return [create_position(
+        ticker=scan.position.ticker,
+        expiry=pick["expiry"],
+        strike=float(row["strike"]),
+        contracts=contracts,
+        entry_price=float(row["premium_price"]),
+        premium_source=str(row.get("premium_source", "NONE")),
+        quote_quality=str(row.get("quote_quality", "BAD")),
+        warning=str(row.get("warning", "Verify on broker")),
+        allocation_type=kind,
+    )]
 
 
 def build_plan(
@@ -134,67 +93,26 @@ def build_plan(
     config: ScannerConfig = DEFAULT_CONFIG,
     open_positions: list[dict] | None = None,
 ) -> list[PlannedCall]:
-    """
-    Build a contract allocation plan that maintains the overall 70/30 split
-    across all contracts (open + new), not just the new batch.
-    """
-    if scan.income_pick is None or scan.balanced_pick is None:
+    """The trade to place: every free contract on the recommended call. Empty without a pick or free contracts."""
+    if scan.income_pick is None:
         return []
-
-    position = scan.position
-    open_positions = open_positions or []
-
-    targets = get_allocation_targets(position.shares, open_positions, config)
-
-    if targets["available"] == 0:
-        log.info("%s: no contracts available, all %d are already open", position.ticker, targets["total_contracts"])
+    free = free_contracts(scan.position.shares, open_positions or [])
+    if free == 0:
+        log.info("%s: no contracts available, every one has a call sold", scan.position.ticker)
         return []
-
-    log.info(
-        "%s plan: %d contracts, income %d (open %d, need %d), balanced %d (open %d, need %d)",
-        position.ticker, targets["total_contracts"],
-        targets["target_income"], targets["open_income"], targets["needed_income"],
-        targets["target_balanced"], targets["open_balanced"], targets["needed_balanced"],
-    )
-
-    raw_plan = []
-
-    if targets["needed_income"] > 0:
-        raw_plan.append({
-            "expiry":    scan.income_pick["expiry"],
-            "strike":    scan.income_pick["strike"],
-            "contracts": targets["needed_income"],
-            "type":      "Income",
-        })
-
-    if targets["needed_balanced"] > 0:
-        raw_plan.append({
-            "expiry":    scan.balanced_pick["expiry"],
-            "strike":    scan.balanced_pick["strike"],
-            "contracts": targets["needed_balanced"],
-            "type":      "Balanced",
-        })
-
-    return create_positions_from_plan(
-        ticker=position.ticker,
-        plan=raw_plan,
-        scored_calls=scan.candidates,
-        config=config,
-    )
+    return _plan_on(scan, scan.income_pick, free, "Income", config)
 
 
-def compute_buyback_budget(position: PlannedCall, config: ScannerConfig = DEFAULT_CONFIG) -> dict:
-    gross     = float(position.premium_total)
-    contracts = int(position.contracts)
-
-    buyback_total    = math.ceil(gross * config.buyback_budget_pct)
-    per_contract     = buyback_total / contracts if contracts > 0 else 0.0
-    limit_per_share  = math.ceil(per_contract / 100.0 * 100) / 100
-    net_premium      = gross - buyback_total
-
-    return {
-        "buyback_total":   buyback_total,
-        "per_contract":    per_contract,
-        "limit_per_share": limit_per_share,
-        "net_premium":     net_premium,
-    }
+def alternative_plan(
+    scan: ScanResult,
+    config: ScannerConfig = DEFAULT_CONFIG,
+    open_positions: list[dict] | None = None,
+) -> list[PlannedCall]:
+    """The same contracts on the scan's other pick (more room for the stock to rise), when it's a different call."""
+    inc, bal = scan.income_pick, scan.balanced_pick
+    if inc is None or bal is None:
+        return []
+    if str(inc["expiry"]) == str(bal["expiry"]) and abs(float(inc["strike"]) - float(bal["strike"])) <= config.strike_match_tolerance:
+        return []
+    free = free_contracts(scan.position.shares, open_positions or [])
+    return _plan_on(scan, bal, free, "Balanced", config) if free else []

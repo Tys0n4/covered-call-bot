@@ -37,7 +37,8 @@ def test_scan_prices_options_at_a_likely_fill_after_fees(client, nvda):
     assert c["annualized_yield_pct"] == pytest.approx(yearly_on_net, abs=0.02)
     contracts = sum(p["contracts"] for p in scan["planned_positions"])
     assert scan["estimated_fees"] == pytest.approx(0.65 * contracts)
-    assert scan["net_premium"] == pytest.approx(scan["gross_premium"] - scan["buyback_budget"] - scan["estimated_fees"])
+    assert scan["gross_premium"] == pytest.approx(sum(p["premium_total"] for p in scan["planned_positions"]))
+    assert "net_premium" not in scan and "buyback_budget" not in scan        # no "set aside" money any more
 
 
 def test_no_commission_by_default_and_the_setting_is_used(client, nvda):

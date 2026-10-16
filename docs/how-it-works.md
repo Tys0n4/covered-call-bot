@@ -4,7 +4,7 @@ The details behind the [README](../README.md): what each screen shows, how calls
 
 - [The screens](#the-screens)
 - [Scanning](#scanning)
-- [Allocation](#allocation)
+- [One trade per stock](#one-trade-per-stock)
 - [Management](#management)
 - [Alerts (Discord)](#alerts-discord)
 - [Performance](#performance)
@@ -18,7 +18,7 @@ The details behind the [README](../README.md): what each screen shows, how calls
 
 **Home** — what you've kept this month as the big number, with a chart of premium kept against the pace your monthly goal needs (Month, 3M or Year; hover or drag across it to see any day). Next to it, the one thing to do next and anything else that needs you, then "Coming up": the next three events, earnings and Fed decisions first, with the rest of the month behind "See all". Under the chart, premium in open calls, contracts working and yearly return, then one row per stock with a mark for each contract that has a call sold (Edit shares or cost is in its ⋯ menu).
 
-**Scanner** — pick a stock (each shows how many contracts are free), scan, and get one recommended trade: what you collect as the big number, the income and balanced calls with each one's chance of being called, whether it keeps you on pace for your monthly goal, and boxes for the price you actually sold at (empty until you enter your broker's fills, or tap "Use these" if they matched the quotes). Heads-ups about earnings or a Fed decision sit under the trade, one line each with the detail behind "More". A plain line says whether premiums are rich or thin right now, with the numbers behind it in the ⓘ. Your rules and filters sit beside it, and every option that matched is listed below. The last scan of each stock stays on screen when you come back to it. **All stocks** scans every stock with free contracts at once (a few at a time, with the same rules and filters) and lists each one's recommended trade, most premium first, with what selling them all would collect; picking one opens its full scan to record the fills. When several stocks have free contracts, Home's next step is "Scan all".
+**Scanner** — pick a stock (each shows how many contracts it has to sell), scan, and get one answer: "Sell 3 calls, collect about $514" with the call (strike and expiry), then **the catch** in plain words (if the stock closes above the strike on that date your shares are sold at the strike, about how likely that is, and the tax on the gain if they are), any earnings or Fed decision before it expires, and the order to place at your broker (sell to open, contracts, the call, a limit price) with a Copy button. When a call with more room for the stock to rise is a real alternative, it's one tap away. Below that, "Sold it? Record what you got" takes the price your broker filled (any time, even with the market closed; "Use $1.71" fills in the quote while prices are live). Coming from Home's "Find a call", the scan starts by itself. Other heads-ups (prices from the last close, a strike below your cost) sit above the trade with the detail behind "More". Your rules and filters sit beside it, and every call that fit is listed below. The last scan of each stock stays on screen when you come back to it. **All stocks** scans every stock with contracts to sell at once (a few at a time, with the same rules and filters) and lists each one's trade, most premium first, with what selling them all would collect; picking one opens its full scan to record the fill. When several stocks have contracts to sell, Home's next step is "Scan all".
 
 **Positions** — every open call across your stocks, with prices checked automatically (again every 5 minutes while the market is open, and shared with Home for a minute) and grouped into **Ready to buy back**, **Going against you** and **Holding**. Calls that need something from you get a card with premium kept against the target, the price now (and whether it's today's or the last close), your target price and what buying back costs. A call that's ready also shows the order to place at your broker (buy to close, how many contracts, the limit price) with a Copy button. Calls you're just holding are one line each and open to the full card. "I rolled it" and "I bought it back" record what you did at your broker; Edit and Delete are in the ⋯ menu, and changes can be undone. On phones, every pop-up is a sheet that slides up from the bottom.
 
@@ -26,7 +26,7 @@ The details behind the [README](../README.md): what each screen shows, how calls
 
 **Performance** — what you kept after buybacks and fees, yearly return on capital, profit on shares sold when they're called away, and a month-by-month chart against your goal.
 
-**Strategy** — your monthly goal, then the trading rules (chance of being called, expiry window, buy-back targets, split, reserve) as a list with each value on the right; a rule opens in place on bigger screens and in a sheet on phones, and changes wait for Save. Then Discord alerts, your broker's commission, Appearance (light or dark) and CSV downloads of your data.
+**Strategy** — one question: "If your shares get sold at a profit, is that…" *Fine, I want more income* (calls with a 20–30% chance of being called) or *I'd rather keep my shares* (10–15%). Then an optional monthly goal. Everything else is under **Advanced**: the exact chance-of-being-called range, the expiry window and buy-back targets (each opens in place on bigger screens and in a sheet on phones), your broker's commission and Discord alerts. Changes wait for Save. Then Appearance (light or dark), CSV downloads of your data and your account.
 
 ---
 
@@ -45,12 +45,12 @@ Each scan also says whether premiums are **rich**, **normal** or **thin** right 
 
 From the options in your range the scanner picks two:
 
-- **Balanced** — the best monthly income near the safe end of your range (within 3 points of your lowest delta).
-- **Income** — the lowest-delta option that, blended with the balanced pick at your income/balanced split, reaches your monthly goal. Your goal is spread across every contract your holdings can cover, so each contract has a monthly pace to hit. If no option in range reaches it, the best payer is picked and the Scanner says you're short. With no goal set, the best payer in range is picked.
+- **The recommended call** — the lowest-delta option that reaches your monthly goal on its own. Your goal is spread across every contract your holdings can cover, so each contract has a monthly pace to hit. If no option in range reaches it, the best payer is picked and the Scanner says you're short. With no goal set, the best payer in range is picked.
+- **The alternative** — the best monthly income near the safe end of your range (within 3 points of your lowest delta), for more room to rise. It's only offered when it's a different call.
 
 Monthly income is what you expect to keep per contract: the premium × your buy-back target (the earlier event target when earnings or a Fed decision comes first), minus the commission to sell and the one to buy back, ÷ days to expiry × 30.4. The goal check uses the same number, so "on pace" means after buy-backs.
 
-**Option prices** come from Cboe's delayed quotes, about 15 minutes behind. When Cboe fails or has nothing for a stock, the app uses Yahoo Finance instead; Yahoo isn't used at all while Cboe works. The Scanner and the price check say which source was used. After the close, Cboe's closing bid and ask are used (at their midpoint) and marked as a closing quote. Because the quotes are 15 minutes behind, the first 15 minutes after the open are treated the same way: the feed still shows the last session's closing quotes, so the Scanner says so and keeps saving off until they catch up, and the buy-back alert check waits until then too.
+**Option prices** come from Cboe's delayed quotes, about 15 minutes behind. When Cboe fails or has nothing for a stock, the app uses Yahoo Finance instead; Yahoo isn't used at all while Cboe works. The Scanner and the price check say which source was used. After the close, Cboe's closing bid and ask are used (at their midpoint) and marked as a closing quote. Because the quotes are 15 minutes behind, the first 15 minutes after the open are treated the same way: the feed still shows the last session's closing quotes, so the Scanner says so (and only offers the quote as your fill once they catch up), and the buy-back alert check waits until then too.
 
 **The stock price** comes from the same Cboe snapshot, so it always matches the option prices, with Alpha Vantage and then Yahoo as fallbacks. NYSE holidays and early closes are handled.
 
@@ -60,9 +60,9 @@ Monthly income is what you expect to keep per contract: the premium × your buy-
 
 ---
 
-## Allocation
+## One trade per stock
 
-The planner maintains a **70/30 income/balanced split** across the total available contracts from your shares. It reads existing open positions and calculates how many contracts of each type are still needed to reach the target — so it always plans the right amount regardless of what's already open.
+Every contract your shares can cover that doesn't already have a call sold goes on the one recommended call: 300 shares with one call open leaves 2 contracts to sell. Nothing is set aside from the premium; the buy-back cost is counted when you actually buy back.
 
 ---
 
@@ -119,7 +119,7 @@ A server from before accounts (one shared password, `APP_PASSWORD`) keeps its po
 
 ## Configuration
 
-Defaults live in `backend/core/config.py`. Your delta range, expiry window, split, buy-back targets, reserve and monthly goal are edited on the Strategy page and override them:
+Defaults live in `backend/core/config.py`. Your delta range, expiry window, buy-back targets and monthly goal are edited on the Strategy page and override them:
 
 ```python
 @dataclass(frozen=True)
@@ -132,8 +132,6 @@ class ScannerConfig:
     min_open_interest: int = 50
     delta_min: float = 0.20
     delta_max: float = 0.30
-    income_weight: float = 0.70
-    buyback_budget_pct: float = 0.15
     profit_capture_target_pct: float = 85.0
     event_buyback_pct: float = 65.0              # before earnings or a Fed decision
     commission_per_contract: float = 0.0         # your broker's, per option contract
