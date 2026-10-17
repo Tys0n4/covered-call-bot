@@ -47,7 +47,7 @@ export default function RollOptionsModal({ position: p, onUse, onCancel }) {
               const why = note(r, p, strategy?.delta_max)
               return (
                 <button key={`${r.expiry}|${r.strike}`} type="button" role="radio" aria-checked={on} onClick={() => setPicked(i)}
-                  className={`w-full rounded-sm bg-panel px-3.5 py-3 text-left ${on ? 'ring-2 ring-accent' : 'ring-1 ring-edge'}`}>
+                  className={`w-full rounded-sm bg-panel px-3.5 py-3 text-left ${on ? 'ring-2 ring-fg' : 'ring-1 ring-edge'}`}>
                   <span className="flex items-baseline justify-between gap-3">
                     <span className="text-15 font-semibold">{fmtDate(r.expiry)} · {strike(r.strike)} call</span>
                     <span className="text-15 font-semibold text-accent">{signedMoney(r.net_per_share)}</span>

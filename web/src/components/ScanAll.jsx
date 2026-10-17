@@ -37,7 +37,7 @@ function StockRow({ item, saved, onReview }) {
 
   let detail
   if (saved) {
-    detail = <span className="flex items-center gap-1.5 text-15 text-fg-2"><Check size={16} strokeWidth={2.4} className="text-accent" aria-hidden="true" />Saved: every contract has a call sold</span>
+    detail = <span className="flex items-center gap-1.5 text-15 text-fg-2"><Check size={16} strokeWidth={2.4} className="text-fg-2" aria-hidden="true" />Saved: every contract has a call sold</span>
   } else if (planned.length > 0) {
     detail = (
       <>

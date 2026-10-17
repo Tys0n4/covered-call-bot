@@ -286,14 +286,14 @@ export default function Scanner() {
       {error && <p role="alert" className="mb-5 flex items-start gap-2 text-15 text-loss"><Dot tone="loss" className="mt-2" />{error}</p>}
       {allLoading ? (
         <div className="flex items-center gap-4 rounded-card bg-surface p-6" role="status">
-          <Spinner className="h-6 w-6 text-accent" />
+          <Spinner className="h-6 w-6 text-fg-2" />
           <div><div className="text-17 font-semibold">Checking {plural(freeStocks.length, 'stock')}…</div><div className="text-13 text-muted">Up to four at a time. This usually takes 5–20 seconds.</div></div>
         </div>
       ) : allScan ? (
         <ScanAll data={allScan.data} tickers={tickers} onReview={review} />
       ) : (
         <section aria-labelledby="all-ready-h">
-          <h2 id="all-ready-h" className="text-22 font-semibold tracking-title">Find calls for every stock at once</h2>
+          <h2 id="all-ready-h" className="font-display text-22 font-medium">Find calls for every stock at once</h2>
           <p className="mt-2 max-w-[560px] text-15 text-fg-2">
             {freeStocks.length
               ? `Scans ${freeStocks.map(t => t.ticker).join(', ')} with your rules and filters and lists the recommended trade for each, with what selling them all would collect.`
@@ -374,14 +374,14 @@ export default function Scanner() {
 
             {loading && (
               <div className="mt-10 flex items-center gap-4 rounded-card bg-surface p-6" role="status">
-                <Spinner className="h-6 w-6 text-accent" />
+                <Spinner className="h-6 w-6 text-fg-2" />
                 <div><div className="text-17 font-semibold">Checking {selected} options…</div><div className="text-13 text-muted">This usually takes 5–10 seconds.</div></div>
               </div>
             )}
 
             {!result && !loading && (
               <section aria-labelledby="ready-h" className="mt-8">
-                <h2 id="ready-h" className="text-22 font-semibold tracking-title">Find a call to sell on {selected}</h2>
+                <h2 id="ready-h" className="font-display text-22 font-medium">Find a call to sell on {selected}</h2>
                 <p className="mt-2 max-w-[560px] text-15 text-fg-2">
                   {strategy ? `Calls with a ${Math.round(strategy.delta_min * 100)}–${Math.round(strategy.delta_max * 100)}% chance of being called, expiring in ${strategy.min_dte}–${strategy.max_dte} days.` : 'Calls that fit your strategy.'}
                   {holding?.available === 0 ? ` Every ${selected} contract already has a call sold, so this is just to look.` : ''}
@@ -416,7 +416,7 @@ export default function Scanner() {
 
                 {planned.length === 0 && result.candidates.length > 0 && (
                   <p className="mt-8 flex items-start gap-2 text-15 text-fg-2">
-                    <Check size={18} strokeWidth={2.4} className="mt-0.5 shrink-0 text-accent" />
+                    <Check size={18} strokeWidth={2.4} className="mt-0.5 shrink-0 text-fg-2" />
                     All of your {result.ticker} contracts are already working, so there's nothing new to sell. Every option that matched is below.
                   </p>
                 )}
@@ -494,7 +494,7 @@ export default function Scanner() {
                   {TOGGLES.map(t => (
                     <div key={t.name} className="flex min-h-11 items-center gap-2">
                       <label className="flex cursor-pointer items-center gap-3 text-15 text-fg-2">
-                        <input type="checkbox" className="h-[18px] w-[18px] accent-[var(--accent)]" checked={form[t.name]} onChange={e => updateField(t.name, e.target.checked)} />
+                        <input type="checkbox" className="h-[18px] w-[18px] accent-[var(--text)]" checked={form[t.name]} onChange={e => updateField(t.name, e.target.checked)} />
                         {t.label}
                       </label>
                       <InfoTip text={t.tip} size={12} />

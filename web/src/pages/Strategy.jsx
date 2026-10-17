@@ -218,11 +218,11 @@ export default function Strategy() {
       <PageHeader title="Strategy" />
 
       <section aria-labelledby="style-h" className="mt-2 md:mt-0">
-        <h2 id="style-h" className="text-20 font-semibold tracking-title">If your shares get sold at a profit, is that…</h2>
+        <h2 id="style-h" className="font-display text-20 font-medium">If your shares get sold at a profit, is that…</h2>
         <div role="radiogroup" aria-labelledby="style-h" className="mt-4 flex flex-col gap-2.5">
           {STYLES.map((st, i) => (
             <button key={st.title} type="button" role="radio" aria-checked={style === i}
-              className={`w-full rounded-card bg-surface p-4 text-left ${style === i ? 'ring-2 ring-accent' : 'ring-1 ring-edge'}`}
+              className={`w-full rounded-card bg-surface p-4 text-left ${style === i ? 'ring-2 ring-fg' : 'ring-1 ring-edge'}`}
               onClick={() => setDraft(d => ({ ...d, delta_min: st.delta_min, delta_max: st.delta_max }))}>
               <span className="block text-17 font-semibold">{st.title}</span>
               <span className="mt-0.5 block text-13 text-fg-2">{st.detail}</span>
@@ -249,7 +249,7 @@ export default function Strategy() {
               <span className="text-fg-2"><strong className="font-semibold text-fg">{money(monthKept)}</strong> kept in {monthName}</span>
               <span className="font-semibold">{goalPct}%</span>
             </div>
-            <div className="mt-2 h-1 rounded-full bg-track"><div className="h-1 rounded-full bg-accent" style={{ width: `${Math.min(goalPct, 100)}%` }} /></div>
+            <div className="mt-2 h-1 rounded-full bg-track"><div className="h-1 rounded-full bg-gold" style={{ width: `${Math.min(goalPct, 100)}%` }} /></div>
             <p className="mt-2 text-13 text-muted">
               {goalPct >= 100 ? 'Goal reached this month.' : `${money(Math.max(draft.monthly_goal - monthKept, 0))} to go.`}
               {monthRow && <> {plural(monthRow.calls, 'call')} finished: {money(monthRow.premium)} collected{monthRow.buybacks > 0 && <>, {money(monthRow.buybacks)} bought back</>}{monthRow.fees > 0 && <>, {money(monthRow.fees)} fees</>}.</>}
@@ -284,7 +284,7 @@ export default function Strategy() {
         {showAdvanced && (
           <div id="advanced" className="pb-8">
             <Section id="rules-h" title="Trading rules" className="mt-2" right={usesDefaults(draft)
-              ? <span className="text-13 font-semibold text-accent">Recommended</span>
+              ? <span className="text-13 font-semibold text-fg-2">Recommended</span>
               : <span className="text-13 text-muted">Your rules · <button type="button" className="link text-13"
                   onClick={() => setDraft(d => ({ ...d, ...Object.fromEntries(RULE_KEYS.map(k => [k, DEFAULT_STRATEGY[k]])) }))}>Back to recommended</button></span>}>
               <ul>

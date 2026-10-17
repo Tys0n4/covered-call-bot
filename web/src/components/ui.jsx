@@ -5,14 +5,32 @@ import { useMarket } from '../context/MarketContext'
 import { cleanMoney } from '../lib/pnl'
 import { money } from '../lib/format'
 
-// The mark: a covered call's payoff, rising then capped at the strike
-export function Logo({ size = 28 }) {
+// The mark: a crescent moon (Home's moon fills as you reach your goal)
+export function Logo({ size = 26 }) {
   return (
-    <span className="inline-flex shrink-0 items-center justify-center bg-logo text-on-logo"
-      style={{ width: size, height: size, borderRadius: size * 0.29 }} aria-hidden="true">
-      <svg width={size * 0.64} height={size * 0.64} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 18 11.5 9.5H20" /></svg>
-    </span>
+    <svg width={size} height={size} viewBox="0 0 32 32" className="shrink-0" aria-hidden="true">
+      <circle cx="16" cy="16" r="12" fill="var(--logo)" />
+      <circle cx="21" cy="12" r="10.5" fill="var(--on-logo)" />
+    </svg>
+  )
+}
+
+// A moon lit by how much is done: the month's goal reached, a call's premium kept. It waxes from
+// the right; `empty` draws a dashed outline (nothing to measure), `ring` circles a full one.
+export function Moon({ pct, size = 40, label, empty = false, ring = false, className = '' }) {
+  const f = Math.max(0, Math.min(pct || 0, 100)) / 100
+  const r = ring ? 41 : 46
+  const rx = (r * Math.abs(1 - 2 * f)).toFixed(2)
+  const lit = f > 0 && f < 1 ? `M50 ${50 - r} A${r} ${r} 0 0 1 50 ${50 + r} A${rx} ${r} 0 0 ${f > 0.5 ? 1 : 0} 50 ${50 - r} Z` : null
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" className={`shrink-0 ${className}`}
+      role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      {ring && <circle cx="50" cy="50" r="48" fill="none" stroke="var(--gold)" strokeWidth="2.5" opacity="0.6" />}
+      {empty
+        ? <circle cx="50" cy="50" r={r} fill="none" stroke="var(--moon-edge)" strokeWidth="2.5" strokeDasharray="7 8" />
+        : <circle cx="50" cy="50" r={r} fill={f >= 1 ? 'var(--gold)' : 'var(--moon)'} stroke={f >= 1 ? 'none' : 'var(--moon-edge)'} strokeWidth="1.5" />}
+      {lit && !empty && <path d={lit} fill="var(--gold)" />}
+    </svg>
   )
 }
 
@@ -96,15 +114,16 @@ export function Switch({ checked, onChange, label, disabled }) {
   )
 }
 
-// How much of a call's premium you've kept, with the buy-back target marked
-export function KeptBar({ pct, target, event = false, hot = false, height = 6, className = '' }) {
+// How much of a call's premium you've kept (gold, it's money), with the buy-back target marked:
+// ink normally, periwinkle when an earnings date or Fed decision lowered it
+export function KeptBar({ pct, target, event = false, height = 4, className = '' }) {
   const w = Math.max(0, Math.min(pct || 0, 100))
   return (
     <div className={`relative rounded-full bg-track ${className}`} style={{ height }} aria-hidden="true">
-      <div className="h-full rounded-full" style={{ width: `${w}%`, background: hot ? 'var(--accent)' : 'var(--text-2)' }} />
+      <div className="h-full rounded-full" style={{ width: `${w}%`, background: 'var(--gold)' }} />
       {target > 0 && (
         <span className="absolute rounded-sm" title={`Target: ${target.toFixed(1)}% kept`}
-          style={{ left: `${Math.min(target, 100)}%`, top: -4, bottom: -4, width: 2, marginLeft: -1, background: event ? 'var(--amber)' : 'var(--mark)' }} />
+          style={{ left: `${Math.min(target, 100)}%`, top: -5, bottom: -5, width: 2, marginLeft: -1, background: event ? 'var(--amber)' : 'var(--mark)' }} />
       )}
     </div>
   )

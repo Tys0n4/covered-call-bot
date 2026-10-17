@@ -38,7 +38,7 @@ function Row({ c, ticker, contracts, picked, showDate }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-17 font-semibold">{strike(c.strike)} call</span>
-          {picked && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-12 font-semibold text-accent">{picked}</span>}
+          {picked && <span className="rounded-full bg-chip px-2 py-0.5 text-12 font-semibold text-on-chip">{picked}</span>}
           {c.below_cost_basis && <span className="text-12 font-medium text-amber">below what you paid</span>}
         </div>
         <div className="mt-0.5 text-13 text-fg-2">

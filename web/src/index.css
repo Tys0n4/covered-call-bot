@@ -5,98 +5,111 @@
    (index.html sets data-theme before the first paint, from Strategy ›
    Appearance or the device setting).
 
-   One accent for money and actions. Red (loss) only for losses and things
-   that can't be undone. Amber only for heads-ups (earnings, Fed decisions). */
+   "Almanac": indigo night and cream ink (dark), warm paper and indigo ink
+   (light). Gold is for money (kept, gains) and the one main button on a
+   screen; selection and navigation use the ink color. Red (loss) only for
+   losses and things that can't be undone. Periwinkle (--amber, the old name)
+   for heads-ups: earnings, Fed decisions, a stock near its strike. */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0A0B0D;
-  --surface: #15171B;       /* cards on the page */
-  --surface-2: #1C1F24;     /* hover on a surface */
-  --raised: #2A2E35;        /* selected segment */
-  --panel: #0A0B0D;         /* a box inside a dialog */
-  --inset: #0A0B0D;         /* a box inside a card on the page */
-  --sheet: #15171B;         /* dialogs, menus, toasts */
-  --input: #0A0B0D;
-  --line: #1A1D22;          /* hairlines on the page */
-  --line-2: #23262C;        /* hairlines on a surface */
-  --edge: #2A2E35;          /* borders of buttons and inputs */
-  --text: #F4F5F6;
-  --text-2: #A3A8B0;
-  --muted: #7F858E;
-  --accent: #2BD67B;
-  --accent-soft: rgba(43, 214, 123, 0.14);
-  --accent-dim: rgba(43, 214, 123, 0.28);
-  --on-accent: #04140B;
-  --primary: #2BD67B;       /* the main button */
-  --on-primary: #04140B;
-  --chip: rgba(43, 214, 123, 0.14);
-  --on-chip: #2BD67B;
-  --amber: #F2B13E;
-  --loss: #FF6A3D;
+  --bg: #0F1226;
+  --surface: #151933;       /* cards on the page */
+  --surface-2: #1B2040;     /* hover on a surface */
+  --raised: #242A4A;        /* selected segment */
+  --panel: #0F1226;         /* a box inside a dialog */
+  --inset: #0F1226;         /* a box inside a card on the page */
+  --sheet: #151933;         /* dialogs, menus, toasts */
+  --input: #0F1226;
+  --line: #242A4A;          /* hairlines on the page */
+  --line-2: #2A3052;        /* hairlines on a surface */
+  --edge: #343B66;          /* borders of buttons and inputs */
+  --text: #EEEAE0;
+  --text-2: #B8B5C8;
+  --muted: #8F8CA8;
+  --accent: #E2B65E;        /* gold text: money kept, gains */
+  --accent-soft: rgba(226, 182, 94, 0.14);
+  --accent-dim: rgba(226, 182, 94, 0.28);
+  --on-accent: #0F1226;
+  --gold: #E2B65E;          /* gold shapes: moons, kept bars, month bars */
+  --gold-dim: rgba(226, 182, 94, 0.45);
+  --primary: #E2B65E;       /* the main button */
+  --on-primary: #0F1226;
+  --chip: #242A4A;          /* a picked chip */
+  --on-chip: #EEEAE0;
+  --amber: #A3ACFF;         /* heads-up (periwinkle) */
+  --loss: #FF7A66;
   --on-loss: #1A0700;
-  --loss-soft: rgba(255, 106, 61, 0.12);
-  --track: #262A31;
-  --pace: #4A505A;
-  --mark: #F4F5F6;          /* the buy-back target on a kept bar */
-  --dot: #7F858E;
-  --skel: #16181C;
-  --seg: #15171B;
-  --seg-active: #2A2E35;
+  --loss-soft: rgba(255, 122, 102, 0.12);
+  --track: #242A4A;
+  --pace: #8F8CA8;
+  --mark: #EEEAE0;          /* the buy-back target on a kept bar */
+  --moon: #1B2040;          /* the unlit part of a moon */
+  --moon-edge: #343B66;
+  --focus: #EEEAE0;
+  --dot: #8F8CA8;
+  --skel: #1B2040;
+  --seg: #151933;
+  --seg-active: #242A4A;
   --seg-shadow: none;
-  --overlay: rgba(0, 0, 0, 0.6);
-  --handle: #3A3F47;
-  --switch-off: #3A3F47;
-  --logo: #2BD67B;
-  --on-logo: #04140B;
-  --pop-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  --overlay: rgba(5, 6, 18, 0.72);
+  --handle: #343B66;
+  --switch-off: #343B66;
+  --logo: #E2B65E;
+  --on-logo: #0F1226;
+  --pop-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
   --bar-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --hero-weight: 600;
+  --hero-weight: 500;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #FFFFFF;
-  --surface: #F4F4F1;
-  --surface-2: #EDEDEA;
+  --bg: #F7F4EC;
+  --surface: #FFFFFF;
+  --surface-2: #F0ECE2;
   --raised: #FFFFFF;
-  --panel: #F4F4F1;
-  --inset: #FFFFFF;         /* the card is #F4F4F1, so its boxes are white */
+  --panel: #F7F4EC;
+  --inset: #F7F4EC;         /* the card is white, so its boxes are paper */
   --sheet: #FFFFFF;
   --input: #FFFFFF;
-  --line: #ECECE8;
-  --line-2: #E2E2DE;
-  --edge: #DCDCD7;
-  --text: #0E0F11;
-  --text-2: #45484D;
-  --muted: #6B6E74;
-  --accent: #087A48;
-  --accent-soft: rgba(8, 122, 72, 0.10);
-  --accent-dim: rgba(8, 122, 72, 0.22);
+  --line: #E3DDCF;
+  --line-2: #E3DDCF;
+  --edge: #CFC7B6;
+  --text: #1A1D3A;
+  --text-2: #4A4D66;
+  --muted: #686A80;
+  --accent: #8A5D0B;        /* gold dark enough to read on paper */
+  --accent-soft: rgba(138, 93, 11, 0.10);
+  --accent-dim: rgba(138, 93, 11, 0.22);
   --on-accent: #FFFFFF;
-  --primary: #0E0F11;
-  --on-primary: #FFFFFF;
-  --chip: #0E0F11;
-  --on-chip: #FFFFFF;
-  --amber: #D98A00;
-  --loss: #C2410C;
+  --gold: #D9A441;
+  --gold-dim: rgba(217, 164, 65, 0.45);
+  --primary: #D9A441;
+  --on-primary: #1A1D3A;
+  --chip: #1A1D3A;
+  --on-chip: #F7F4EC;
+  --amber: #4F5BD5;
+  --loss: #B4361F;
   --on-loss: #FFFFFF;
-  --loss-soft: rgba(194, 65, 12, 0.08);
-  --track: #E2E2DE;
-  --pace: #A9AAA6;
-  --mark: #0E0F11;
-  --dot: #A2A4A8;
-  --skel: #EEEEEB;
-  --seg: #F4F4F1;
+  --loss-soft: rgba(180, 54, 31, 0.08);
+  --track: #ECE6D8;
+  --pace: #7C7F96;
+  --mark: #1A1D3A;
+  --moon: #ECE6D8;
+  --moon-edge: #CFC7B6;
+  --focus: #1A1D3A;
+  --dot: #9C9AAE;
+  --skel: #ECE6D8;
+  --seg: #F0ECE2;
   --seg-active: #FFFFFF;
-  --seg-shadow: 0 1px 3px rgba(14, 15, 17, 0.12);
-  --overlay: rgba(14, 15, 17, 0.32);
-  --handle: #DCDCD7;
-  --switch-off: #C9CAC6;
-  --logo: #0E0F11;
-  --on-logo: #FFFFFF;
-  --pop-shadow: 0 24px 64px rgba(14, 15, 17, 0.18);
-  --bar-shadow: 0 8px 24px rgba(14, 15, 17, 0.12);
+  --seg-shadow: 0 1px 3px rgba(26, 29, 58, 0.12);
+  --overlay: rgba(26, 29, 58, 0.32);
+  --handle: #CFC7B6;
+  --switch-off: #CFC7B6;
+  --logo: #D9A441;
+  --on-logo: #F7F4EC;
+  --pop-shadow: 0 24px 64px rgba(26, 29, 58, 0.18);
+  --bar-shadow: 0 8px 24px rgba(26, 29, 58, 0.12);
   --hero-weight: 500;
 }
 
@@ -122,6 +135,7 @@
   --color-accent-soft: var(--accent-soft);
   --color-accent-dim: var(--accent-dim);
   --color-on-accent: var(--on-accent);
+  --color-gold: var(--gold);
   --color-primary: var(--primary);
   --color-on-primary: var(--on-primary);
   --color-chip: var(--chip);
@@ -138,7 +152,10 @@
   --color-logo: var(--logo);
   --color-on-logo: var(--on-logo);
 
+  /* Geist for everything you read (tabular figures for numbers); Newsreader for the
+     big amount on a page and its headings. Both draw digits on one line. */
   --font-sans: 'Geist Variable', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Newsreader Variable', 'Newsreader', Georgia, 'Times New Roman', serif;
 
   /* One type scale (Apple's sizes), plus the big numbers */
   --text-11: 11px;
@@ -163,12 +180,12 @@
   --text-56--line-height: 1.05;
 
   --tracking-title: -0.02em;
-  --tracking-page: -0.03em;
-  --tracking-hero: -0.035em;
+  --tracking-page: -0.015em;
+  --tracking-hero: -0.02em;
 
-  /* Three radii: small controls, cards, and pills (rounded-full) */
-  --radius-sm: 8px;
-  --radius-card: 20px;
+  /* Two radii: controls (buttons, chips, boxes) and cards; rounded-full for dots and bars */
+  --radius-sm: 10px;
+  --radius-card: 16px;
 
   --shadow-pop: var(--pop-shadow);
   --shadow-bar: var(--bar-shadow);
@@ -183,12 +200,12 @@
     font-family: var(--font-sans);
     font-size: 15px;
     line-height: 1.45;
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: lining-nums tabular-nums;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   button:not(:disabled), [role="button"], summary, label[for] { cursor: pointer; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   ::selection { background: var(--accent-dim); }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--edge); border-radius: 999px; }
@@ -198,23 +215,23 @@
 @layer components {
   /* --- Type ---------------------------------------------------------------- */
   .hero-num {
-    font-size: 44px; line-height: 1.05; letter-spacing: var(--tracking-hero);
-    font-weight: var(--hero-weight);
+    font-family: var(--font-display); font-size: 44px; line-height: 1.05; letter-spacing: var(--tracking-hero);
+    font-weight: var(--hero-weight); font-variant-numeric: lining-nums proportional-nums;
   }
   @media (width >= 48rem) { .hero-num { font-size: 56px; } }
-  .page-title { font-size: 28px; line-height: 1.15; font-weight: 600; letter-spacing: var(--tracking-page); }
+  .page-title { font-family: var(--font-display); font-size: 28px; line-height: 1.15; font-weight: 500; letter-spacing: var(--tracking-page); }
 
   /* --- Buttons --------------------------------------------------------------
-     Pills. 48px tall (btn) or 40px (btn-sm). One primary per screen. */
+     48px tall (btn) or 40px (btn-sm). One primary (gold) per screen. */
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    min-height: 48px; padding: 0 24px; border-radius: 999px; border: 1px solid transparent;
+    min-height: 48px; padding: 0 22px; border-radius: 10px; border: 1px solid transparent;
     font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; white-space: nowrap;
     text-decoration: none; transition: background-color .15s, opacity .15s, transform .1s;
   }
   .btn:active:not(:disabled) { transform: scale(0.98); }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-sm { min-height: 40px; padding: 0 16px; font-size: 13px; }
+  .btn-sm { min-height: 40px; padding: 0 14px; font-size: 13px; }
   .btn-block { display: flex; width: 100%; }
   .btn-primary { background: var(--primary); color: var(--on-primary); }
   .btn-primary:hover:not(:disabled) { opacity: 0.9; }
@@ -227,7 +244,7 @@
 
   .icon-btn {
     display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-    width: 44px; height: 44px; border-radius: 999px; border: 0; background: transparent; color: var(--text-2);
+    width: 44px; height: 44px; border-radius: 10px; border: 0; background: transparent; color: var(--text-2);
     transition: background-color .15s, color .15s;
   }
   .icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
@@ -247,18 +264,18 @@
   /* --- Chips (pick one: a stock, a time range) -------------------------- */
   .chip {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--edge);
+    min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--edge);
     background: transparent; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
     transition: background-color .15s, color .15s;
   }
   .chip:hover { color: var(--text); }
-  .chip[aria-pressed="true"] { background: var(--chip); color: var(--on-chip); border-color: transparent; }
+  .chip[aria-pressed="true"] { background: var(--chip); color: var(--on-chip); border-color: var(--chip); }
   .chip-quiet { border-color: transparent; }
 
   /* --- Segmented control (Open / History, Light / Dark) ------------------- */
-  .seg { display: flex; padding: 4px; border-radius: 999px; background: var(--seg); }
+  .seg { display: flex; padding: 3px; border-radius: 10px; background: var(--seg); border: 1px solid var(--line); }
   .seg > button {
-    flex: 1; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent;
+    flex: 1; min-height: 40px; padding: 0 16px; border: 0; border-radius: 7px; background: transparent;
     color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
     transition: background-color .15s, color .15s;
   }
@@ -272,12 +289,12 @@
   .label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text-2); }
   .input {
     box-sizing: border-box; width: 100%; min-height: 48px; padding: 0 14px;
-    border: 1px solid var(--edge); border-radius: 8px; background: var(--input); color: var(--text);
-    font: inherit; font-size: 17px; font-variant-numeric: tabular-nums; outline: none;
+    border: 1px solid var(--edge); border-radius: 10px; background: var(--input); color: var(--text);
+    font: inherit; font-size: 17px; font-variant-numeric: lining-nums tabular-nums; outline: none;
     transition: border-color .15s, box-shadow .15s;
   }
   .input::placeholder { color: var(--muted); }
-  .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .input:focus { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
   .input[aria-invalid="true"] { border-color: var(--loss); }
   .input:disabled { opacity: 0.5; }
   select.input { appearance: none; padding-right: 40px; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
@@ -289,13 +306,13 @@
   .field-error { margin-top: 6px; font-size: 13px; color: var(--loss); }
   .field-hint { margin-top: 6px; font-size: 13px; color: var(--muted); }
 
-  .range { width: 100%; height: 32px; margin: 0; accent-color: var(--accent); }
+  .range { width: 100%; height: 32px; margin: 0; accent-color: var(--text); }
 
   .switch { position: relative; flex-shrink: 0; width: 52px; height: 44px; padding: 0; border: 0; background: transparent; display: inline-flex; align-items: center; justify-content: center; }
   .switch > span { position: relative; display: block; width: 44px; height: 26px; border-radius: 999px; background: var(--switch-off); transition: background-color .15s; }
   .switch > span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF; transition: transform .15s; }
-  .switch[aria-checked="true"] > span { background: var(--accent); }
-  .switch[aria-checked="true"] > span::after { transform: translateX(18px); }
+  .switch[aria-checked="true"] > span { background: var(--text); }
+  .switch[aria-checked="true"] > span::after { transform: translateX(18px); background: var(--bg); }
   .switch:disabled { opacity: 0.5; }
 
   /* --- Status dot (market, heads-ups) --------------------------------------- */
@@ -308,7 +325,7 @@
   }
   .dialog {
     position: relative; width: 100%; max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain;
-    padding: 8px 20px 0; border-radius: 20px 20px 0 0; background: var(--sheet); color: var(--text);
+    padding: 8px 20px 0; border-radius: 16px 16px 0 0; background: var(--sheet); color: var(--text);
     box-shadow: var(--pop-shadow); animation: sheet-up .24s cubic-bezier(.2, .8, .2, 1) both;
   }
   .dialog::before { content: ''; display: block; width: 36px; height: 5px; margin: 0 auto 16px; border-radius: 999px; background: var(--handle); }
@@ -321,9 +338,9 @@
   .dialog-actions > .btn-primary, .dialog-actions > .btn-danger { flex: 2; }
   @media (width >= 48rem) {
     .backdrop { align-items: center; padding: 24px; overflow-y: auto; }
-    .dialog { max-width: 520px; max-height: none; overflow: visible; padding: 28px; border-radius: 20px; animation: pop-in .18s ease both; }
+    .dialog { max-width: 520px; max-height: none; overflow: visible; padding: 24px; border-radius: 16px; border: 1px solid var(--line); animation: pop-in .18s ease both; }
     .dialog::before { display: none; }
-    .dialog-close { top: 16px; right: 16px; }
+    .dialog-close { top: 14px; right: 14px; }
     .dialog-actions { position: static; justify-content: flex-end; margin: 24px 0 0; padding: 0; background: none; }
     .dialog-actions > .btn, .dialog-actions > .btn-primary, .dialog-actions > .btn-danger { flex: none; }
   }
@@ -331,11 +348,11 @@
   /* --- Pop-up menu (⋯) --------------------------------------------------------- */
   .menu {
     position: fixed; z-index: 150; min-width: 200px; padding: 6px; display: flex; flex-direction: column;
-    border: 1px solid var(--line-2); border-radius: 12px; background: var(--sheet); box-shadow: var(--bar-shadow);
+    border: 1px solid var(--line-2); border-radius: 10px; background: var(--sheet); box-shadow: var(--bar-shadow);
   }
   .menu-item {
     display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 12px;
-    border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left;
+    border: 0; border-radius: 7px; background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left;
   }
   .menu-item:hover, .menu-item:focus { background: var(--surface-2); outline: none; }
   .menu-item.danger { color: var(--loss); }
@@ -348,11 +365,11 @@
   @media (width >= 48rem) { .toast-stack { left: auto; right: 24px; bottom: 24px; align-items: flex-end; } }
   .toast {
     pointer-events: auto; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 6px 6px 16px;
-    border-radius: 999px; background: var(--text); color: var(--bg); box-shadow: var(--bar-shadow);
+    border-radius: 16px; background: var(--text); color: var(--bg); box-shadow: var(--bar-shadow);
     font-size: 15px; animation: pop-in .18s ease both;
   }
   @media (width >= 48rem) { .toast { min-width: 320px; max-width: 460px; } }
-  .toast .btn-toast { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+  .toast .btn-toast { min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 
   /* --- Tooltip bubble (ⓘ) ---------------------------------------------------- */
   .tip {

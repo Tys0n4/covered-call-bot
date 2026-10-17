@@ -15,7 +15,7 @@ export default function ConfirmDialog({ title, children, confirmLabel, danger = 
 
   return (
     <Modal onDismiss={() => { if (!busy) onCancel() }} role="alertdialog" labelledBy="confirm-title" width={440}>
-      <h2 id="confirm-title" className="text-22 font-semibold tracking-title">{title}</h2>
+      <h2 id="confirm-title" className="font-display text-22 font-medium">{title}</h2>
       <p className="mt-2 text-15 text-fg-2">{children}</p>
       {error && <p role="alert" className="mt-3 text-13 text-loss">{error}</p>}
       <div className="dialog-actions">

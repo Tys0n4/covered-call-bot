@@ -59,7 +59,7 @@ export default function Modal({ children, onDismiss, labelledBy, label, role = '
 export function DialogHead({ id, title, sub, onClose, disabled }) {
   return (
     <>
-      <h2 id={id} className="pr-10 text-22 font-semibold tracking-title">{title}</h2>
+      <h2 id={id} className="pr-10 font-display text-22 font-medium">{title}</h2>
       {sub && <p className="mt-1 text-15 text-fg-2">{sub}</p>}
       {onClose && (
         <button type="button" className="icon-btn dialog-close" aria-label="Close" onClick={onClose} disabled={disabled}>
