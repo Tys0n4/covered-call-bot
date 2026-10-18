@@ -29,7 +29,7 @@ import ConfirmDialog from '../components/dialogs/ConfirmDialog'
 import Modal, { DialogHead } from '../components/dialogs/Modal'
 import PriceStamp, { priceAsOf } from '../components/PriceStamp'
 import InfoTip from '../components/InfoTip'
-import { Dot, KeptBar, Segmented, Spinner } from '../components/ui'
+import { Dot, KeptBar, Moon, Segmented, Spinner } from '../components/ui'
 import { fmtDate, daysUntil, marketToday, money, plural, signedMoney, strike } from '../lib/format'
 import { DECISION_PCT, keptPct, needsDecision, optionNet, resultLabel } from '../lib/pnl'
 import { TERMS } from '../lib/terms'
@@ -216,7 +216,7 @@ function Status({ p, ev, checking, failed, avgCost, asOf, onFindRoll }) {
   const target = ev.buyback_kept_pct
   return (
     <>
-      <KeptBar className="mt-4" pct={ev.profit_capture_pct} target={target} event={!!ev.event} hot={buy || expire} />
+      <KeptBar className="mt-4" pct={ev.profit_capture_pct} target={target} event={!!ev.event} />
       <div className="relative mt-1 h-4 text-11 text-muted" aria-hidden="true">
         {target > 0 && <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${Math.min(Math.max(target, 12), 88)}%` }}>target {keptPct(target)}%</span>}
       </div>
@@ -259,16 +259,22 @@ function PositionCard({ p, showTicker, ev, checking, failed, avgCost, asOf, onCl
   const decision = needsDecision(p, ev, avgCost) || ev?.early_exercise
   const priced = ev && ev.current_option_price > 0 && !decision
   return (
-    <article aria-label={`${p.ticker} ${strike(p.strike)} call`} className="rounded-card bg-surface p-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-17 font-semibold">{callName(p, showTicker)}</h3>
-        {priced && <span className="text-17 font-semibold" style={{ color: buy || ev.action === 'let_expire' ? 'var(--accent)' : undefined }}>{keptPct(ev.profit_capture_pct)}%</span>}
+    <article aria-label={`${p.ticker} ${strike(p.strike)} call`} className="rounded-card border border-line bg-surface p-5">
+      {/* The moon is lit by how much of the premium you'd keep buying back now */}
+      <div className="flex items-center gap-3">
+        {priced && <Moon pct={Math.max(0, keptPct(ev.profit_capture_pct))} size={40} />}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="font-display text-20 font-medium">{callName(p, showTicker)}</h3>
+            {priced && <span className="text-20 font-semibold" style={{ color: buy || ev.action === 'let_expire' ? 'var(--accent)' : undefined }}>{keptPct(ev.profit_capture_pct)}%</span>}
+          </div>
+          <div className="mt-0.5 flex justify-between gap-3 text-13 text-muted">
+            <span>{plural(p.contracts, 'contract')} · {fmtDate(p.expiry)} · {daysLeft(p)}</span>
+            {priced && <span>kept</span>}
+          </div>
+        </div>
       </div>
-      <div className="mt-0.5 flex justify-between gap-3 text-13 text-muted">
-        <span>{plural(p.contracts, 'contract')} · {fmtDate(p.expiry)} · {daysLeft(p)}</span>
-        {priced && <span>kept</span>}
-      </div>
-      <div className="mt-0.5 text-13 text-muted">
+      <div className="mt-1 text-13 text-muted">
         {p.rolled_from ? 'Rolled · ' : ''}sold at {money(p.entry_price)} · you collected {money(p.premium_total)}
       </div>
 
@@ -310,6 +316,7 @@ function CallRow({ p, showTicker, ev, checking, failed, onExpand }) {
     <li className="border-b border-line last:border-b-0">
       <button type="button" className="flex w-full items-center gap-3 py-3.5 text-left" onClick={onExpand} aria-expanded="false"
         aria-label={`${callName(p, true)}, ${priced ? `${Math.max(0, keptPct(ev.profit_capture_pct))}% earned so far` : 'no current price'}. Show details`}>
+        {priced ? <Moon pct={Math.max(0, keptPct(ev.profit_capture_pct))} size={28} /> : <span className="w-7 shrink-0" aria-hidden="true" />}
         <span className="min-w-0 flex-1">
           <span className="block text-15 font-semibold">{callName(p, showTicker)}</span>
           <span className="block text-13 text-muted">
@@ -570,7 +577,7 @@ export default function Positions() {
               )}
               {groups.map(g => (
                 <section key={g.key} aria-label={g.title} className="mt-7 first:mt-5">
-                  <h2 className="mb-3 text-17 font-semibold">{g.title} <span className="font-medium text-muted">{g.calls.length}</span></h2>
+                  <h2 className="mb-3 font-display text-22 font-medium">{g.title} <span className="font-sans text-15 font-medium text-muted">{g.calls.length}</span></h2>
                   {g.key !== 'hold' ? (
                     <div className="grid gap-3 md:grid-cols-2">{g.calls.map(p => card(p))}</div>
                   ) : (

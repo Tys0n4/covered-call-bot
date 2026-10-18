@@ -36,7 +36,7 @@ export default function WakingNotice({ variant = 'bar', className = '' }) {
         <div className="flex items-center justify-between gap-3 text-13">
           <span className="font-semibold">Waking up the server…</span><span className="text-muted">usually 5–10 s</span>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-track"><div className="waking-bar h-1 w-[30%] rounded-full bg-accent" /></div>
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-track"><div className="waking-bar h-1 w-[30%] rounded-full bg-fg-2" /></div>
         <p className="mt-2 text-12 text-muted">CovCall runs on a free server that naps when nobody's using it. You can fill in the form now; it sends as soon as it's awake.</p>
       </div>
     )
@@ -46,7 +46,7 @@ export default function WakingNotice({ variant = 'bar', className = '' }) {
       <div className="flex items-center justify-between gap-3 text-13">
         <span className="font-semibold">Waking up the server…</span><span className="shrink-0 text-muted">usually 5–10 s</span>
       </div>
-      <div className="mt-2 h-1 overflow-hidden rounded-full bg-track"><div className="waking-bar h-1 w-[30%] rounded-full bg-accent" /></div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-track"><div className="waking-bar h-1 w-[30%] rounded-full bg-fg-2" /></div>
       <p className="mt-2 text-12 text-muted">CovCall runs on a free server that naps when nobody's using it. Your data loads as soon as it's awake.</p>
     </div>
   )

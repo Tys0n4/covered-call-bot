@@ -24,11 +24,15 @@ export function DashboardSkeleton() {
     <Loading>
       <div className="md:grid md:grid-cols-[minmax(0,1fr)_320px] md:gap-12">
         <div>
-          <Bone className="h-4 w-28" />
-          <Bone className="mt-3 h-11 w-52 md:h-14" />
-          <Bone className="mt-3 h-4 w-64" />
-          <div className="relative mt-6 h-[180px] md:h-[240px]"><Bone className="absolute inset-x-0 top-[70%] h-0.5" /></div>
-          <div className="mt-8 flex gap-2"><Bone className="h-11 flex-1 rounded-full md:w-20 md:flex-none" /><Bone className="h-11 flex-1 rounded-full md:w-20 md:flex-none" /><Bone className="h-11 flex-1 rounded-full md:w-20 md:flex-none" /></div>
+          <div className="flex items-center justify-between gap-6">
+            <div>
+              <Bone className="h-4 w-28" />
+              <Bone className="mt-3 h-11 w-52 md:h-14" />
+              <Bone className="mt-3 h-4 w-64" />
+            </div>
+            <Bone className="h-20 w-20 shrink-0 rounded-full md:h-24 md:w-24" />
+          </div>
+          <Bone className="mt-6 h-[188px] rounded-card md:h-[212px]" />
           <Bone className="mt-8 h-36 rounded-card md:hidden" />
           <div className="mt-10"><Rows n={3} /></div>
         </div>

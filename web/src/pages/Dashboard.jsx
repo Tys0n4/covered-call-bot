@@ -8,7 +8,7 @@ import { useTicker } from '../context/TickerContext'
 import { useToast } from '../context/ToastContext'
 import { usePageTitle } from '../components/PageHeader'
 import ActionMenu from '../components/ActionMenu'
-import KeptChart from '../components/KeptChart'
+import MonthProgress from '../components/MonthProgress'
 import PriceStamp from '../components/PriceStamp'
 import HoldingModal from '../components/dialogs/HoldingModal'
 import ServerDown from '../components/ServerDown'
@@ -33,7 +33,7 @@ function GettingStarted({ onAdd }) {
       <ol className="mt-7 border-b border-line">
         {steps.map(([title, text], i) => (
           <li key={title} className="flex gap-3.5 border-t border-line py-4">
-            <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-13 font-semibold ${i === 0 ? 'bg-accent-soft text-accent' : 'bg-surface text-fg-2'}`}>{i + 1}</span>
+            <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-13 font-semibold ${i === 0 ? 'bg-chip text-on-chip' : 'bg-surface text-fg-2'}`}>{i + 1}</span>
             <div><div className="text-17 font-semibold">{title}</div><div className="text-13 text-muted">{text}</div></div>
           </li>
         ))}
@@ -50,11 +50,11 @@ function NextStep({ items, checking, priceMeta, className = '' }) {
   const id = useId()
   const [first, ...rest] = items
   return (
-    <section aria-labelledby={id} className={`rounded-card bg-surface p-5 md:p-6 ${className}`}>
-      <div className="text-13 font-semibold text-accent">Next step</div>
+    <section aria-labelledby={id} className={`rounded-card border border-line bg-surface p-5 md:p-6 ${className}`}>
+      <div className="text-12 font-semibold uppercase tracking-wide text-muted">Next step</div>
       {first ? (
         <>
-          <h2 id={id} className="mt-1.5 text-20 font-semibold tracking-title md:mt-2 md:text-22">{first.title}</h2>
+          <h2 id={id} className="mt-1.5 font-display text-20 font-medium md:mt-2 md:text-22">{first.title}</h2>
           <p className="mt-1.5 text-15 text-fg-2">{first.body}{first.more ? `. ${first.more}` : ''}</p>
           <button type="button" className="btn btn-primary btn-block mt-5" onClick={first.cta.onClick}>
             {first.cta.label} <ArrowRight size={16} strokeWidth={2.2} />
@@ -62,8 +62,8 @@ function NextStep({ items, checking, priceMeta, className = '' }) {
         </>
       ) : (
         <>
-          <h2 id={id} className="mt-1.5 flex items-center gap-2 text-20 font-semibold tracking-title md:text-22">
-            <Check size={22} strokeWidth={2.4} className="text-accent" aria-hidden="true" /> All caught up
+          <h2 id={id} className="mt-1.5 flex items-center gap-2 font-display text-20 font-medium md:text-22">
+            <Check size={22} strokeWidth={2.4} className="text-fg-2" aria-hidden="true" /> All caught up
           </h2>
           <p className="mt-1.5 text-15 text-fg-2">Every contract is working and nothing needs you right now.</p>
         </>
@@ -97,7 +97,7 @@ function ComingUp({ items, note, warning, className = '' }) {
   return (
     <section aria-labelledby={id} className={className}>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id={id} className="text-20 font-semibold tracking-title md:text-17">Coming up</h2>
+        <h2 id={id} className="font-display text-20 font-medium">Coming up</h2>
         {items.length > SHOWN && (
           <button type="button" className="link link-quiet min-h-11 text-13" aria-expanded={open} onClick={() => setOpen(o => !o)}>
             {open ? 'Show less' : `See all ${items.length}`}
@@ -135,14 +135,14 @@ function Coverage({ total, working }) {
   if (total > 12) {
     return (
       <span className="inline-flex h-1.5 w-20 overflow-hidden rounded-full bg-track" aria-hidden="true">
-        <span className="h-full rounded-full bg-accent" style={{ width: `${(working / total) * 100}%` }} />
+        <span className="h-full rounded-full bg-fg-2" style={{ width: `${(working / total) * 100}%` }} />
       </span>
     )
   }
   return (
     <span className="inline-flex gap-[3px]" aria-hidden="true">
       {Array.from({ length: total }, (_, i) => (
-        <span key={i} className={`h-3 w-[5px] rounded-[2px] md:h-4 md:w-1.5 ${i < working ? 'bg-accent' : 'bg-track'}`} />
+        <span key={i} className={`h-3 w-[5px] rounded-[2px] md:h-4 md:w-1.5 ${i < working ? 'bg-fg-2' : 'bg-track'}`} />
       ))}
     </span>
   )
@@ -164,7 +164,7 @@ function StockRow({ t, positions, onScan, onPositions, onEdit }) {
         </div>
       </div>
       {t.available > 0 ? (
-        <button type="button" className="btn btn-primary btn-sm min-h-11 md:min-h-10" onClick={onScan}>
+        <button type="button" className="btn btn-secondary btn-sm min-h-11 md:min-h-10" onClick={onScan}>
           Find a call
         </button>
       ) : (
@@ -387,7 +387,7 @@ export default function Dashboard() {
                 <div className="h-[260px] md:h-[318px]" />
               </div>
             ) : finished ? (
-              <KeptChart trades={perf.trades} goal={goal} />
+              <MonthProgress summary={perf.summary} goal={goal} />
             ) : (
               <div className="md:max-w-[560px]">
                 {nextStep}
@@ -416,7 +416,7 @@ export default function Dashboard() {
 
             <section aria-labelledby="stocks-h" className="mt-10">
               <div className="flex items-center justify-between gap-3">
-                <h2 id="stocks-h" className="text-20 font-semibold tracking-title">Your stocks</h2>
+                <h2 id="stocks-h" className="font-display text-22 font-medium">Your stocks</h2>
                 <button type="button" className="btn btn-secondary btn-sm hidden md:inline-flex" onClick={() => setEditing('new')}>
                   <Plus size={15} strokeWidth={2.2} /> Add stock
                 </button>
@@ -433,7 +433,7 @@ export default function Dashboard() {
             </section>
 
             <div className="mt-10 md:hidden">{coming}</div>
-            {finished === false && <p className="mt-8 text-13 text-muted">"Earned from calls" and its chart appear here once your first call finishes.</p>}
+            {finished === false && <p className="mt-8 text-13 text-muted">"Earned from calls" and this month's progress appear here once your first call finishes.</p>}
           </div>
 
           <aside className="hidden md:flex md:flex-col md:gap-10">

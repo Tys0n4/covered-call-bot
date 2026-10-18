@@ -39,7 +39,7 @@ function MonthBars({ months, goal, selected, onSelect, thisMonth }) {
               className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5 md:gap-2">
               <span className={`whitespace-nowrap text-12 font-semibold md:text-13 ${on ? 'text-fg' : 'text-muted'}`}>{whole(m.option_net)}</span>
               <span className="block w-full max-w-[88px] rounded-t-sm transition-colors"
-                style={{ height: `${h}%`, background: m.option_net < 0 ? 'var(--loss)' : on ? 'var(--accent)' : 'var(--accent-dim)', opacity: m.option_net < 0 && !on ? 0.5 : 1 }} />
+                style={{ height: `${h}%`, background: m.option_net < 0 ? 'var(--loss)' : on ? 'var(--gold)' : 'var(--gold-dim)', opacity: m.option_net < 0 && !on ? 0.5 : 1 }} />
             </button>
           )
         })}
@@ -228,7 +228,7 @@ export default function Performance() {
           {months.length > 0 && selected && (
             <section aria-labelledby="months-h" className="mt-10">
               <div className="flex items-baseline justify-between gap-3">
-                <h2 id="months-h" className="text-20 font-semibold tracking-title">Month by month</h2>
+                <h2 id="months-h" className="font-display text-22 font-medium">Month by month</h2>
                 <span className="hidden text-13 text-muted md:inline">Pick a month to see how it adds up</span>
               </div>
               <div className="mt-5 flex flex-col gap-8 md:flex-row md:items-start md:gap-14">
@@ -252,7 +252,7 @@ export default function Performance() {
           </section>
 
           <section aria-labelledby="calls-h" className="mt-12">
-            <h2 id="calls-h" className="text-20 font-semibold tracking-title">Finished calls <span className="font-medium text-muted">{trades.length}</span></h2>
+            <h2 id="calls-h" className="font-display text-22 font-medium">Finished calls <span className="font-medium text-muted">{trades.length}</span></h2>
             <div className="mt-2 hidden md:block">
               <table className="dtable">
                 <thead>

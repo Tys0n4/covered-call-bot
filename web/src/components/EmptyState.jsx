@@ -11,7 +11,7 @@ export default function EmptyState({ icon: Icon, title, children, action }) {
           <Icon size={24} strokeWidth={1.75} aria-hidden="true" />
         </span>
       )}
-      <h2 className="mt-5 text-20 font-semibold tracking-title">{title}</h2>
+      <h2 className="mt-5 font-display text-22 font-medium">{title}</h2>
       {children && <p className="mt-2 text-15 text-fg-2">{children}</p>}
       {action && <div className="mt-6">{action}</div>}
     </div>

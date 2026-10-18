@@ -1,7 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-// One typeface, bundled with the app (no Google Fonts request); numbers use its tabular figures
+// Bundled with the app (no Google Fonts request): Geist for reading, with tabular figures for
+// numbers; Newsreader (optical sizes) for the big amounts and headings
 import '@fontsource-variable/geist'
+import '@fontsource-variable/newsreader/opsz.css'
 import './index.css'
 import App from './App.jsx'
 

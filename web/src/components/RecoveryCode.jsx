@@ -53,15 +53,15 @@ export default function RecoveryCodeScreen({ code, email, kicker, onDone }) {
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
       <section className="page flex w-full max-w-[400px] flex-col" aria-labelledby="code-h">
         <Logo size={44} />
-        <div className="mt-6 text-13 font-semibold text-accent">{kicker}</div>
-        <h1 id="code-h" className="mt-1.5 text-28 font-semibold tracking-title">Save your recovery code</h1>
+        <div className="mt-6 text-12 font-semibold uppercase tracking-wide text-muted">{kicker}</div>
+        <h1 id="code-h" className="mt-1.5 font-display text-28 font-medium">Save your recovery code</h1>
         <p className="mt-2.5 text-15 text-fg-2">
           If you ever forget your password, this code lets you set a new one. Keep it somewhere safe, like a password manager.
         </p>
         <div className="mt-6"><RecoveryCodeBox code={code} email={email} /></div>
         <RecoveryCodeNotes />
         <label className="mt-5 flex min-h-11 cursor-pointer items-center gap-3 text-15">
-          <input type="checkbox" className="h-5 w-5 accent-[var(--accent)]" checked={saved} onChange={e => setSaved(e.target.checked)} />
+          <input type="checkbox" className="h-5 w-5 accent-[var(--text)]" checked={saved} onChange={e => setSaved(e.target.checked)} />
           I saved it somewhere safe
         </label>
         <button type="button" className="btn btn-primary btn-block mt-3" disabled={!saved} onClick={onDone}>Continue</button>

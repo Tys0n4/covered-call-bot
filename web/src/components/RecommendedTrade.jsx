@@ -189,7 +189,7 @@ export default function RecommendedTrade({
       <section aria-labelledby="record-h" className="mt-6 rounded-card bg-surface p-5">
         {saved ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2 text-17 font-semibold"><Check size={20} strokeWidth={2.4} className="text-accent" /> Saved</span>
+            <span className="inline-flex items-center gap-2 text-17 font-semibold"><Check size={20} strokeWidth={2.4} className="text-fg-2" /> Saved</span>
             <Link to="/positions" className="btn btn-secondary btn-sm">View in Positions <ArrowRight size={15} strokeWidth={2.2} /></Link>
           </div>
         ) : (

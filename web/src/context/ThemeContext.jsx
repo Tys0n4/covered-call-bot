@@ -28,7 +28,7 @@ export function ThemeProvider({ children }) {
   const theme = preference === 'system' ? device : preference
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#FFFFFF' : '#0A0B0D')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#F7F4EC' : '#0F1226')
   }, [theme])
 
   const setPreference = useCallback(p => {

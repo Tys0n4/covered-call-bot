@@ -7,7 +7,7 @@ export default function ServerDown({ onRetry, fullPage = false, message }) {
       <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-surface text-fg-2">
         <CloudOff size={28} strokeWidth={1.75} aria-hidden="true" />
       </span>
-      <h2 className="mt-5 text-20 font-semibold tracking-title">Can't reach the server</h2>
+      <h2 className="mt-5 font-display text-22 font-medium">Can't reach the server</h2>
       <p className="mt-2 text-15 text-fg-2">
         {message || 'Your data is safe. If the server was asleep, it can take up to a minute to wake up.'}
       </p>

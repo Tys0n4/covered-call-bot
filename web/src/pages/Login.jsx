@@ -19,7 +19,7 @@ function SampleScan() {
         <span className="text-12 text-muted">Sample · 300 AAPL</span>
       </div>
       <div className="mt-2.5 text-15 text-fg-2">Sell 3 calls, collect about</div>
-      <div className="text-44 font-semibold tracking-hero">$585</div>
+      <div className="hero-num">$585</div>
       <div className="mt-1 text-15 font-semibold">3 × $355 call · expires Oct 30</div>
       <p className="mt-3 border-t border-line pt-3 text-13 text-fg-2">
         <strong className="font-semibold text-fg">The catch:</strong> if AAPL closes above $355 on Oct 30, your 300 shares are sold
@@ -71,7 +71,7 @@ export default function LoginPage({ canClaim, startWithLogin = false, onLoggedIn
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
       <form className="page flex w-full max-w-[380px] flex-col" onSubmit={submit} aria-labelledby="auth-h" noValidate>
         <Logo size={44} />
-        <h1 id="auth-h" className="mt-6 text-28 font-semibold tracking-title">
+        <h1 id="auth-h" className="mt-6 font-display text-28 font-medium">
           {signingUp ? 'Get paid for shares you already own' : recovering ? 'Set a new password' : 'Log in to CovCall'}
         </h1>
         <p className="mt-2.5 text-15 text-fg-2">

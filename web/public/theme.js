@@ -9,5 +9,5 @@
       : pref
   } catch { /* storage unavailable: dark */ }
   document.documentElement.dataset.theme = theme
-  document.querySelector('meta[name="theme-color"]').content = theme === 'light' ? '#FFFFFF' : '#0A0B0D'
+  document.querySelector('meta[name="theme-color"]').content = theme === 'light' ? '#F7F4EC' : '#0F1226'
 })()
